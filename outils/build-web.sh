@@ -49,9 +49,15 @@ if ! emcc "$TMP_PORTS/vide.c" -o "$TMP_PORTS/vide.js" \
 fi
 
 echo "== Configuration ($TYPE) dans build-web/"
+# -sDEFAULT_TO_CXX : moteur/CMakeLists.txt lie avec `--bind` (embind, du C++)
+# alors que le projet est en C. Depuis Emscripten 7, emcc n'ajoute plus seul
+# les bibliothèques C++ : sans ça, l'édition de liens échoue (« undefined
+# symbol: typeinfo for … »). Augustus n'utilise pas embind : M2 pourra
+# retirer `--bind` du moteur et cette option.
 emcmake cmake -S moteur -B "$SORTIE" \
   -DTARGET_PLATFORM=emscripten \
-  -DCMAKE_BUILD_TYPE="$TYPE"
+  -DCMAKE_BUILD_TYPE="$TYPE" \
+  -DCMAKE_EXE_LINKER_FLAGS="-sDEFAULT_TO_CXX"
 
 echo "== Compilation"
 emmake cmake --build "$SORTIE" -j "$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
