@@ -145,7 +145,9 @@ static void save_campaign_player_data(void)
     
     const char *xml_file = dir_append_location(XML_FILE_NAME, PATH_LOCATION_CONFIG);
 
-    FILE *xml_dest = fopen(xml_file, "wb");
+    // Brutus III : file_open/file_close au lieu de fopen/fclose, pour que la
+    // version web synchronise IDBFS (Module.syncFS) après l'écriture.
+    FILE *xml_dest = file_open(xml_file, "wb");
 
     if (!xml_dest) {
         log_error("Failed to create file", XML_FILE_NAME, 0);
@@ -155,7 +157,7 @@ static void save_campaign_player_data(void)
 
     fwrite(buf.data, 1, buf.index, xml_dest);
 
-    fclose(xml_dest);
+    file_close(xml_dest);
     free(buf_data);
 }
 

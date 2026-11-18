@@ -1,0 +1,835 @@
+<!doctype html>
+<!--
+  Brutus III : page web du jeu (modèle Emscripten).
+  Dérivée de moteur/gen/shell.html.in (Augustus, AGPL-3.0). Même mécanique :
+  dossier du jeu copié dans IDBFS (IndexedDB) monté sur /C3, Module.syncFS()
+  appelé par le moteur après chaque fichier écrit (sauvegardes, config).
+  Différences : textes en français, aucun script ni image chargés depuis un
+  autre site, choix explicite du dossier, copie des seuls fichiers utiles,
+  sauvegardes conservées quand on change de dossier.
+  Compilée par outils/build-web.sh (option CMake BRUTUS_SHELL_IN).
+  Ne pas écrire de dollar suivi d'accolade dans ce fichier : configure_file le remplacerait.
+-->
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brutus III</title>
+    <style>
+      body {
+        background: black;
+        margin: auto;
+      }
+
+      /* le canvas ne doit avoir ni bordure ni marge, sinon la souris est décalée */
+      canvas {
+        border: 0px none;
+        background-color: black;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        transform: translate(-50%, -50%);
+        z-index: 1;
+      }
+
+      input#loaddir {
+        display: none;
+      }
+
+      .spinner {
+        display: block;
+        height: 40px;
+        width: 40px;
+        margin: 0 auto 10px auto;
+        animation: rotation 0.8s linear infinite;
+        border: 8px solid rgb(200, 190, 170);
+        border-left-color: rgb(140, 40, 30);
+        border-radius: 100%;
+      }
+
+      .spinner.small {
+        display: inline-block;
+        height: 10px;
+        width: 10px;
+        border-width: 2px;
+        margin: 0 4px 0 0;
+        position: relative;
+        top: 2px;
+      }
+
+      @keyframes rotation {
+        from {transform: rotate(0deg);}
+        to {transform: rotate(360deg);}
+      }
+
+      div#infoLocation {
+        position: fixed;
+        inset: 0;
+        margin: 30px;
+        padding: 10px 20px;
+        border: 6px solid rgb(140, 40, 30);
+        border-radius: 20px;
+        background-color: rgb(245, 238, 222);
+        color: rgb(60, 45, 35);
+        display: flex;
+        justify-content: space-between;
+        flex-direction: column;
+        align-items: center;
+        font: 14pt Georgia, "Times New Roman", serif;
+        z-index: 2;
+        overflow: auto;
+      }
+
+      div#infoLocation.drag {
+        border-style: dashed;
+        background-color: rgb(235, 225, 200);
+      }
+
+      div#infoLocation div {
+        text-align: center;
+      }
+
+      div#infoLocation h1 {
+        text-align: center;
+        font-size: 32pt;
+        letter-spacing: 3px;
+        margin: 15px 0 0 0;
+        color: rgb(140, 40, 30);
+      }
+
+      div#infoLocation p.intro {
+        max-width: 650px;
+        font-size: 12pt;
+        line-height: 1.5;
+        text-align: center;
+      }
+
+      div#middleElement {
+        max-width: 650px;
+      }
+
+      div#startOptions,
+      div#chooseFolder,
+      div#confirm {
+        display: none;
+      }
+
+      div#infoLocation div.footer {
+        font-size: 10pt;
+        line-height: 1.6;
+      }
+
+      a {
+        color: rgb(140, 40, 30);
+      }
+
+      small.hint {
+        display: block;
+        font-size: 10pt;
+        margin-top: 8px;
+        color: rgb(110, 95, 80);
+      }
+
+      progress {
+        appearance: none;
+        -webkit-appearance: none;
+        border: 1px solid rgb(120, 100, 80);
+        border-radius: 5px;
+        margin: 10px auto;
+        width: 75vw;
+        max-width: 350px;
+        height: 18px;
+        display: none;
+      }
+
+      progress::-webkit-progress-bar {
+        background-color: rgba(180, 170, 150, 0.5);
+      }
+
+      progress::-webkit-progress-value {
+        background: rgb(140, 40, 30);
+        border-radius: 2px;
+      }
+
+      progress::-moz-progress-bar {
+        background: rgb(140, 40, 30);
+        border-radius: 2px;
+      }
+
+      #infoLocation input[type='button'] {
+        cursor: pointer;
+        font: 12pt Georgia, "Times New Roman", serif;
+        border: 1px solid rgb(60, 45, 35);
+        border-radius: 4px;
+        background-color: rgba(200, 185, 160, 0.6);
+        color: rgb(60, 45, 35);
+        padding: 8pt 12pt;
+        min-width: 120pt;
+        margin: 6pt;
+      }
+
+      #infoLocation input[type='button']:hover {
+        background-color: rgba(220, 205, 180, 0.9);
+      }
+
+      #infoLocation input[type='button'].main {
+        font-size: 16pt;
+        padding: 14pt 24pt;
+        background-color: rgb(140, 40, 30);
+        color: rgb(245, 238, 222);
+        border-color: rgb(90, 20, 15);
+      }
+
+      #infoLocation input[type='button'].main:hover {
+        background-color: rgb(165, 55, 40);
+      }
+
+      #infoLocation input[type='button'].red {
+        border: 1px solid rgb(170, 20, 20);
+        color: rgb(170, 20, 20);
+      }
+
+      #infoLocation input[type='button'].red:hover {
+        background-color: rgb(170, 20, 20);
+        color: white;
+      }
+
+      #OSD {
+        display: none;
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        border: 1px solid rgb(120, 120, 120);
+        border-radius: 2px;
+        background-color: rgba(0, 0, 0, 0.5);
+        color: rgb(220, 220, 220);
+        padding: 4pt;
+        font: 10pt sans-serif;
+        z-index: 3;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="infoLocation">
+      <div>
+        <h1>Brutus III</h1>
+        <p class="intro">
+          Caesar III dans ton navigateur, sur la base du moteur libre Augustus.<br>
+          <b>Les fichiers originaux de Caesar III sont nécessaires</b> (ta propre copie du jeu :
+          C3.sg2, c3.eng…). Ils ne sont pas fournis ici. Ils sont copiés une seule fois dans
+          le stockage de ton navigateur et ne quittent jamais ton ordinateur.
+        </p>
+      </div>
+      <div id="middleElement">
+        <div id="loadStatus">
+          <div id="spinner" class="spinner"></div>
+          <div id="status"><noscript>Active JavaScript pour jouer à Brutus III.</noscript>Chargement de la page...</div>
+          <progress id="progress"></progress>
+        </div>
+        <div id="chooseFolder">
+          <div id="chooseMessage"></div>
+          <input type="button" class="main" id="chooseButton" value="Choisir le dossier du jeu">
+          <small class="hint">ou glisse le dossier ici. C'est le dossier qui contient C3.sg2 et c3.eng.</small>
+          <div id="chooseCancel" style="display: none">
+            <input type="button" onclick="Module.showFirstScreen()" value="Annuler">
+          </div>
+        </div>
+        <div id="startOptions">
+          <input type="button" class="main" onclick="Module.startGame()" value="Jouer">
+          <div>
+            <input type="button" onclick="Module.showChooseFolder(true)" value="Changer de dossier du jeu">
+            <input type="button" class="red" onclick="Module.showSubWindow(confirmElement)" value="Tout effacer">
+          </div>
+          <small class="hint">« Changer de dossier » garde tes sauvegardes. « Tout effacer » supprime aussi les sauvegardes.</small>
+        </div>
+        <div id="confirm">
+          <div>Tout effacer : les fichiers du jeu <b>et toutes tes sauvegardes</b> stockés dans ce navigateur ?</div>
+          <input type="button" class="red" onclick="Module.clearFS()" value="Oui, tout effacer">
+          <input type="button" onclick="Module.showFirstScreen()" value="Non">
+        </div>
+      </div>
+      <div class="footer">
+        Code source (AGPL-3.0) : <a href="https://github.com/DoubleV840/Brutus-III" target="_blank" rel="noopener">github.com/DoubleV840/Brutus-III</a>
+        · moteur : <a href="https://github.com/Keriew/augustus" target="_blank" rel="noopener">Augustus</a>
+        v@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@@VERSION_REVISION@<br>
+        Caesar III est une marque de ses propriétaires respectifs. Projet non officiel.
+      </div>
+    </div>
+    <div id="OSD">
+      <span id="OSDSpinner" class="spinner small"></span>
+      <span id="OSDStatus"></span>
+    </div>
+    <input type="file" id="loaddir" name="fileList" webkitdirectory multiple>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <script type='text/javascript'>
+      // Point de montage IDBFS. Le nom de la base IndexedDB est ce chemin.
+      // Gardé identique à Augustus ('/C3') : le moteur le reçoit en argument.
+      var C3Dir = '/C3';
+
+      var infoElement = document.getElementById('infoLocation');
+      var statusElement = document.getElementById('status');
+      var progressElement = document.getElementById('progress');
+      var spinnerElement = document.getElementById('spinner');
+      var dirElement = document.getElementById('loaddir');
+
+      var loadStatusElement = document.getElementById('loadStatus');
+      var chooseFolderElement = document.getElementById('chooseFolder');
+      var chooseMessageElement = document.getElementById('chooseMessage');
+      var chooseCancelElement = document.getElementById('chooseCancel');
+      var startOptionsElement = document.getElementById('startOptions');
+      var confirmElement = document.getElementById('confirm');
+
+      var OSDElement = document.getElementById('OSD');
+      var OSDSpinnerElement = document.getElementById('OSDSpinner');
+      var OSDStatusElement = document.getElementById('OSDStatus');
+
+      // ---- Fichiers à copier ------------------------------------------------
+      // Fichier repère : le dossier qui le contient est la racine du jeu
+      // (on accepte donc aussi un dossier parent, ex. « app » au lieu de « jeu1 »).
+      var MARKER_FILE = 'c3.sg2';
+      // Inutiles au moteur : exécutables Windows, DLL, scripts, docs, icônes.
+      var SKIPPED_EXTENSIONS = ['exe', 'dll', 'bat', 'cmd', 'com', 'doc', 'docx', 'pdf', 'rtf',
+        'isu', 'ico', 'config', 'lnk', 'url', 'htm', 'html', 'db', 'log'];
+      // Les .txt sont des notes, sauf celui-ci que le moteur lit.
+      var KEPT_TXT = ['c3_model.txt'];
+      // Conservés quand on change de dossier du jeu (racine de /C3 sur le web).
+      var SAVE_EXTENSIONS = ['sav', 'svx'];
+      var SAVE_FILES = ['campaign_player_data.xml'];
+
+      function extensionOf(name) {
+        var dot = name.lastIndexOf('.');
+        return dot === -1 ? '' : name.substring(dot + 1).toLowerCase();
+      }
+
+      function baseName(path) {
+        return path.substring(path.lastIndexOf('/') + 1);
+      }
+
+      function isUsefulFile(path) {
+        var parts = path.split('/');
+        for (var i = 0; i < parts.length; i++) {
+          // .DS_Store, ._fichier (macOS), __MACOSX, Thumbs.db…
+          if (parts[i] === '' || parts[i].charAt(0) === '.' || parts[i] === '__MACOSX') {
+            return false;
+          }
+        }
+        var name = baseName(path).toLowerCase();
+        var ext = extensionOf(name);
+        if (SKIPPED_EXTENSIONS.indexOf(ext) !== -1) {
+          return false;
+        }
+        if (ext === 'txt' && KEPT_TXT.indexOf(name) === -1) {
+          return false;
+        }
+        return true;
+      }
+
+      function isSaveFile(name) {
+        var lower = name.toLowerCase();
+        return SAVE_EXTENSIONS.indexOf(extensionOf(lower)) !== -1 || SAVE_FILES.indexOf(lower) !== -1;
+      }
+
+      // entries : [{ path: 'dossier/sous/fichier', file: File }]
+      // Garde ce qui est sous la racine du jeu (dossier contenant c3.sg2, casse ignorée)
+      // et retire ce préfixe. Renvoie null si c3.sg2 est introuvable.
+      function selectGameFiles(entries) {
+        var root = null;
+        entries.forEach(function(entry) {
+          if (baseName(entry.path).toLowerCase() === MARKER_FILE) {
+            var dir = entry.path.substring(0, entry.path.length - MARKER_FILE.length);
+            if (root === null || dir.length < root.length) {
+              root = dir;
+            }
+          }
+        });
+        if (root === null) {
+          return null;
+        }
+        var selected = [];
+        entries.forEach(function(entry) {
+          if (entry.path.indexOf(root) === 0) {
+            var path = entry.path.substring(root.length);
+            if (isUsefulFile(path)) {
+              selected.push({ path: path, file: entry.file });
+            }
+          }
+        });
+        return selected;
+      }
+
+      // ---- Lecture du dossier choisi ----------------------------------------
+      function entriesFromInput(files) {
+        var entries = [];
+        for (var i = 0; i < files.length; i++) {
+          entries.push({ path: files[i].webkitRelativePath || files[i].name, file: files[i] });
+        }
+        return Promise.resolve(entries);
+      }
+
+      function readAllEntries(dirReader) {
+        // readEntries renvoie les éléments par paquets : on relit jusqu'à un paquet vide.
+        return new Promise(function(resolve, reject) {
+          var all = [];
+          (function next() {
+            dirReader.readEntries(function(batch) {
+              if (batch.length === 0) {
+                resolve(all);
+                return;
+              }
+              all = all.concat(Array.prototype.slice.call(batch));
+              next();
+            }, reject);
+          })();
+        });
+      }
+
+      function entriesFromFileSystemEntry(entry, path, out) {
+        if (entry.isFile) {
+          return new Promise(function(resolve, reject) {
+            entry.file(function(file) {
+              out.push({ path: path + entry.name, file: file });
+              resolve();
+            }, reject);
+          });
+        }
+        if (entry.isDirectory) {
+          return readAllEntries(entry.createReader()).then(function(children) {
+            return children.reduce(function(promise, child) {
+              return promise.then(function() {
+                return entriesFromFileSystemEntry(child, path + entry.name + '/', out);
+              });
+            }, Promise.resolve());
+          });
+        }
+        return Promise.resolve();
+      }
+
+      function entriesFromDrop(dataTransfer) {
+        var roots = [];
+        var items = dataTransfer.items || [];
+        for (var i = 0; i < items.length; i++) {
+          var entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+          if (entry) {
+            roots.push(entry);
+          }
+        }
+        var out = [];
+        return roots.reduce(function(promise, entry) {
+          return promise.then(function() {
+            return entriesFromFileSystemEntry(entry, '', out);
+          });
+        }, Promise.resolve()).then(function() {
+          return out;
+        });
+      }
+
+      // ---- Écoute du choix de dossier ----------------------------------------
+      dirElement.addEventListener('change', function(event) {
+        var files = event.target.files;
+        if (!files || files.length === 0) {
+          return;
+        }
+        removeEventListeners();
+        Module.loadGameFiles(entriesFromInput(files));
+      }, false);
+
+      document.getElementById('chooseButton').addEventListener('click', function() {
+        dirElement.click();
+      }, false);
+
+      function dragOverEvent(event) {
+        event.stopPropagation();
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        infoElement.classList.add('drag');
+      }
+
+      function dragLeaveEvent() {
+        infoElement.classList.remove('drag');
+      }
+
+      function dropEvent(event) {
+        event.stopPropagation();
+        event.preventDefault();
+        infoElement.classList.remove('drag');
+        removeEventListeners();
+        Module.loadGameFiles(entriesFromDrop(event.dataTransfer));
+      }
+
+      function addFileUploadEventListeners() {
+        infoElement.addEventListener('dragover', dragOverEvent, false);
+        infoElement.addEventListener('dragleave', dragLeaveEvent, false);
+        infoElement.addEventListener('drop', dropEvent, false);
+      }
+
+      function removeEventListeners() {
+        infoElement.removeEventListener('dragover', dragOverEvent, false);
+        infoElement.removeEventListener('dragleave', dragLeaveEvent, false);
+        infoElement.removeEventListener('drop', dropEvent, false);
+      }
+
+      function reloadOnClick() {
+        infoElement.style.cursor = 'pointer';
+        setTimeout(function () {
+          infoElement.addEventListener('click', function() {
+            window.location.reload();
+          });
+        }, 50);
+      }
+
+      function browserCanLoadFolder() {
+        return typeof FileReader !== 'undefined' && 'webkitdirectory' in dirElement;
+      }
+
+      function gameIsInstalled() {
+        try {
+          var names = Object.keys(FS.lookupPath(C3Dir).node.contents);
+          return names.some(function(name) {
+            return name.toLowerCase() === MARKER_FILE;
+          });
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function mkdirs(path) {
+        var current = C3Dir;
+        path.split('/').forEach(function(part) {
+          current += '/' + part;
+          try {
+            FS.mkdir(current, 0o777);
+          } catch (e) {
+            // existe déjà
+          }
+        });
+      }
+
+      var Module = {
+        preRun: [],
+        postRun: [],
+        running: false,
+        syncingFS: false,
+        syncPending: false,
+        totalDependencies: 0,
+        canvas: (function() {
+          var canvas = document.getElementById('canvas');
+          canvas.addEventListener("webglcontextlost", function(e) {
+            Module.setStatus('Le contexte WebGL a été perdu. Clique pour recharger la page.');
+            e.preventDefault();
+            reloadOnClick();
+          }, false);
+          return canvas;
+        })(),
+        print: function(text) {
+          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+          console.log(text);
+        },
+        printErr: function(text) {
+          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+          console.error(text);
+        },
+        // Texte de la forme « Libellé (x/y) » : affiché avec une barre de progression.
+        setStatus: function(text) {
+          if (!Module.setStatus.last) {
+            Module.setStatus.last = { time: 0, text: '' };
+          }
+          if (!text || text === Module.setStatus.last.text) {
+            return;
+          }
+          Module.showSubWindow(loadStatusElement);
+          var m = text.match(/([^(]+)?\((\d+(\.\d+)?)\/(\d+)\)/);
+          var now = Date.now();
+          if (m && now - Module.setStatus.last.time < 30) {
+            return;
+          }
+          Module.setStatus.last.time = now;
+          Module.setStatus.last.text = text;
+          if (m) {
+            text = m[1].trim() + ' ' + m[2] + ' / ' + m[4];
+            progressElement.value = parseInt(m[2]);
+            progressElement.max = parseInt(m[4]);
+            progressElement.style.display = 'block';
+          } else {
+            progressElement.removeAttribute('value');
+            progressElement.style.display = 'none';
+          }
+          spinnerElement.style.display = text.endsWith('...') || m ? 'block' : 'none';
+          statusElement.innerHTML = text;
+        },
+        showOSD: function(text) {
+          OSDElement.style.display = 'block';
+          OSDSpinnerElement.style.display = text.endsWith('...') ? 'inline-block' : 'none';
+          OSDStatusElement.innerHTML = text;
+        },
+        clearOSD: function() {
+          OSDElement.style.display = 'none';
+        },
+        showSubWindow: function(subWindow) {
+          if (Module.running) {
+            return;
+          }
+          Module.clearOSD();
+          infoElement.style.display = 'flex';
+          infoElement.style.cursor = 'auto';
+          loadStatusElement.style.display = subWindow === loadStatusElement ? 'block' : 'none';
+          chooseFolderElement.style.display = subWindow === chooseFolderElement ? 'block' : 'none';
+          startOptionsElement.style.display = subWindow === startOptionsElement ? 'block' : 'none';
+          confirmElement.style.display = subWindow === confirmElement ? 'block' : 'none';
+        },
+        showFirstScreen: function() {
+          removeEventListeners();
+          if (!gameIsInstalled()) {
+            Module.showChooseFolder(false);
+            return;
+          }
+          Module.showSubWindow(startOptionsElement);
+        },
+        showChooseFolder: function(canCancel, message) {
+          if (!browserCanLoadFolder()) {
+            Module.setStatus("Ce navigateur ne permet pas de choisir un dossier.<br><br>" +
+              "Utilise Chrome, Edge ou Firefox, en version récente.");
+            return;
+          }
+          chooseMessageElement.innerHTML = message ? message + '<br><br>' : '';
+          chooseCancelElement.style.display = canCancel && gameIsInstalled() ? 'block' : 'none';
+          dirElement.value = null;
+          Module.showSubWindow(chooseFolderElement);
+          addFileUploadEventListeners();
+        },
+        monitorRunDependencies: function(left) {
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          if (left) {
+            Module.setStatus('Préparation (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')');
+          }
+        },
+        onRuntimeInitialized: function() {
+          Module.startFS();
+        },
+        startGame: function() {
+          if (Module.running) {
+            return;
+          }
+          Module.setStatus("Lancement du jeu...");
+          Module.running = true;
+          Module.callMain([C3Dir]);
+          setTimeout(function() {
+            if (Module.running) {
+              infoElement.style.display = 'none';
+            }
+          }, 1000);
+        },
+        // Appelé par le moteur à la fermeture du jeu. Codes d'erreur (platform/SDL2/augustus.c) :
+        // 1 et 2 = fichiers du jeu invalides ; -1 et -2 = SDL, fenêtre ou WebGL indisponible.
+        quitGame: function(status) {
+          Module.running = false;
+          infoElement.style.display = 'flex';
+          if (status < 0) {
+            // Rien à voir avec les fichiers : on n'efface rien.
+            Module.setStatus("Le jeu n'a pas pu démarrer : WebGL ou l'audio est indisponible dans ce navigateur " +
+              "(code " + status + ").<br><br>Active l'accélération matérielle ou essaie un autre navigateur, " +
+              "puis clique pour recharger la page. Les fichiers et les sauvegardes sont gardés.");
+            reloadOnClick();
+          } else if (status) {
+            Module.setStatus("Ces fichiers ne sont pas une installation valide de Caesar III.<br><br>Nettoyage...");
+            Module.clearPath(C3Dir, true);
+            FS.syncfs(false, function() {
+              Module.showChooseFolder(false,
+                "Ces fichiers ne sont pas une installation valide de Caesar III. Choisis un autre dossier.");
+            });
+          } else {
+            Module.syncFS();
+          }
+        },
+        startFS: function() {
+          Module.setStatus("Lecture du stockage du navigateur...");
+          var hasIndexedDB = false;
+          try {
+            hasIndexedDB = typeof indexedDB !== 'undefined' && indexedDB !== null;
+          } catch (e) {
+            // certains navigateurs lèvent une exception en navigation privée
+          }
+          if (!hasIndexedDB) {
+            Module.setStatus("Ce navigateur bloque le stockage local (navigation privée ?).<br><br>" +
+              "Brutus III en a besoin pour garder les fichiers du jeu et les sauvegardes. " +
+              "Ouvre la page dans une fenêtre normale.");
+            return;
+          }
+          // Demande un stockage persistant : sinon le navigateur peut l'effacer s'il manque de place.
+          if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist().catch(function(e) {
+              console.warn(e);
+            });
+          }
+          try {
+            // Emscripten 7 ne met plus IDBFS dans la portée de la page :
+            // il est exporté par le moteur (EXPORTED_RUNTIME_METHODS) dans Module.IDBFS.
+            var idbfs = Module.IDBFS || (typeof IDBFS !== 'undefined' ? IDBFS : null);
+            if (!idbfs) {
+              throw new Error("IDBFS absent de la compilation (moteur/CMakeLists.txt)");
+            }
+            FS.mkdir(C3Dir);
+            FS.mount(idbfs, {}, C3Dir);
+            FS.syncfs(true, function(err) {
+              if (err) {
+                Module.handleFSError(err);
+                return;
+              }
+              Module.showFirstScreen();
+            });
+          } catch (e) {
+            Module.handleFSError(e);
+          }
+        },
+        // Appelé par le moteur (EM_ASM) après chaque fichier écrit ou supprimé.
+        // Si une synchro est déjà en cours, on en relance une à la fin : sinon une
+        // sauvegarde écrite pendant la synchro précédente ne serait pas enregistrée.
+        syncFS: function() {
+          if (Module.syncingFS) {
+            Module.syncPending = true;
+            return;
+          }
+          Module.syncingFS = true;
+          Module.syncPending = false;
+          var message = 'Enregistrement...';
+          if (!Module.running) {
+            Module.setStatus(message);
+          } else {
+            Module.showOSD(message);
+          }
+          FS.syncfs(false, function(err) {
+            Module.syncingFS = false;
+            if (err) {
+              console.error(err);
+            }
+            if (Module.syncPending) {
+              Module.syncFS();
+              return;
+            }
+            if (err) {
+              // Le joueur doit le savoir : sa sauvegarde n'est pas dans le navigateur.
+              var failure = "Échec de l'enregistrement (" + err + ") : ne ferme pas l'onglet, sauvegarde à nouveau";
+              if (Module.running) {
+                Module.showOSD(failure);
+              } else {
+                Module.setStatus(failure + ".<br><br>Clique pour recharger la page.");
+                reloadOnClick();
+              }
+              return;
+            }
+            Module.clearOSD();
+            if (!Module.running) {
+              Module.showFirstScreen();
+            }
+          });
+        },
+        // Vide un dossier de /C3. keepSaves : garde les sauvegardes à la racine.
+        clearPath: function(path, keepSaves) {
+          Object.keys(FS.lookupPath(path).node.contents).forEach(function(element) {
+            var full = path + '/' + element;
+            var stat = FS.stat(full);
+            if (FS.isDir(stat.mode)) {
+              Module.clearPath(full, false);
+              FS.rmdir(full);
+            } else if (!(keepSaves && path === C3Dir && isSaveFile(element))) {
+              FS.unlink(full);
+            }
+          });
+        },
+        clearFS: function() {
+          Module.setStatus("Suppression...");
+          Module.clearPath(C3Dir, false);
+          FS.syncfs(false, function(err) {
+            if (err) {
+              Module.handleFSError(err);
+              return;
+            }
+            Module.showChooseFolder(false, "Tout a été effacé.");
+          });
+        },
+        // Brutus III : ne supprime plus la base IndexedDB (Augustus le faisait), pour ne jamais
+        // perdre les sauvegardes sur une erreur passagère (quota, base verrouillée).
+        handleFSError: function(err) {
+          console.error(err);
+          Module.setStatus("Erreur du stockage du navigateur :<br><br>" + err +
+            "<br><br>Tes sauvegardes n'ont pas été effacées. Libère de la place sur le disque " +
+            "ou ferme les autres onglets Brutus III, puis clique pour recharger la page et réessayer." +
+            "<br><br>Si l'erreur revient, efface les données du site dans les réglages du navigateur " +
+            "(les fichiers du jeu et les sauvegardes seront perdus).");
+          reloadOnClick();
+        },
+        // Copie le dossier choisi dans /C3, puis enregistre dans IndexedDB.
+        loadGameFiles: function(entriesPromise) {
+          Module.setStatus("Lecture du dossier...");
+          entriesPromise.then(function(entries) {
+            var selected = selectGameFiles(entries);
+            if (!selected) {
+              Module.showChooseFolder(gameIsInstalled(),
+                "C3.sg2 est introuvable dans ce dossier. Choisis le dossier d'installation de Caesar III.");
+              return;
+            }
+            Module.setStatus("Suppression de l'ancien dossier du jeu (sauvegardes gardées)...");
+            Module.clearPath(C3Dir, true);
+            var total = selected.length;
+            var done = 0;
+            var copyNext = function() {
+              if (done === total) {
+                Module.setStatus("Enregistrement dans le navigateur (une seule fois)...");
+                FS.syncfs(false, function(err) {
+                  if (err) {
+                    Module.handleFSError(err);
+                    return;
+                  }
+                  dirElement.value = null;
+                  Module.startGame();
+                });
+                return;
+              }
+              var entry = selected[done];
+              Module.setStatus("Copie des fichiers du jeu (" + (done + 1) + "/" + total + ")");
+              entry.file.arrayBuffer().then(function(buffer) {
+                var slash = entry.path.lastIndexOf('/');
+                if (slash !== -1) {
+                  mkdirs(entry.path.substring(0, slash));
+                }
+                FS.writeFile(C3Dir + '/' + entry.path, new Uint8Array(buffer));
+                done++;
+                copyNext();
+              }).catch(function(e) {
+                Module.setStatus("Erreur pendant la copie de " + entry.path + " :<br><br>" + e +
+                  "<br><br>Clique pour recharger la page et réessayer.");
+                reloadOnClick();
+              });
+            };
+            copyNext();
+          }).catch(function(e) {
+            Module.setStatus("Impossible de lire ce dossier :<br><br>" + e +
+              "<br><br>Clique pour recharger la page et réessayer.");
+            reloadOnClick();
+          });
+        }
+      };
+
+      // Filet de sécurité : enregistre quand l'onglet passe en arrière-plan.
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden' && Module.running) {
+          Module.syncFS();
+        }
+      });
+      window.addEventListener('beforeunload', function(event) {
+        if (Module.syncingFS) {
+          event.preventDefault();
+          event.returnValue = '';
+        }
+      });
+
+      window.onerror = function(error) {
+        Module.setStatus("Erreur inattendue :<br><br>" + error + "<br><br>Clique pour recharger la page.");
+        reloadOnClick();
+        Module.setStatus = function() {};
+      };
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+</html>

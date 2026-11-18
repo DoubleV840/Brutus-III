@@ -49,15 +49,19 @@ if ! emcc "$TMP_PORTS/vide.c" -o "$TMP_PORTS/vide.js" \
 fi
 
 echo "== Configuration ($TYPE) dans build-web/"
-# -sDEFAULT_TO_CXX : moteur/CMakeLists.txt lie avec `--bind` (embind, du C++)
-# alors que le projet est en C. Depuis Emscripten 7, emcc n'ajoute plus seul
-# les bibliothèques C++ : sans ça, l'édition de liens échoue (« undefined
-# symbol: typeinfo for … »). Augustus n'utilise pas embind : M2 pourra
-# retirer `--bind` du moteur et cette option.
+# - BRUTUS_SHELL_IN : notre page (web/shell.html.in) au lieu de celle d'Augustus.
+# - CMAKE_EXE_LINKER_FLAGS vide : M1 y mettait -sDEFAULT_TO_CXX (pour embind,
+#   retiré du moteur en M2). Sans cette ligne, l'ancienne valeur resterait
+#   dans le cache CMake d'un build-web/ existant.
 emcmake cmake -S moteur -B "$SORTIE" \
   -DTARGET_PLATFORM=emscripten \
   -DCMAKE_BUILD_TYPE="$TYPE" \
-  -DCMAKE_EXE_LINKER_FLAGS="-sDEFAULT_TO_CXX"
+  -DBRUTUS_SHELL_IN="$RACINE/web/shell.html.in" \
+  -DCMAKE_EXE_LINKER_FLAGS=""
+
+# Pour CMake, la page n'est pas une dépendance de l'édition de liens : on la
+# force, pour qu'une modification de web/ soit toujours prise en compte.
+rm -f "$SORTIE/augustus.html"
 
 echo "== Compilation"
 emmake cmake --build "$SORTIE" -j "$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
@@ -72,6 +76,16 @@ if find "$SORTIE" -type f \( -iname '*.sg2' -o -iname '*.555' -o -iname '*.smk' 
   exit 1
 fi
 
+echo "== Vérification : IDBFS présent dans le JS (sauvegardes persistantes)"
+if ! grep -q '<title>Brutus III</title>' "$SORTIE/augustus.html"; then
+  echo "ERREUR : la page web/shell.html.in n'a pas été utilisée." >&2
+  exit 1
+fi
+if ! grep -q 'IDBFS=' "$SORTIE/augustus.html"; then
+  echo "ERREUR : IDBFS absent du JS généré (voir EXPORTED_RUNTIME_METHODS dans moteur/CMakeLists.txt)." >&2
+  exit 1
+fi
+
 echo
 echo "OK : $(ls -lh "$SORTIE/augustus.html" | awk '{print $5}') -> build-web/augustus.html"
-echo "(La page jouable avec chargement du dossier du jeu arrive en M2.)"
+echo "Tester : cd build-web && python3 -m http.server 8000   puis http://localhost:8000/augustus.html"

@@ -1,0 +1,11 @@
+{
+  "name": "brutus-iii-test-page",
+  "private": true,
+  "description": "Test sans navigateur de la page web (IDBFS, copie du dossier, sauvegardes)",
+  "scripts": {
+    "test": "node test-page.js"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.0.0"
+  }
+}

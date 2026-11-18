@@ -202,7 +202,9 @@ configure_file(${PROJECT_SOURCE_DIR}/gen/version.rc.in ${PROJECT_SOURCE_DIR}/res
 configure_file(${PROJECT_SOURCE_DIR}/gen/version.txt.in ${PROJECT_SOURCE_DIR}/res/version.txt)
 
 if(${TARGET_PLATFORM} STREQUAL "emscripten")
-    configure_file(${PROJECT_SOURCE_DIR}/gen/shell.html.in ${PROJECT_SOURCE_DIR}/res/shell.html)
+    # Brutus III : page web remplaçable (outils/build-web.sh passe web/shell.html.in)
+    set(BRUTUS_SHELL_IN "${PROJECT_SOURCE_DIR}/gen/shell.html.in" CACHE FILEPATH "Brutus III : modèle de la page web")
+    configure_file(${BRUTUS_SHELL_IN} ${PROJECT_SOURCE_DIR}/res/shell.html)
 endif()
 
 if(DRAW_FPS)
@@ -912,8 +914,10 @@ endif()
 
 if(${TARGET_PLATFORM} STREQUAL "emscripten")
     set(CMAKE_EXECUTABLE_SUFFIX .html)
+    # Brutus III : `--bind` (embind, C++, inutilisé) retiré ; IDBFS exporté
+    # explicitement (Module.IDBFS), sinon Emscripten 7 l'élimine du JS.
     set(EMSCRIPTEN_LINK_FLAGS
-        "-lidbfs.js -s SINGLE_FILE=1 -s SINGLE_FILE_BINARY_ENCODE=0 --shell-file ${PROJECT_SOURCE_DIR}/res/shell.html --embed-file ${ASSETS_DIR}@/assets -s INITIAL_MEMORY=268435456 -s ALLOW_MEMORY_GROWTH=1 -s INVOKE_RUN=0 -s EXPORTED_FUNCTIONS=[\"_main\"] -s EXPORTED_RUNTIME_METHODS=[\"callMain\",\"FS\"] -s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=[\"$autoResumeAudioContext\"] --bind"
+        "-lidbfs.js -s SINGLE_FILE=1 -s SINGLE_FILE_BINARY_ENCODE=0 --shell-file ${PROJECT_SOURCE_DIR}/res/shell.html --embed-file ${ASSETS_DIR}@/assets -s INITIAL_MEMORY=268435456 -s ALLOW_MEMORY_GROWTH=1 -s INVOKE_RUN=0 -s EXPORTED_FUNCTIONS=[\"_main\"] -s EXPORTED_RUNTIME_METHODS=[\"callMain\",\"FS\",\"IDBFS\"] -s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=[\"$autoResumeAudioContext\"]"
     )
     if("${CMAKE_BUILD_TYPE}" MATCHES "Debug")
         set(EMSCRIPTEN_LINK_FLAGS "${EMSCRIPTEN_LINK_FLAGS} -s ASSERTIONS=1")
