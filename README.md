@@ -45,3 +45,18 @@ Test sans navigateur de la page (IDBFS, copie, sauvegardes après rechargement) 
 ```bash
 cd web/test && npm install && npm test   # après bash outils/build-web.sh
 ```
+
+## Publication
+
+La CI `.github/workflows/pages.yml` publie la version web sur GitHub Pages (https://brutus.ivwi.fr) à chaque push sur `main` (ou à la main : onglet Actions → Pages → « Run workflow ») :
+
+1. **build** : installe Emscripten 7.0.0, restaure le cache des ports (`.emcache/`), lance `bash outils/build-web.sh`, qui prépare `build-pages/` (`index.html` = la page du jeu, `CNAME`, `.nojekyll`), puis le garde-fou `outils/verifier-publication.sh`.
+2. **test** : `npm ci && npm test` dans `web/test`, sur la page publiée.
+3. **deploy** : publie, seulement si les deux jobs précédents ont réussi.
+
+Le garde-fou bloque la publication si le dossier contient un fichier ou un nom typique des données de Caesar III, un fichier non prévu, plus de 60 Mo, ou si un fichier embarqué dans le wasm ne vient pas de `moteur/res/`. À lancer aussi en local : `bash outils/verifier-publication.sh build-pages`.
+
+Réglages à faire une fois :
+
+- GitHub, dépôt `DoubleV840/Brutus-III` → Settings → Pages → Source : « GitHub Actions » ;
+- chez OVH, zone DNS de `ivwi.fr` : CNAME `brutus` → `doublev840.github.io.` ; puis, dans Settings → Pages, renseigner `brutus.ivwi.fr` comme domaine personnalisé et cocher « Enforce HTTPS » quand le certificat est prêt.

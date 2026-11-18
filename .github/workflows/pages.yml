@@ -1,0 +1,117 @@
+# Brutus III : compile la version web (Emscripten), la teste, puis la publie
+# sur GitHub Pages (https://brutus.ivwi.fr). Phase 1d de PLAN.md.
+#
+# Règle 1 : aucun fichier du jeu original n'est publié. Le dépôt n'en contient
+# pas (jeu-original/ est ignoré) et outils/verifier-publication.sh bloque
+# l'upload si le dossier publié en contient (noms, taille, fichiers embarqués).
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un seul déploiement Pages à la fois ; on ne coupe pas un déploiement en cours.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # Même version qu'en local (emcc --version).
+  EMSCRIPTEN_VERSION: 7.0.0
+
+jobs:
+  build:
+    name: Compilation web
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Installer Emscripten
+        uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+          actions-cache-folder: emsdk-cache
+
+      - name: Vérifier la version d'Emscripten
+        run: emcc --version | head -1 | grep -F " $EMSCRIPTEN_VERSION "
+        env:
+          EM_CACHE: ${{ github.workspace }}/.emcache
+
+      # Ports Emscripten (SDL2, SDL2_mixer, ogg, vorbis, mpg123) et bibliothèques
+      # système compilées. build-web.sh les prépare en séquence avant la
+      # compilation parallèle (sinon le verrou du cache bloque).
+      - name: Cache des ports Emscripten
+        uses: actions/cache@v6
+        with:
+          path: .emcache
+          key: emcache-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-${{ hashFiles('outils/build-web.sh', 'moteur/CMakeLists.txt') }}
+          restore-keys: |
+            emcache-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-
+
+      # Compile, puis prépare build-pages/ (index.html, CNAME, .nojekyll) et
+      # lance une première fois le garde-fou.
+      - name: Compiler
+        run: bash outils/build-web.sh
+
+      - name: Garde-fou (aucun fichier du jeu publié)
+        run: bash outils/verifier-publication.sh build-pages
+
+      - name: Envoyer le dossier publié
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build-pages
+          include-hidden-files: true
+
+  test:
+    name: Test de la page
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/test/package-lock.json
+
+      # On teste exactement la page qui sera publiée.
+      - name: Récupérer le dossier publié
+        uses: actions/download-artifact@v8
+        with:
+          name: github-pages
+          path: build-artefact
+
+      - name: Extraire
+        run: mkdir -p build-pages && tar -xf build-artefact/artifact.tar -C build-pages
+
+      - name: Installer
+        working-directory: web/test
+        run: npm ci
+
+      - name: Tester
+        working-directory: web/test
+        run: npm test
+        env:
+          BRUTUS_PAGE: ${{ github.workspace }}/build-pages/index.html
+
+  deploy:
+    name: Déployer sur GitHub Pages
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
