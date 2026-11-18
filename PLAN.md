@@ -26,7 +26,7 @@ Le fondateur veut aussi pouvoir y jouer sur son PC Windows. Le navigateur suffit
 
 ## 3. Règles du projet (pour tous les agents)
 
-1. **Aucun fichier du jeu original** (`.sg2 .555 .smk .eng .emp .map .wav`, vidéos, etc.) ne doit être commité ni publié sur le site. Chaque joueur charge ses propres fichiers dans son navigateur. Vérification avant chaque fin de mission : `git ls-files | grep -iE '\.(sg2|555|smk|eng|emp)$'` doit être vide.
+1. **Aucun fichier du jeu original** (`.sg2 .555 .smk .eng .emp .map .wav`, vidéos, etc.) ne doit être commité ni publié sur le site. Chaque joueur charge ses propres fichiers dans son navigateur. Vérification avant chaque fin de mission : `git ls-files | grep -iE '\.(sg2|555|smk|eng|emp|map|wav)$' | grep -v '^moteur/'` doit être vide (`moteur/` est exclu : Augustus y fournit ses propres cartes libres, `moteur/res/maps/*.map`).
 2. **Licence AGPL** : garder `moteur/COPYING` (ou équivalent) et les crédits Julius/Augustus, et mettre un lien « Code source » visible dans le jeu et sur la page.
 3. **Le solo doit toujours marcher.** Chaque phase se termine avec un solo jouable.
 4. **Isoler nos modifications** : le nouveau code va dans des fichiers à nous (par exemple `moteur/src/multijoueur/…`). Les fichiers d'Augustus ne reçoivent que des points d'accroche courts. Ainsi, `git subtree pull` pourra récupérer les mises à jour d'Augustus sans trop de conflits.

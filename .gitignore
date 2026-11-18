@@ -14,6 +14,10 @@ jeu-original/
 *.smk
 *.eng
 *.emp
+*.map
+*.wav
+# Exception : cartes libres fournies par Augustus (suivies dans moteur/res/maps)
+!moteur/**/*.map
 
 # Compilation
 build/
