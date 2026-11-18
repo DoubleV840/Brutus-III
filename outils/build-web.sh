@@ -42,7 +42,9 @@ echo 'int main(void) { return 0; }' > "$TMP_PORTS/vide.c"
 if ! emcc "$TMP_PORTS/vide.c" -o "$TMP_PORTS/vide.js" \
      -sUSE_SDL=2 -sUSE_SDL_MIXER=2 '-sSDL2_MIXER_FORMATS=["mp3,ogg"]' -sUSE_MPG123=1; then
   echo "ERREUR : impossible de préparer les ports Emscripten." >&2
-  echo "Si c'est un problème réseau, il faut accès à github.com et à ses serveurs de téléchargement." >&2
+  echo "Si c'est un problème réseau : il faut github.com, codeload.github.com," >&2
+  echo "release-assets.githubusercontent.com (releases GitHub) et www.mpg123.de." >&2
+  echo "Le bac à sable des agents ne les a pas tous : lance ce script une fois depuis ton Terminal." >&2
   exit 1
 fi
 
