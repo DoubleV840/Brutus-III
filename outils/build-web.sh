@@ -10,6 +10,8 @@
 # - idempotent : relancer le script recompile seulement ce qui a changé.
 # - n'embarque JAMAIS de fichier de jeu-original/ (règle 1 de PLAN.md) : seuls
 #   les assets libres d'Augustus (moteur/res/assets) sont intégrés, et c'est vérifié à la fin.
+# - prépare aussi build-pages/ (ce que la CI publie) et lance le garde-fou
+#   outils/verifier-publication.sh.
 set -euo pipefail
 
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -64,17 +66,32 @@ emcmake cmake -S moteur -B "$SORTIE" \
 rm -f "$SORTIE/augustus.html"
 
 echo "== Compilation"
-emmake cmake --build "$SORTIE" -j "$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+emmake cmake --build "$SORTIE" -j "$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
 echo "== Vérification : aucun fichier du jeu original dans la sortie"
 if grep -rIl --include='*.txt' --include='*.make' --include='*.rsp' 'jeu-original' "$SORTIE/CMakeFiles" 2>/dev/null; then
   echo "ERREUR : la compilation fait référence à jeu-original/ (fichiers ci-dessus). Règle 1 de PLAN.md." >&2
   exit 1
 fi
-if find "$SORTIE" -type f \( -iname '*.sg2' -o -iname '*.555' -o -iname '*.smk' -o -iname '*.eng' -o -iname '*.emp' -o -iname '*.map' -o -iname '*.wav' \) | grep .; then
-  echo "ERREUR : fichiers du jeu original trouvés dans build-web/ (liste ci-dessus). Règle 1 de PLAN.md." >&2
+# Les assets sont embarqués dans augustus.html (--embed-file) : on vérifie leur
+# source dans la commande d'édition de liens (uniquement moteur/), puis le
+# contenu réel de la page via le garde-fou de publication (plus bas).
+LINK_TXT="$SORTIE/CMakeFiles/augustus.dir/link.txt"
+if [ ! -f "$LINK_TXT" ]; then
+  echo "ERREUR : $LINK_TXT introuvable : impossible de vérifier les fichiers embarqués." >&2
   exit 1
 fi
+EMBARQUES="$(grep -oE -- '--(embed|preload)-file [^ ]+' "$LINK_TXT" | awk '{print $2}' || true)"
+if [ -z "$EMBARQUES" ]; then
+  echo "ERREUR : aucun --embed-file dans $LINK_TXT (format changé ? à revoir)." >&2
+  exit 1
+fi
+echo "$EMBARQUES" | while read -r SOURCE; do
+  case "$SOURCE" in
+    "$RACINE/moteur/"*) echo "   embarqué : ${SOURCE#"$RACINE/"}" ;;
+    *) echo "ERREUR : fichier embarqué hors de moteur/ : $SOURCE. Règle 1 de PLAN.md." >&2; exit 1 ;;
+  esac
+done
 
 echo "== Vérification : IDBFS présent dans le JS (sauvegardes persistantes)"
 if ! grep -q '<title>Brutus III</title>' "$SORTIE/augustus.html"; then
@@ -85,6 +102,9 @@ if ! grep -q 'IDBFS=' "$SORTIE/augustus.html"; then
   echo "ERREUR : IDBFS absent du JS généré (voir EXPORTED_RUNTIME_METHODS dans moteur/CMakeLists.txt)." >&2
   exit 1
 fi
+
+echo "== Dossier de publication (build-pages/) et garde-fou"
+bash "$RACINE/outils/preparer-publication.sh"
 
 echo
 echo "OK : $(ls -lh "$SORTIE/augustus.html" | awk '{print $5}') -> build-web/augustus.html"

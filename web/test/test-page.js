@@ -10,7 +10,8 @@ const path = require('path');
 const vm = require('vm');
 const { indexedDB, IDBKeyRange } = require('fake-indexeddb');
 
-const html = fs.readFileSync(path.join(__dirname, '..', '..', 'build-web', 'augustus.html'), 'utf8');
+// BRUTUS_PAGE : autre page à tester (la CI teste build-pages/index.html, la page publiée).
+const html = fs.readFileSync(process.env.BRUTUS_PAGE || path.join(__dirname, '..', '..', 'build-web', 'augustus.html'), 'utf8');
 const scripts = [];
 const re = /<script[^>]*>([\s\S]*?)<\/script>/g;
 let m;
