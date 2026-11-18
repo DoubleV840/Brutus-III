@@ -1,0 +1,25 @@
+node_modules/
+.DS_Store
+dist/
+.build/
+.venv/
+__pycache__/
+*.log
+.claude/.cc-writes/
+
+# Fichiers du jeu original : JAMAIS dans le dépôt (droits d'auteur)
+jeu-original/
+*.sg2
+*.555
+*.smk
+*.eng
+*.emp
+
+# Compilation
+build/
+build-*/
+.emcache/
+
+# Serveur multijoueur (Cloudflare)
+.wrangler/
+.dev.vars
