@@ -1,5 +1,7 @@
 #include "building_info.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "assets/assets.h"
 #include "building/barracks.h"
 #include "building/culture.h"
@@ -1257,7 +1259,7 @@ static void button_mothball(int param1, int param2)
     building *b = building_get(context.building_id);
     int workers_needed = model_get_building(b->type)->laborers;
     if (workers_needed) {
-        building_mothball_toggle(b);
+        brutus_commande_2(BRUTUS_CMD_MISE_EN_SOMMEIL, b->x, b->y); // Brutus III
         window_invalidate();
     }
 }

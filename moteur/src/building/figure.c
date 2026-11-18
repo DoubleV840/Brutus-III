@@ -26,6 +26,7 @@
 #include "core/calc.h"
 #include "core/config.h"
 #include "core/image.h"
+#include "core/random.h" // Brutus III
 #include "figure/figure.h"
 #include "figure/formation_legion.h"
 #include "figure/movement.h"
@@ -215,7 +216,7 @@ static void spawn_plebian(building *b)
                 }
             }
             // random spawn check
-            if (rand() % 100 < chance) {
+            if (random_from_stdlib() % 100 < chance) { // Brutus III : rand() -> générateur déterministe
                 figure *f = figure_create(FIGURE_PLEBIAN, road.x, road.y, DIR_4_BOTTOM);
                 f->action_state = FIGURE_ACTION_125_ROAMING;
                 f->building_id = b->id;
@@ -257,7 +258,7 @@ static void spawn_dog(building *b)
                 }
             }
             // random spawn check
-            if (rand() % 100 < chance) {
+            if (random_from_stdlib() % 100 < chance) { // Brutus III : rand() -> générateur déterministe
                 figure *f = figure_create(FIGURE_DOG, road.x, road.y, DIR_4_BOTTOM);
                 f->action_state = FIGURE_ACTION_125_ROAMING;
                 f->building_id = b->id;

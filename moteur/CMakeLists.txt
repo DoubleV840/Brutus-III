@@ -107,6 +107,12 @@ endif()
 
 set(CMAKE_C_STANDARD 99)
 
+# Brutus III : flottants identiques en natif et en wasm (pas de fusion a*b+c en FMA sur arm64/x86).
+# Pas de -ffast-math nulle part : il ne doit jamais être ajouté (déterminisme du multijoueur).
+if(NOT MSVC)
+    add_compile_options(-ffp-contract=off)
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCC OR MINGW)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-missing-field-initializers -Wno-sign-compare -Werror=implicit-function-declaration")
     if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 5.0)
@@ -826,7 +832,15 @@ if(${TARGET_PLATFORM} STREQUAL "emscripten")
     set(EMSCRIPTEN_FILES ${PROJECT_SOURCE_DIR}/res/shell.html)
 endif()
 
+# Brutus III : couche de commandes, empreinte et rejouage (phase 2)
+set(MULTIJOUEUR_FILES
+    ${PROJECT_SOURCE_DIR}/src/multijoueur/commande.c
+    ${PROJECT_SOURCE_DIR}/src/multijoueur/empreinte.c
+    ${PROJECT_SOURCE_DIR}/src/multijoueur/rejouage.c
+)
+
 set(SOURCE_FILES
+    ${MULTIJOUEUR_FILES}
     ${PLATFORM_FILES}
     ${CORE_FILES}
     ${BUILDING_FILES}
@@ -919,6 +933,15 @@ if(${TARGET_PLATFORM} STREQUAL "emscripten")
     set(EMSCRIPTEN_LINK_FLAGS
         "-lidbfs.js -s SINGLE_FILE=1 -s SINGLE_FILE_BINARY_ENCODE=0 --shell-file ${PROJECT_SOURCE_DIR}/res/shell.html --embed-file ${ASSETS_DIR}@/assets -s INITIAL_MEMORY=268435456 -s ALLOW_MEMORY_GROWTH=1 -s INVOKE_RUN=0 -s EXPORTED_FUNCTIONS=[\"_main\"] -s EXPORTED_RUNTIME_METHODS=[\"callMain\",\"FS\",\"IDBFS\"] -s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=[\"$autoResumeAudioContext\"]"
     )
+    # Brutus III : variante sans page, pour le rejouage sous Node (outils/test-rejouage-wasm.sh).
+    # Les fichiers de l'ordinateur sont montés sous /hote (NODEFS) ; la page publiée n'est pas concernée.
+    option(BRUTUS_REJOUAGE_NODE "Brutus III : wasm pour Node (rejouage sans affichage)" OFF)
+    if(BRUTUS_REJOUAGE_NODE)
+        set(EMSCRIPTEN_LINK_FLAGS
+            "-lnodefs.js -s ENVIRONMENT=node -s EXIT_RUNTIME=1 --embed-file ${ASSETS_DIR}@/assets -s INITIAL_MEMORY=268435456 -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB --pre-js ${PROJECT_SOURCE_DIR}/src/multijoueur/rejouage-node-pre.js"
+        )
+        set_target_properties(${SHORT_NAME} PROPERTIES SUFFIX ".js")
+    endif()
     if("${CMAKE_BUILD_TYPE}" MATCHES "Debug")
         set(EMSCRIPTEN_LINK_FLAGS "${EMSCRIPTEN_LINK_FLAGS} -s ASSERTIONS=1")
     endif()

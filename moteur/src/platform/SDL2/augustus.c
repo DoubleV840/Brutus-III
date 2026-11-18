@@ -16,6 +16,7 @@
 #include "platform/file_manager.h"
 #include "platform/android/android.h"
 #include "platform/arguments.h"
+#include "multijoueur/rejouage.h" // Brutus III
 #include "platform/cursor.h"
 #include "platform/emscripten/emscripten.h"
 #include "platform/file_manager_cache.h"
@@ -445,7 +446,11 @@ static int init_sdl(int enable_joysticks)
         // Try starting SDL without joystick support
         if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO) != 0) {
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Could not initialize SDL: %s", SDL_GetError());
-            return 0;
+            // Brutus III : en rejouage sans affichage, SDL sans vidéo ni son suffit
+            if (!brutus_rejouage_demande() || SDL_Init(0) != 0) {
+                return 0;
+            }
+            SDL_Log("Brutus III : SDL sans vidéo ni son (rejouage)");
         } else {
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Could not enable joystick support");
         }
@@ -697,6 +702,7 @@ static void setup(const augustus_args *args)
 int main(int argc, char **argv)
 {
     augustus_args args;
+    argc = brutus_rejouage_extraire_options(argc, argv); // Brutus III : options --rejouer…
     if (!platform_parse_arguments(argc, argv, &args)) {
 #if !defined(_WIN32) && !defined(__vita__) && !defined(__SWITCH__) && !defined(__ANDROID__) && !defined(__APPLE__)
         // Only exit on Linux platforms where we know the system will not throw any weird arguments our way
@@ -706,6 +712,12 @@ int main(int argc, char **argv)
 
     setup(&args);
 
+    // Brutus III : mode rejouage sans affichage, sans boucle principale ni horloge réelle
+    if (brutus_rejouage_demande()) {
+        int code = brutus_rejouage_executer();
+        SDL_Quit();
+        exit(code);
+    }
 
 
     mouse_set_inside_window(1);

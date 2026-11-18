@@ -1,5 +1,7 @@
 #include "hold_festival.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "assets/assets.h"
 #include "city/constants.h"
 #include "city/festival.h"
@@ -179,7 +181,8 @@ static void button_hold_festival(int param1, int param2)
     if (city_finance_out_of_money()) {
         return;
     }
-    city_festival_schedule();
+    // Brutus III : passe par la file de commandes (dieu et taille choisis dans la fenêtre)
+    brutus_commande_2(BRUTUS_CMD_FETE, city_festival_selected_god(), city_festival_selected_size());
     window_advisors_show();
 }
 

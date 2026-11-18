@@ -1,5 +1,7 @@
 #include "city.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "building/menu.h"
 #include "city/message.h"
 #include "city/view.h"
@@ -316,7 +318,7 @@ static void button_build(int submenu, int param2)
 static void button_undo(int param1, int param2)
 {
     window_build_menu_hide();
-    game_undo_perform();
+    brutus_commande_0(BRUTUS_CMD_ANNULER); // Brutus III
     window_invalidate();
 }
 
@@ -361,16 +363,12 @@ static void button_toggle_grid(int param1, int param2)
 
 static void button_rotate_north(int param1, int param2)
 {
-    game_orientation_rotate_north();
+    brutus_commande_1(BRUTUS_CMD_ROTATION_VUE, 2); // Brutus III
     window_invalidate();
 }
 
 static void button_rotate(int clockwise, int param2)
 {
-    if (clockwise) {
-        game_orientation_rotate_right();
-    } else {
-        game_orientation_rotate_left();
-    }
+    brutus_commande_1(BRUTUS_CMD_ROTATION_VUE, clockwise ? 1 : 0); // Brutus III
     window_invalidate();
 }

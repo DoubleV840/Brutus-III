@@ -48,6 +48,9 @@
 #include "map/sprite.h"
 #include "map/terrain.h"
 #include "map/tiles.h"
+#include "map/bridge.h" // Brutus III
+#include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/empreinte.h" // Brutus III
 #include "scenario/allowed_building.h"
 #include "scenario/criteria.h"
 #include "scenario/custom_media.h"
@@ -850,6 +853,7 @@ static void scenario_load_from_state(scenario_state *file, scenario_version_t ve
     }
 
     buffer_skip(file->end_marker, 4);
+    brutus_partie_chargee(); // Brutus III
 }
 
 static void scenario_save_to_state(scenario_state *file)
@@ -1075,10 +1079,12 @@ static void savegame_load_from_state(savegame_state *state, savegame_version_t v
     if (version <= SAVE_GAME_LAST_NO_HOUSE_MODELS) {
         scenario_events_population_migrate_counting();
     }
+    brutus_partie_chargee(); // Brutus III : file de commandes et caches remis à zéro
 }
 
 static void savegame_save_to_state(savegame_state *state)
 {
+    buffer_brutus_zero_init(1); // Brutus III : tampons d'écriture remis à zéro (octets sautés déterministes)
     buffer_write_i32(state->file_version, SAVE_GAME_CURRENT_VERSION);
     buffer_write_u32(state->resource_version, RESOURCE_CURRENT_VERSION);
     buffer_write_i32(state->scenario_version, SCENARIO_CURRENT_VERSION);
@@ -1170,6 +1176,56 @@ static void savegame_save_to_state(savegame_state *state)
 
     city_finance_ledger_save_state(state->finance_ledger);
     building_monument_save_stages(state->monument_stages);
+    buffer_brutus_zero_init(0); // Brutus III
+}
+
+// Brutus III : empreinte de l'état (voir multijoueur/empreinte.h et docs/determinisme.md).
+// On sérialise la partie comme pour une sauvegarde (sans compresser ni écrire de fichier),
+// puis on hache chaque morceau, sauf ceux qui ne relèvent pas de la simulation.
+uint64_t game_file_io_brutus_empreinte(void)
+{
+    resource_set_mapping(RESOURCE_CURRENT_VERSION);
+    init_savegame_data(SAVE_GAME_CURRENT_VERSION);
+    brutus_empreinte_marquer(1);
+    savegame_state *state = &savegame_data.state;
+    savegame_save_to_state(state);
+    brutus_empreinte_marquer(0);
+
+    // Tuiles : on efface les marques d'aperçu de construction / démolition (interface)
+    // et les images animées dessinées à l'écran (sauf les ponts, qui sont de la simulation).
+    if (state->bitfields_grid && state->bitfields_grid->size == GRID_SIZE_BUF_U16) {
+        uint8_t *octets = state->bitfields_grid->data;
+        for (int i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+            octets[2 * i] &= (uint8_t) ~0x50; // BIT_CONSTRUCTION | BIT_DELETED (= BIT_REPAIR)
+        }
+    }
+    if (state->sprite_grid && state->sprite_grid->size == GRID_SIZE_BUF_U8) {
+        uint8_t *octets = state->sprite_grid->data;
+        for (int i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+            if (!map_is_bridge(i)) {
+                octets[i] = 0;
+            }
+        }
+    }
+
+    uint64_t h = BRUTUS_FNV_DEPART;
+    for (int i = 0; i < savegame_data.num_pieces; i++) {
+        buffer *b = &savegame_data.pieces[i].buf;
+        if (b == state->city_view_camera || b == state->bookmarks || b == state->sprite_backup_grid ||
+            b == state->city_sounds) {
+            continue; // caméra, signets, copie de secours de l'annulation, sons : hors simulation
+        }
+        uint32_t taille = (uint32_t) b->size;
+        uint8_t taille_le[4] = {
+            (uint8_t) taille, (uint8_t) (taille >> 8), (uint8_t) (taille >> 16), (uint8_t) (taille >> 24)
+        };
+        h = brutus_fnv1a(h, taille_le, 4);
+        if (b->data && b->size) {
+            h = brutus_fnv1a(h, b->data, b->size);
+        }
+    }
+    clear_savegame_pieces();
+    return h;
 }
 
 static int get_scenario_version(FILE *fp)

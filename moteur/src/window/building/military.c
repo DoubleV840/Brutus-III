@@ -1,5 +1,7 @@
 #include "military.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "assets/assets.h"
 #include "building/barracks.h"
 #include "building/building.h"
@@ -663,14 +665,14 @@ static void button_return_to_fort(const generic_button *button)
 {
     formation *m = formation_get(data.context_for_callback->formation_id);
     if (!m->in_distant_battle && m->is_at_fort != 1) {
-        formation_legion_return_home(m);
+        brutus_commande_1(BRUTUS_CMD_LEGION_RENTRER, m->id); // Brutus III
         window_city_show();
     }
 }
 
 static void button_all_legions_return_to_fort(const generic_button *button)
 {
-    formation_legion_return_home_all();
+    brutus_commande_1(BRUTUS_CMD_LEGION_RENTRER, 0); // Brutus III : 0 = toutes les légions
     window_city_show();
 }
 
@@ -706,7 +708,7 @@ static void button_layout(const generic_button *button)
             case 4: new_layout = FORMATION_MOP_UP; break;
         }
     }
-    formation_legion_change_layout(m, new_layout);
+    brutus_commande_2(BRUTUS_CMD_LEGION_FORMATION, m->id, new_layout); // Brutus III
     switch (index) {
         case 0: sound_speech_play_file("wavs/cohort1.wav"); break;
         case 1: sound_speech_play_file("wavs/cohort2.wav"); break;

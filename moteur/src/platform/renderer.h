@@ -5,6 +5,9 @@
 
 int platform_renderer_init(void *window);
 
+/** Brutus III : rendu logiciel sans fenêtre (rejouage sans affichage, wasm sous Node). */
+int platform_renderer_brutus_init_sans_fenetre(int width, int height);
+
 int platform_renderer_create_render_texture(int width, int height);
 
 int platform_renderer_lost_render_texture(void);

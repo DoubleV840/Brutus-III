@@ -26,6 +26,13 @@ unsigned int building_construction_clear_select(int x_start, int y_start, int x_
 unsigned int building_construction_clear_land(int x_start, int y_start, int x_end, int y_end);
 
 /**
+ * Brutus III : exécute la démolition après la réponse du joueur à une confirmation
+ * (commande BRUTUS_CMD_DEMOLIR_CONFIRME). quoi : 1 fort, 2 pont, 3 monument.
+ */
+void building_construction_brutus_demolir_confirme(int x_start, int y_start, int x_end, int y_end,
+    int quoi, int accepte);
+
+/**
  * Gets the color used for highlighting clearing or repairing land
  * @return Color
  */

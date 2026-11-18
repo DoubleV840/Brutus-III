@@ -4,7 +4,7 @@
 #include "core/config.h"
 #include "core/file.h"
 #include "core/log.h"
-#include "core/random.h"
+#include "core/random.h" // Brutus III : random_ui_* (hors simulation)
 #include "core/string.h"
 #include "platform/prefs.h"
 #include "platform/android/android.h"
@@ -597,7 +597,7 @@ int platform_file_manager_is_directory_writeable(const char *directory)
     }
     int attempt = 0;
     do {
-        snprintf(file_name, FILE_NAME_MAX, "%s/test_%d.txt", directory, random_from_stdlib());
+        snprintf(file_name, FILE_NAME_MAX, "%s/test_%d.txt", directory, random_ui_from_stdlib());
         attempt++;
     } while (file_exists(file_name, NOT_LOCALIZED) && attempt < 5);
     FILE *fp = file_open(file_name, "w");

@@ -1,5 +1,7 @@
 #include "extra.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "assets/assets.h"
 #include "city/figures.h"
 #include "city/finance.h"
@@ -773,9 +775,9 @@ static void confirm_send_troops(int accepted, int checked)
 static void confirm_send_goods(int accepted, int checked)
 {
     if (accepted) {
-        scenario_request_dispatch(data.selected_request_id);
+        brutus_commande_1(BRUTUS_CMD_DEMANDE_CESAR, data.selected_request_id); // Brutus III
         if (!checked && city_resource_is_stockpiled(data.selected_resource)) {
-            city_resource_toggle_stockpiled(data.selected_resource);
+            brutus_commande_1(BRUTUS_CMD_RESSOURCE_RESERVE, data.selected_resource); // Brutus III
         }
     }
 }
@@ -807,7 +809,7 @@ static void button_handle_request(const generic_button *button)
                 window_popup_dialog_show(POPUP_DIALOG_SEND_TROOPS, confirm_send_troops, 2);
                 break;
             case CITY_REQUEST_STATUS_NOT_ENOUGH_RESOURCES:
-                city_resource_toggle_stockpiled(r->resource);
+                brutus_commande_1(BRUTUS_CMD_RESSOURCE_RESERVE, r->resource); // Brutus III
                 break;
             default:
                 data.selected_resource = r->resource;

@@ -1,4 +1,4 @@
-#include "set_salary.h"
+#include "set_salary.h" // Brutus III : voir multijoueur/commande.h
 
 #include "city/emperor.h"
 #include "city/finance.h"
@@ -104,9 +104,7 @@ static void button_set_salary(const generic_button *button)
     int rank = button->parameter1;
 
     if (!city_victory_has_won()) {
-        city_emperor_set_salary_rank(rank);
-        city_finance_update_salary();
-        city_ratings_update_favor_explanation();
+        brutus_commande_1(BRUTUS_CMD_SALAIRE_GOUVERNEUR, rank); // Brutus III (recalculs compris)
         window_advisors_show();
     }
 }

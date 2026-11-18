@@ -1,5 +1,7 @@
 #include "imperial.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "city/emperor.h"
 #include "city/finance.h"
 #include "city/military.h"
@@ -208,9 +210,9 @@ static void confirm_send_troops(int accepted, int checked)
 static void confirm_send_goods(int accepted, int checked)
 {
     if (accepted) {
-        scenario_request_dispatch(selected_request_id);
+        brutus_commande_1(BRUTUS_CMD_DEMANDE_CESAR, selected_request_id); // Brutus III
         if (!checked && city_resource_is_stockpiled(selected_resource)) {
-            city_resource_toggle_stockpiled(selected_resource);
+            brutus_commande_1(BRUTUS_CMD_RESSOURCE_RESERVE, selected_resource); // Brutus III
         }
     }
 }

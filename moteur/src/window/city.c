@@ -1,5 +1,7 @@
 #include "city.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "building/clone.h"
 #include "building/construction.h"
 #include "building/data_transfer.h"
@@ -771,19 +773,19 @@ static void handle_hotkeys(const hotkeys *h)
     }
     if (h->rotate_map_left) {
         if (!building_construction_in_progress()) {
-            game_orientation_rotate_left();
+            brutus_commande_1(BRUTUS_CMD_ROTATION_VUE, 0); // Brutus III : la rotation touche la simulation
             window_invalidate();
         }
     }
     if (h->rotate_map_right) {
         if (!building_construction_in_progress()) {
-            game_orientation_rotate_right();
+            brutus_commande_1(BRUTUS_CMD_ROTATION_VUE, 1); // Brutus III
             window_invalidate();
         }
     }
     if (h->rotate_map_north) {
         if (!building_construction_in_progress()) {
-            game_orientation_rotate_north();
+            brutus_commande_1(BRUTUS_CMD_ROTATION_VUE, 2); // Brutus III
             window_invalidate();
         }
     }
@@ -840,17 +842,20 @@ static void handle_hotkeys(const hotkeys *h)
         set_construction_building_type(h->building, 0);
     }
     if (h->undo) {
-        game_undo_perform();
+        if (game_can_undo()) {
+            brutus_commande_0(BRUTUS_CMD_ANNULER); // Brutus III
+        }
         window_invalidate();
     }
     if (h->mothball_toggle) {
         int building_id = map_building_at(widget_city_current_grid_offset());
         building *b = building_main(building_get(building_id));
         if (building_id && model_get_building(b->type)->laborers) {
-            building_mothball_toggle(b);
-            if (b->state == BUILDING_STATE_IN_USE) {
+            // Brutus III : la bascule passe par la file ; le message annonce l'état à venir
+            brutus_commande_2(BRUTUS_CMD_MISE_EN_SOMMEIL, b->x, b->y);
+            if (b->state == BUILDING_STATE_MOTHBALLED) {
                 mothball_warning_id = city_warning_show(WARNING_DATA_MOTHBALL_OFF, mothball_warning_id);
-            } else if (b->state == BUILDING_STATE_MOTHBALLED) {
+            } else if (b->state == BUILDING_STATE_IN_USE) {
                 mothball_warning_id = city_warning_show(WARNING_DATA_MOTHBALL_ON, mothball_warning_id);
             }
         }

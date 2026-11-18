@@ -2,7 +2,7 @@
 
 #include "core/config.h"
 #include "core/image.h"
-#include "core/random.h"
+#include "core/random.h" // Brutus III : random_ui_* (hors simulation)
 #include "core/speed.h"
 #include "game/settings.h"
 #include "graphics/renderer.h"
@@ -77,15 +77,15 @@ static struct {
 
 static int random_from_min_to_range(int min, int range)
 {
-    return min + random_between_from_stdlib(0, range);
+    return min + random_ui_between_from_stdlib(0, range);
 }
 
 static void position_ellipse(ellipse *e, int cloud_width, int cloud_height)
 {
-    double angle = random_fractional_from_stdlib() * PI * 2;
+    double angle = random_ui_fractional_from_stdlib() * PI * 2;
 
-    e->x = (int) (CLOUD_WIDTH / 2 + random_fractional_from_stdlib() * cloud_width * cos(angle));
-    e->y = (int) (CLOUD_HEIGHT / 2 + random_fractional_from_stdlib() * cloud_height * sin(angle));
+    e->x = (int) (CLOUD_WIDTH / 2 + random_ui_fractional_from_stdlib() * cloud_width * cos(angle));
+    e->y = (int) (CLOUD_HEIGHT / 2 + random_ui_fractional_from_stdlib() * cloud_height * sin(angle));
 
     e->width = random_from_min_to_range((int) (CLOUD_WIDTH * CLOUD_SIZE_RATIO), (int) (CLOUD_WIDTH * CLOUD_SIZE_RATIO));
     e->height = random_from_min_to_range((int) (CLOUD_HEIGHT * CLOUD_SIZE_RATIO), (int) (CLOUD_HEIGHT * CLOUD_SIZE_RATIO));
@@ -207,12 +207,12 @@ static void generate_cloud(cloud_type *cloud)
 
     cloud->x = 0;
     cloud->y = 0;
-    cloud->scale_x = (float) ((1.5 - random_fractional_from_stdlib()) / CLOUD_SCALE);
-    cloud->scale_y = (float) ((1.5 - random_fractional_from_stdlib()) / CLOUD_SCALE);
+    cloud->scale_x = (float) ((1.5 - random_ui_fractional_from_stdlib()) / CLOUD_SCALE);
+    cloud->scale_y = (float) ((1.5 - random_ui_fractional_from_stdlib()) / CLOUD_SCALE);
     int scaled_width = (int) (CLOUD_WIDTH / cloud->scale_x);
     int scaled_height = (int) (CLOUD_HEIGHT / cloud->scale_y);
     cloud->side = (int) sqrt(scaled_width * scaled_width + scaled_height * scaled_height);
-    cloud->angle = random_between_from_stdlib(0, 360);
+    cloud->angle = random_ui_between_from_stdlib(0, 360);
     cloud->status = STATUS_CREATED;
 }
 
@@ -233,7 +233,7 @@ static int cloud_intersects(const cloud_type *cloud)
 
 static void position_cloud(cloud_type *cloud, int x_limit, int y_limit)
 {
-    int offset_x = random_between_from_stdlib(0, x_limit / 2);
+    int offset_x = random_ui_between_from_stdlib(0, x_limit / 2);
 
     cloud->x = x_limit - offset_x + cloud->side;
     cloud->y = (y_limit - offset_x) / 2 - cloud->side;
@@ -242,7 +242,7 @@ static void position_cloud(cloud_type *cloud, int x_limit, int y_limit)
         cloud->status = STATUS_MOVING;
         speed_clear(&cloud->speed.x);
         speed_clear(&cloud->speed.y);
-        data.movement_timeout = random_between_from_stdlib(CLOUD_MIN_CREATION_TIMEOUT, CLOUD_MAX_CREATION_TIMEOUT);
+        data.movement_timeout = random_ui_between_from_stdlib(CLOUD_MIN_CREATION_TIMEOUT, CLOUD_MAX_CREATION_TIMEOUT);
     }
 }
 

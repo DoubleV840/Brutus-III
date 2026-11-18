@@ -14,6 +14,7 @@
 #include "figure/route.h"
 #include "game/undo.h"
 #include "map/road_access.h"
+#include "multijoueur/commande.h" // Brutus III
 
 static struct {
     int available;
@@ -69,7 +70,8 @@ static void update_direction_and_image(figure *f)
 
 static int closest_house_with_room(int x, int y)
 {
-    if (houses_with_room.last_check == time_get_millis() && !houses_with_room.available) {
+    // Brutus III : cache valable pendant un tick de la partie (et non une milliseconde réelle)
+    if (houses_with_room.last_check == brutus_repere_simulation() && !houses_with_room.available) {
         return 0;
     }
     int available_houses = 0;
@@ -91,7 +93,7 @@ static int closest_house_with_room(int x, int y)
         }
     }
     available_houses--;
-    houses_with_room.last_check = time_get_millis();
+    houses_with_room.last_check = brutus_repere_simulation(); // Brutus III
     houses_with_room.available = available_houses;
     return min_building_id;
 }

@@ -40,6 +40,8 @@
 #include "window/building_info.h"
 #include "window/option_popup.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include <math.h>
 #include <stdio.h>
 
@@ -333,7 +335,7 @@ static void toggle_permissions_all(int param1, int param2)
 
     for (int i = 0; i < number_of_permissions; i++) { //do it via loop instead of bit check due to unused permissions
         int permission = building_permissions[i];
-        building_storage_set_permission(permission, building_get(data.building_id), accept_all);
+        brutus_commande_4(BRUTUS_CMD_STOCKAGE_PERMISSION, b->x, b->y, permission, accept_all != 0); // Brutus III
     }
     window_invalidate();
 }
@@ -1562,14 +1564,14 @@ static void toggle_resource_state(const generic_button *button, int reverse_orde
     resource_type resource;
     if (building_has_supplier_inventory(b->type) || b->type == BUILDING_DOCK) {
         resource = data.stored_resources.items[index];
-        building_distribution_toggle_good_accepted(b, resource);
+        brutus_commande_3(BRUTUS_CMD_DISTRIBUTION_BIEN, b->x, b->y, resource); // Brutus III
     } else {
         if (b->type == BUILDING_WAREHOUSE) {
             resource = city_resource_get_potential()->items[index];
         } else {
             resource = city_resource_get_potential_foods()->items[index];
         }
-        building_storage_cycle_resource_state(b->storage_id, resource, reverse_order);
+        brutus_commande_5(BRUTUS_CMD_STOCKAGE_ETAT, b->x, b->y, resource, reverse_order != 0, 0); // Brutus III
     }
     window_invalidate();
 }
@@ -1579,11 +1581,9 @@ static void market_orders(const generic_button *button)
     int index = button->parameter1;
     building *b = building_get(data.building_id);
     if (index == 0) {
-        if (affect_all_button_distribution_state() == ACCEPT_ALL) {
-            building_distribution_accept_all_goods(b);
-        } else {
-            building_distribution_unaccept_all_goods(b);
-        }
+        // Brutus III : passe par la file de commandes
+        brutus_commande_3(BRUTUS_CMD_DISTRIBUTION_TOUT, b->x, b->y,
+            affect_all_button_distribution_state() == ACCEPT_ALL);
     }
     window_invalidate();
 }
@@ -1592,14 +1592,14 @@ static void storage_toggle_permissions(const generic_button *button)
 {
     int index = button->parameter1;
     building *b = building_get(data.building_id);
-    building_storage_toggle_permission(index, b);
+    brutus_commande_4(BRUTUS_CMD_STOCKAGE_PERMISSION, b->x, b->y, index, -1); // Brutus III
     window_invalidate();
 }
 
 static void toggle_mantain(int param1, int param2)
 {
     building *b = building_get(data.building_id);
-    building_storage_toggle_permission(BUILDING_STORAGE_PERMISSION_WORKER, b);
+    brutus_commande_4(BRUTUS_CMD_STOCKAGE_PERMISSION, b->x, b->y, BUILDING_STORAGE_PERMISSION_WORKER, -1); // Brutus III
     window_invalidate();
 }
 
@@ -1613,7 +1613,7 @@ static void toggle_partial_resource_state(const generic_button *button, int reve
     } else {
         resource = city_resource_get_potential_foods()->items[index + scrollbar.scroll_position - 1];
     }
-    building_storage_cycle_partial_resource_state(b->storage_id, resource, reverse_order);
+    brutus_commande_5(BRUTUS_CMD_STOCKAGE_ETAT, b->x, b->y, resource, reverse_order != 0, 1); // Brutus III
     window_invalidate();
 }
 
@@ -1646,20 +1646,15 @@ static void dock_toggle_route(const generic_button *button)
 
 static void storage_empty_all(const generic_button *button)
 {
-    int storage_id = building_get(data.building_id)->storage_id;
-    building_storage_toggle_empty_all(storage_id);
+    building *b = building_get(data.building_id);
+    brutus_commande_2(BRUTUS_CMD_STOCKAGE_VIDER, b->x, b->y); // Brutus III
     window_invalidate();
 }
 
 static void storage_toggle_all_states(int param1, int param2)
 {
-
-    int storage_id = building_get(data.building_id)->storage_id;
-    if (param1 == 0) {
-        building_storage_accept_all(storage_id);
-    } else {
-        building_storage_accept_none(storage_id);
-    }
+    building *b = building_get(data.building_id);
+    brutus_commande_3(BRUTUS_CMD_STOCKAGE_TOUT, b->x, b->y, param1 == 0); // Brutus III
     window_invalidate();
 }
 

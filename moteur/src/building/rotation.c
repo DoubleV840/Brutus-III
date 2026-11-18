@@ -279,3 +279,41 @@ int building_rotation_type_has_rotations(building_type type)
             return 0;
     }
 }
+
+// Brutus III : accroches de la couche de commandes
+static struct {
+    int rotation;
+    int extra_rotation;
+    int road_orientation;
+    int warning_id;
+} brutus_rotation_sauvee;
+
+void building_rotation_brutus_lire(int *rotation, int *extra_rotation, int *road_orientation)
+{
+    *rotation = data.rotation;
+    *extra_rotation = data.extra_rotation;
+    *road_orientation = data.road_orientation;
+}
+
+void building_rotation_brutus_ecrire(int rotation, int extra_rotation, int road_orientation)
+{
+    data.rotation = rotation;
+    data.extra_rotation = extra_rotation;
+    data.road_orientation = road_orientation;
+}
+
+void building_rotation_brutus_sauver(void)
+{
+    brutus_rotation_sauvee.rotation = data.rotation;
+    brutus_rotation_sauvee.extra_rotation = data.extra_rotation;
+    brutus_rotation_sauvee.road_orientation = data.road_orientation;
+    brutus_rotation_sauvee.warning_id = data.warning_id;
+}
+
+void building_rotation_brutus_restaurer(void)
+{
+    data.rotation = brutus_rotation_sauvee.rotation;
+    data.extra_rotation = brutus_rotation_sauvee.extra_rotation;
+    data.road_orientation = brutus_rotation_sauvee.road_orientation;
+    data.warning_id = brutus_rotation_sauvee.warning_id;
+}

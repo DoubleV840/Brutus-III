@@ -43,6 +43,8 @@
 #include "scenario/allowed_building.h"
 #include "scenario/map.h"
 
+#include <string.h> // Brutus III : memcpy
+
 #define MAX_CYCLE_SIZE 10
 
 struct reservoir_info {
@@ -752,8 +754,18 @@ int building_construction_in_progress(void)
     return data.in_progress;
 }
 
+// Brutus III : coordonnées brutes du glisser (avant décalage d'orientation), pour les commandes
+static struct {
+    int x_start;
+    int y_start;
+    int x_end;
+    int y_end;
+} brutus_brut;
+
 void building_construction_start(int x, int y, int grid_offset)
 {
+    brutus_brut.x_start = brutus_brut.x_end = x; // Brutus III
+    brutus_brut.y_start = brutus_brut.y_end = y;
     if (data.type == BUILDING_HIGHWAY) {
         building_construction_offset_start_from_orientation(&x, &y, 2);
         grid_offset = map_grid_offset(x, y);
@@ -899,6 +911,8 @@ void building_construction_update(int x, int y, int grid_offset)
 {
     building_type type = building_construction_type();
     if (grid_offset) {
+        brutus_brut.x_end = x; // Brutus III
+        brutus_brut.y_end = y;
         if (type == BUILDING_HIGHWAY) {
             building_construction_offset_start_from_orientation(&x, &y, 2);
             grid_offset = map_grid_offset(x, y);
@@ -1457,6 +1471,90 @@ int building_construction_get_start_grid_offset(void)
 void building_construction_reset_draw_as_constructing(void)
 {
     data.draw_as_constructing = 0;
+}
+
+// Brutus III : accroches de la couche de commandes (voir construction.h)
+static struct {
+    int valide;
+    int last_items_cleared;
+    int x_start;
+    int y_start;
+    int x_end;
+    int y_end;
+} brutus_sauvegarde;
+static unsigned char brutus_sauvegarde_data[sizeof(data)];
+
+void building_construction_brutus_lire_brut(int *x_start, int *y_start, int *x_end, int *y_end)
+{
+    *x_start = brutus_brut.x_start;
+    *y_start = brutus_brut.y_start;
+    *x_end = brutus_brut.x_end;
+    *y_end = brutus_brut.y_end;
+}
+
+void building_construction_brutus_sauver(void)
+{
+    memcpy(brutus_sauvegarde_data, &data, sizeof(data));
+    brutus_sauvegarde.valide = 1;
+    brutus_sauvegarde.last_items_cleared = last_items_cleared;
+    brutus_sauvegarde.x_start = brutus_brut.x_start;
+    brutus_sauvegarde.y_start = brutus_brut.y_start;
+    brutus_sauvegarde.x_end = brutus_brut.x_end;
+    brutus_sauvegarde.y_end = brutus_brut.y_end;
+    building_rotation_brutus_sauver();
+}
+
+void building_construction_brutus_restaurer(void)
+{
+    if (!brutus_sauvegarde.valide) {
+        return;
+    }
+    memcpy(&data, brutus_sauvegarde_data, sizeof(data));
+    last_items_cleared = brutus_sauvegarde.last_items_cleared;
+    brutus_brut.x_start = brutus_sauvegarde.x_start;
+    brutus_brut.y_start = brutus_sauvegarde.y_start;
+    brutus_brut.x_end = brutus_sauvegarde.x_end;
+    brutus_brut.y_end = brutus_sauvegarde.y_end;
+    brutus_sauvegarde.valide = 0;
+    building_rotation_brutus_restaurer();
+}
+
+void building_construction_brutus_retirer_apercu(void)
+{
+    // Comme building_construction_cancel(), mais garde le type choisi et la rotation.
+    map_property_clear_constructing_and_deleted();
+    if (data.in_progress && building_construction_is_updatable()) {
+        game_undo_restore_building_state();
+        game_undo_restore_map(1);
+    }
+    data.in_progress = 0;
+    data.cost_preview = 0;
+}
+
+void building_construction_brutus_apres_placement_interface(void)
+{
+    // Effet d'interface de building_construction_place() : rotation automatique des cycles
+    if (building_construction_type_can_cycle(data.type) &&
+        building_construction_is_auto_cycling(auto_cycle_group_for_type(data.type))) {
+        for (int i = 0; i < building_construction_type_cycle_steps(data.type); i++) {
+            building_rotation_rotate_forward();
+        }
+    }
+}
+
+void building_construction_brutus_relancer_apercu(void)
+{
+    if (!data.in_progress) {
+        return;
+    }
+    int x_end = brutus_brut.x_end;
+    int y_end = brutus_brut.y_end;
+    data.in_progress = 0;
+    building_construction_start(brutus_brut.x_start, brutus_brut.y_start,
+        map_grid_offset(brutus_brut.x_start, brutus_brut.y_start));
+    if (data.in_progress) {
+        building_construction_update(x_end, y_end, map_grid_offset(x_end, y_end));
+    }
 }
 
 int building_construction_draw_as_constructing(void)

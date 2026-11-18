@@ -239,6 +239,15 @@ void city_view_reset_orientation(void)
     calculate_lookup();
 }
 
+// Brutus III : orientation imposée le temps d'exécuter une commande (la caméra ne bouge pas)
+void city_view_brutus_forcer_orientation(int orientation)
+{
+    if (orientation != data.orientation && orientation >= 0 && orientation <= 6) {
+        data.orientation = 2 * (orientation / 2);
+        calculate_lookup();
+    }
+}
+
 int city_view_get_scale(void)
 {
     return data.scale;

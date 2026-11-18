@@ -50,6 +50,7 @@
 #include "map/routing_terrain.h"
 #include "map/tiles.h"
 #include "map/water_supply.h"
+#include "multijoueur/commande.h" // Brutus III
 #include "scenario/demand_change.h"
 #include "scenario/distant_battle.h"
 #include "scenario/earthquake.h"
@@ -206,6 +207,9 @@ void game_tick_run(void)
         figure_action_handle(); // just update the flag figures
         return;
     }
+    // Brutus III : les commandes datées de ce tick sont appliquées avant la simulation
+    brutus_commandes_appliquer(brutus_tick_absolu());
+    brutus_debut_tick();
     random_generate_next();
     game_undo_reduce_time_available();
     advance_tick();
