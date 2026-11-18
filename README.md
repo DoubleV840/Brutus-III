@@ -46,6 +46,17 @@ Test sans navigateur de la page (IDBFS, copie, sauvegardes après rechargement) 
 cd web/test && npm install && npm test   # après bash outils/build-web.sh
 ```
 
+## Multijoueur : commandes et déterminisme
+
+Les actions du joueur passent par une file de commandes (`moteur/src/multijoueur/`, inventaire dans `docs/commandes.md`). Test de rejouage sans affichage (il demande les fichiers du jeu ; sans eux, il est sauté) :
+
+```bash
+bash outils/test-rejouage.sh        # natif : même journal rejoué 2 fois, empreintes comparées
+bash outils/test-rejouage-wasm.sh   # wasm sous Node (cible séparée) + comparaison natif ↔ wasm
+```
+
+Méthode, audit et résultats : `docs/determinisme.md`. Les sorties vont dans `build-rejouage/` (ignoré par git).
+
 ## Publication
 
 La CI `.github/workflows/pages.yml` publie la version web sur GitHub Pages (https://brutus.ivwi.fr) à chaque push sur `main` (ou à la main : onglet Actions → Pages → « Run workflow ») :

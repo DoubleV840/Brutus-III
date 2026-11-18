@@ -1,4 +1,6 @@
-#include "set_salary.h" // Brutus III : voir multijoueur/commande.h
+#include "set_salary.h"
+
+#include "multijoueur/commande.h" // Brutus III
 
 #include "city/emperor.h"
 #include "city/finance.h"
