@@ -27,6 +27,9 @@ typedef struct {
  */
 void buffer_init(buffer *buffer, void *data, size_t size);
 
+/** Brutus III : si actif, buffer_init() remet les données à zéro (écriture de sauvegarde). */
+void buffer_brutus_zero_init(int actif);
+
 /**
  * Resets the buffer so that reading/writing starts at the beginning again
  * @param buffer Buffer

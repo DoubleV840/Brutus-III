@@ -1,5 +1,7 @@
 #include "message_dialog.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "city/emperor.h"
 #include "city/message.h"
 #include "city/resource.h"
@@ -139,11 +141,11 @@ static struct {
 static void button_dispatch_request(complex_button *button)
 {
     int request_id = button->parameters[0];
-    scenario_request_dispatch(request_id);
+    brutus_commande_1(BRUTUS_CMD_DEMANDE_CESAR, request_id); // Brutus III
     const scenario_request *req = scenario_request_get(request_id);
     complex_button_dispatch_request.is_hidden = 1;
     if (city_resource_is_stockpiled(req->resource)) {
-        city_resource_toggle_stockpiled(req->resource);
+        brutus_commande_1(BRUTUS_CMD_RESSOURCE_RESERVE, req->resource); // Brutus III
     }
     button_close(0, 0);
 }

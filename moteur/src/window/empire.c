@@ -1,5 +1,7 @@
 #include "empire.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "assets/assets.h"
 #include "building/menu.h"
 #include "city/finance.h"
@@ -3199,8 +3201,7 @@ static void confirmed_open_trade_by_route(int accepted, int checked)
 {
     if (accepted) {
         int city_id = empire_city_get_for_trade_route(data.selected_trade_route);
-        empire_city_open_trade(city_id, 1);
-        building_menu_update();
+        brutus_commande_1(BRUTUS_CMD_COMMERCE_OUVRIR, city_id); // Brutus III (menu mis à jour aussi)
         window_trade_opened_show(city_id);
     }
 }

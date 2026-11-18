@@ -23,4 +23,10 @@ void building_rotation_remove_rotation(void);
 
 int building_rotation_type_has_rotations(building_type type);
 
+/* Brutus III : lecture / écriture de l'état de rotation (paramètres des commandes de construction). */
+void building_rotation_brutus_lire(int *rotation, int *extra_rotation, int *road_orientation);
+void building_rotation_brutus_ecrire(int rotation, int extra_rotation, int road_orientation);
+void building_rotation_brutus_sauver(void);
+void building_rotation_brutus_restaurer(void);
+
 #endif // BUILDING_ROTATION_H

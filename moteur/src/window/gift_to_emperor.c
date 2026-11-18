@@ -1,5 +1,7 @@
 #include "gift_to_emperor.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "city/emperor.h"
 #include "game/resource.h"
 #include "graphics/button.h"
@@ -118,7 +120,7 @@ static void button_set_gift(const generic_button *button)
 static void button_send_gift(const generic_button *button)
 {
     if (city_emperor_can_send_gift(GIFT_MODEST)) {
-        city_emperor_send_gift();
+        brutus_commande_1(BRUTUS_CMD_DON_CESAR, city_emperor_selected_gift_size()); // Brutus III
         window_advisors_show();
     }
 }

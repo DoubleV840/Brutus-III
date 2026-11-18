@@ -23,6 +23,7 @@
 #include "map/routing_terrain.h"
 #include "map/terrain.h"
 #include "map/tiles.h"
+#include "multijoueur/commande.h" // Brutus III
 #include "translation/translation.h"
 #include "window/popup_dialog.h"
 
@@ -294,34 +295,69 @@ static unsigned int clear_land_confirmed(int x_start, int y_start, int x_end, in
     return items_placed;
 }
 
+// Brutus III : la réponse à la confirmation devient une commande (appliquée au tick suivant)
+static void envoyer_confirmation(int quoi, int accepted)
+{
+    int32_t p[6] = { confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end, quoi, accepted == 1 };
+    brutus_commande_envoyer(BRUTUS_CMD_DEMOLIR_CONFIRME, 6, p);
+}
+
 static void confirm_delete_fort(int accepted, int checked)
 {
-    if (accepted == 1) {
-        confirm.fort_confirmed = 1;
-    } else {
-        confirm.fort_confirmed = -1;
-    }
-    clear_land_confirmed(confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end);
+    envoyer_confirmation(1, accepted); // Brutus III
 }
 
 static void confirm_delete_bridge(int accepted, int checked)
 {
-    if (accepted == 1) {
-        confirm.bridge_confirmed = 1;
-    } else {
-        confirm.bridge_confirmed = -1;
-    }
-    clear_land_confirmed(confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end);
+    envoyer_confirmation(2, accepted); // Brutus III
 }
 
 static void confirm_delete_monument(int accepted, int checked)
 {
-    if (accepted == 1) {
-        confirm.monument_confirmed = 1;
-    } else {
-        confirm.monument_confirmed = -1;
+    envoyer_confirmation(3, accepted); // Brutus III
+}
+
+static void scan_auto_confirm(int x_start, int y_start, int x_end, int y_end); // Brutus III
+
+void building_construction_brutus_demolir_confirme(int x_start, int y_start, int x_end, int y_end,
+    int quoi, int accepte)
+{
+    // Brutus III : reproduit l'état de confirmation de building_construction_clear_land()
+    confirm.fort_confirmed = 0;
+    confirm.bridge_confirmed = 0;
+    confirm.monument_confirmed = 0;
+    confirm.repair_confirmed = 0;
+    scan_auto_confirm(x_start, y_start, x_end, y_end);
+    int valeur = accepte ? 1 : -1;
+    if (quoi == 1) {
+        confirm.fort_confirmed = valeur;
+    } else if (quoi == 2) {
+        confirm.bridge_confirmed = valeur;
+    } else if (quoi == 3) {
+        confirm.monument_confirmed = valeur;
     }
-    clear_land_confirmed(confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end);
+    confirm.x_start = x_start;
+    confirm.y_start = y_start;
+    confirm.x_end = x_end;
+    confirm.y_end = y_end;
+    clear_land_confirmed(x_start, y_start, x_end, y_end);
+}
+
+static void scan_auto_confirm(int x_start, int y_start, int x_end, int y_end)
+{
+    int x_min, x_max, y_min, y_max;
+    map_grid_start_end_to_area(x_start, y_start, x_end, y_end, &x_min, &y_min, &x_max, &y_max);
+    for (int y = y_min; y <= y_max; y++) {
+        for (int x = x_min; x <= x_max; x++) {
+            int building_id = map_building_at(map_grid_offset(x, y));
+            if (building_id) {
+                building *b = building_get(building_id);
+                if (building_monument_is_monument(b) && building_monument_type_is_mini_monument(b->type)) {
+                    confirm.monument_confirmed = 1;
+                }
+            }
+        }
+    }
 }
 
 unsigned int building_construction_clear_land(int x_start, int y_start, int x_end, int y_end)
@@ -450,8 +486,16 @@ static void confirm_repair_buildings(int accepted, int checked)
         confirm.repair_confirmed = -1;
     }
     if (accepted == 1) {
-        repair_land_confirmed(0, confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end, 0);
+        // Brutus III : la réparation passe par la file de commandes (BRUTUS_CMD_REPARER_CONFIRME)
+        brutus_commande_4(BRUTUS_CMD_REPARER_CONFIRME, confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end);
     }
+}
+
+// Brutus III : exécution de la commande reparer-confirme
+void building_construction_brutus_reparer_confirme(int x_start, int y_start, int x_end, int y_end)
+{
+    memset(confirm.repairable_buildings, 0, sizeof(confirm.repairable_buildings));
+    repair_land_confirmed(0, x_start, y_start, x_end, y_end, 0);
 }
 
 int building_construction_repair_land(int measure_only, int x_start, int y_start, int x_end, int y_end, int *buildings_count)

@@ -13,6 +13,7 @@
 #include "graphics/window.h"
 #include "translation/translation.h"
 #include "widget/dropdown_button.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #define ADVISOR_HEIGHT 27
 #define FINANCE_YEAR_DROPDOWN_COUNT 9
@@ -144,9 +145,8 @@ static int handle_mouse(const mouse *m)
 
 static void button_change_taxes(int is_down, int param2)
 {
-    city_finance_change_tax_percentage(is_down ? -1 : 1);
-    city_finance_estimate_taxes();
-    city_finance_calculate_totals();
+    // Brutus III : passe par la file de commandes (le recalcul des estimations aussi)
+    brutus_commande_1(BRUTUS_CMD_IMPOTS, is_down ? -1 : 1);
     window_invalidate();
 }
 

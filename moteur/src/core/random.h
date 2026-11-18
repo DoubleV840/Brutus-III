@@ -68,10 +68,26 @@ void random_save_state(buffer *buf);
  */
 void random_load_state(buffer *buf);
 
+/*
+ * Brutus III : les trois fonctions *_from_stdlib sont désormais déterministes
+ * (dérivées de iv1/iv2, sauvegardés, et d'un compteur remis à zéro à chaque tick,
+ * avant chaque commande et au chargement). Elles sont réservées à la simulation.
+ * L'interface, le son et les effets visuels utilisent random_ui_*.
+ */
 int random_from_stdlib(void);
 
 int random_between_from_stdlib(int min, int max);
 
 double random_fractional_from_stdlib(void);
+
+/** Brutus III : remet à zéro le compteur du générateur de simulation. */
+void random_brutus_reinitialiser_compteur(void);
+
+/** Brutus III : aléatoire hors simulation (horloge réelle + rand()), à ne jamais utiliser dans un tick. */
+int random_ui_from_stdlib(void);
+
+int random_ui_between_from_stdlib(int min, int max);
+
+double random_ui_fractional_from_stdlib(void);
 
 #endif // CORE_RANDOM_H

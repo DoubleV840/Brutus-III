@@ -16,6 +16,7 @@
 #include "map/routing_terrain.h"
 #include "map/terrain.h"
 #include "map/tiles.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #define DEVOLVE_DELAY 2
 #define DEVOLVE_DELAY_WITH_VENUS 20
@@ -581,7 +582,9 @@ void building_house_process_evolve_and_consume_goods(void)
         active_devolve_delay = DEVOLVE_DELAY;
     }
 
-    time_millis last_update = time_get_millis();
+    // Brutus III : repère de passage lié au tick de la partie, plus à l'horloge réelle
+    // (deux passages dans la même milliseconde sautaient des maisons en jeu accéléré).
+    time_millis last_update = brutus_repere_simulation();
 
     for (building_type type = BUILDING_HOUSE_VACANT_LOT; type <= BUILDING_HOUSE_LUXURY_PALACE; type++) {
         building *next_of_type = 0; // evolve_callback changes the building type

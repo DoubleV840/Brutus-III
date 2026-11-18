@@ -3,7 +3,7 @@
 #include "core/config.h"
 #include "core/dir.h"
 #include "core/file.h"
-#include "core/random.h"
+#include "core/random.h" // Brutus III : random_ui_* (hors simulation)
 #include "game/settings.h"
 #include "graphics/color.h"
 #include "graphics/graphics.h"
@@ -126,20 +126,20 @@ static int get_adjusted_intensity(void)
 
 void init_weather_element(weather_element *e, int type)
 {
-    e->x = random_from_stdlib() % screen_width();
-    e->y = random_from_stdlib() % screen_height();
+    e->x = random_ui_from_stdlib() % screen_width();
+    e->y = random_ui_from_stdlib() % screen_height();
 
     switch (type) {
         case WEATHER_RAIN:
-            e->length = get_particle_size(PARTICLE_SIZES_RAIN, config_get(CONFIG_WT_RAIN_LENGTH)) + random_from_stdlib() % 10;
-            e->speed = get_particle_size(PARTICLE_SPEEDS_RAIN, config_get(CONFIG_WT_RAIN_SPEED)) + random_from_stdlib() % 5;
+            e->length = get_particle_size(PARTICLE_SIZES_RAIN, config_get(CONFIG_WT_RAIN_LENGTH)) + random_ui_from_stdlib() % 10;
+            e->speed = get_particle_size(PARTICLE_SPEEDS_RAIN, config_get(CONFIG_WT_RAIN_SPEED)) + random_ui_from_stdlib() % 5;
             // Light rain: every drop shares the global wind cycle (uniform sweep).
             // Heavy rain: each drop sees the cycle at a different phase, so they
             // don't all change direction in lockstep.
             if (get_adjusted_intensity() < HEAVY_RAIN_THRESHOLD) {
                 e->wind_phase = 0;
             } else {
-                e->wind_phase = random_from_stdlib() % (HEAVY_RAIN_THRESHOLD / 2);
+                e->wind_phase = random_ui_from_stdlib() % (HEAVY_RAIN_THRESHOLD / 2);
             }
             break;
         case WEATHER_SNOW:
@@ -147,14 +147,14 @@ void init_weather_element(weather_element *e, int type)
             // sway cycle slightly out of step. prev_drift seeds the delta
             // tracker with the sway curve's current value so the flake doesn't
             // jump on its first rendered frame.
-            e->drift_offset = random_from_stdlib() % 300;
+            e->drift_offset = random_ui_from_stdlib() % 300;
             e->prev_drift = (int) (sinf(data.wind_angle * 0.021f
                             + e->drift_offset * 0.02f) * 10.0f);
-            e->speed = get_particle_size(PARTICLE_SPEEDS_SNOW, config_get(CONFIG_WT_SNOW_SPEED)) + random_from_stdlib() % 2;
+            e->speed = get_particle_size(PARTICLE_SPEEDS_SNOW, config_get(CONFIG_WT_SNOW_SPEED)) + random_ui_from_stdlib() % 2;
             break;
         case WEATHER_SAND:
-            e->speed = get_particle_size(PARTICLE_SPEEDS_SAND, config_get(CONFIG_WT_SANDSTORM_SPEED)) + (random_from_stdlib() % 2);
-            e->offset = random_between_from_stdlib(0, 1000);
+            e->speed = get_particle_size(PARTICLE_SPEEDS_SAND, config_get(CONFIG_WT_SANDSTORM_SPEED)) + (random_ui_from_stdlib() % 2);
+            e->offset = random_ui_between_from_stdlib(0, 1000);
             break;
     }
 }
@@ -185,14 +185,14 @@ static uint32_t apply_alpha(uint32_t color, uint8_t alpha)
 
 static int chance_percent(int percent)
 {
-    return (random_between_from_stdlib(0, 99) < percent) ? 1 : 0;
+    return (random_ui_between_from_stdlib(0, 99) < percent) ? 1 : 0;
 }
 
 static void update_lightning(void)
 {
-    if (data.lightning_cooldown <= 0 && (random_from_stdlib() % 500) == 0) {
-        data.lightning_timer = 5 + random_from_stdlib() % 5; // flash duration
-        data.lightning_cooldown = 300 + random_from_stdlib() % 400; // gap between flashes
+    if (data.lightning_cooldown <= 0 && (random_ui_from_stdlib() % 500) == 0) {
+        data.lightning_timer = 5 + random_ui_from_stdlib() % 5; // flash duration
+        data.lightning_cooldown = 300 + random_ui_from_stdlib() % 400; // gap between flashes
     } else if (data.lightning_cooldown > 0) {
         data.lightning_cooldown--;
     }
@@ -205,7 +205,7 @@ static void update_lightning(void)
 
     if (data.lightning_timer == 5) {
         char thunder_path[FILE_NAME_MAX];
-        int thunder_num = random_between_from_stdlib(1, 2);
+        int thunder_num = random_ui_between_from_stdlib(1, 2);
         snprintf(thunder_path, sizeof(thunder_path), ASSETS_DIRECTORY "/Sounds/Thunder%d.ogg", thunder_num);
         sound_speech_play_file(thunder_path);
     }
@@ -354,7 +354,7 @@ static void draw_snow(void)
 
         if (data.elements[i].y >= screen_height() || data.elements[i].x <= 0 || data.elements[i].x >= screen_width()) {
             init_weather_element(&data.elements[i], data.weather_config.type);
-            data.elements[i].y = -(int) (random_from_stdlib() % 30);
+            data.elements[i].y = -(int) (random_ui_from_stdlib() % 30);
         }
     }
 }
@@ -608,16 +608,16 @@ void city_weather_update(int month)
         } else {
             if (month == 10 || month == 11 || month == 0 || month == 1) {
                 if (config_get(CONFIG_UI_WT_ENABLE_SNOW_CENTRAL)) {
-                    type = (random_from_stdlib() % 2 == 0) ? WEATHER_RAIN : WEATHER_SNOW;
+                    type = (random_ui_from_stdlib() % 2 == 0) ? WEATHER_RAIN : WEATHER_SNOW;
                 } else {
                     type = WEATHER_RAIN;
                 }
 
             }
             if (WEATHER_RAIN == type) {
-                intensity = random_between_from_stdlib(250, 1000);
+                intensity = random_ui_between_from_stdlib(250, 1000);
             } else {
-                intensity = random_between_from_stdlib(1000, 5000);
+                intensity = random_ui_between_from_stdlib(1000, 5000);
             }
         }
 
@@ -626,7 +626,7 @@ void city_weather_update(int month)
             type = WEATHER_NONE;
         } else {
             int duration_setting = config_get(CONFIG_UI_WT_WEATHER_DURATION);
-            data.weather_duration_left = random_between_from_stdlib(1, WEATHER_MAX_DURATION[duration_setting]);
+            data.weather_duration_left = random_ui_between_from_stdlib(1, WEATHER_MAX_DURATION[duration_setting]);
             // Play sounds only if weather is enabled
             if (config_get(CONFIG_UI_DRAW_WEATHER)) {
                 stop_wind_sound();

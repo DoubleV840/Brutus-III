@@ -1251,6 +1251,31 @@ int platform_renderer_init(void *window)
     return 1;
 }
 
+// Brutus III : rendu logiciel sur une surface en mémoire, sans fenêtre ni pilote vidéo.
+// Sert au rejouage sans affichage là où SDL n'a pas de pilote « dummy » (wasm sous Node).
+int platform_renderer_brutus_init_sans_fenetre(int width, int height)
+{
+    free_all_textures();
+    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!surface) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Brutus III : surface impossible : %s", SDL_GetError());
+        return 0;
+    }
+    data.renderer = SDL_CreateSoftwareRenderer(surface);
+    if (!data.renderer) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Brutus III : rendu logiciel impossible : %s", SDL_GetError());
+        return 0;
+    }
+    SDL_Log("Brutus III : rendu logiciel sans fenêtre (%d x %d)", width, height);
+    data.is_software_renderer = 1;
+    data.max_texture_size.width = 4096;
+    data.max_texture_size.height = 4096;
+    data.paused = 0;
+    SDL_SetRenderDrawColor(data.renderer, 0, 0, 0, 0xff);
+    create_renderer_interface();
+    return 1;
+}
+
 static void destroy_render_texture(void)
 {
     if (data.render_texture) {

@@ -67,6 +67,9 @@ void game_time_advance_year(void);
 int game_time_total_months(void);
 int game_time_total_years(void);
 
+/** Brutus III : jours écoulés depuis le début de la partie. */
+int game_time_brutus_total_days(void);
+
 /**
  * Saves the game time
  * @param buf Buffer

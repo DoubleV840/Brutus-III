@@ -11,6 +11,7 @@
 #include "map/routing_data.h"
 #include "map/terrain.h"
 #include "map/tiles.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #include <stdlib.h>
 
@@ -66,7 +67,8 @@ static struct {
 
 static void reset_fighting_status(void)
 {
-    time_millis current_time = time_get_millis();
+    // Brutus III : cache valable pendant un tick (ou une commande), plus pendant une milliseconde réelle
+    time_millis current_time = brutus_repere_simulation();
     if (current_time != fighting_data.last_check) {
         map_grid_clear_u8(fighting_data.status.items);
         fighting_data.last_check = current_time;

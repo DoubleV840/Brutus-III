@@ -1,5 +1,7 @@
 #include "military.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "assets/assets.h"
 #include "building/count.h"
 #include "city/view.h"
@@ -650,7 +652,7 @@ static void button_select_formation_layout(const generic_button *button)
     } else {
         layout_indexes = LAYOUT_BUTTON_INDEXES_AUXILIARY[swap_lines];
     }
-    formation_legion_change_layout(m, layout_indexes[index]);
+    brutus_commande_2(BRUTUS_CMD_LEGION_FORMATION, m->id, layout_indexes[index]); // Brutus III
     switch (index) {
         case 0: sound_speech_play_file("wavs/cohort1.wav"); break;
         case 1: sound_speech_play_file("wavs/cohort2.wav"); break;
@@ -670,12 +672,11 @@ static void button_return_to_fort(const generic_button *button)
 {
     formation *m = formation_get(data.active_legion.formation_id);
     if (!m->in_distant_battle) {
-        formation_legion_return_home(m);
+        brutus_commande_1(BRUTUS_CMD_LEGION_RENTRER, m->id); // Brutus III
     }
 }
 
 static void button_empire_service(const generic_button *button)
 {
-    formation_toggle_empire_service(data.active_legion.formation_id);
-    formation_calculate_figures();
+    brutus_commande_1(BRUTUS_CMD_LEGION_SERVICE, data.active_legion.formation_id); // Brutus III
 }

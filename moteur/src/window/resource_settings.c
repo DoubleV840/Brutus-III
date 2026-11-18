@@ -1,5 +1,7 @@
 #include "resource_settings.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "building/count.h"
 #include "city/resource.h"
 #include "core/calc.h"
@@ -268,17 +270,18 @@ static void button_ok(int param1, int param2)
 
 static void button_trade_up_down(int trade_type, int is_down)
 {
+    // Brutus III : réglages de commerce par la file de commandes
     if (trade_type == TRADE_STATUS_IMPORT) {
-        city_resource_change_import_over(data.resource, is_down ? -1 : 1);
+        brutus_commande_3(BRUTUS_CMD_COMMERCE_SEUIL, data.resource, 0, is_down ? -1 : 1);
     } else if (trade_type == TRADE_STATUS_EXPORT) {
-        city_resource_change_export_over(data.resource, is_down ? -1 : 1);
+        brutus_commande_3(BRUTUS_CMD_COMMERCE_SEUIL, data.resource, 1, is_down ? -1 : 1);
     }
 }
 
 static void button_toggle_industry(const generic_button *button)
 {
     if (building_count_total(resource_get_data(data.resource)->industry) > 0) {
-        city_resource_toggle_mothballed(data.resource);
+        brutus_commande_1(BRUTUS_CMD_RESSOURCE_SOMMEIL, data.resource); // Brutus III
     }
 }
 
@@ -293,13 +296,13 @@ static void button_toggle_trade(const generic_button *button)
         window_empire_show();
         return;
     }
-    city_resource_cycle_trade_status(data.resource, status);
+    brutus_commande_2(BRUTUS_CMD_COMMERCE_STATUT, data.resource, status); // Brutus III
 }
 
 static void button_toggle_stockpile(const generic_button *button)
 {
     if (resource_is_storable(data.resource)) {
-        city_resource_toggle_stockpiled(data.resource);
+        brutus_commande_1(BRUTUS_CMD_RESSOURCE_RESERVE, data.resource); // Brutus III
     }
 }
 

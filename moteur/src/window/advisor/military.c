@@ -1,5 +1,7 @@
 #include "military.h"
 
+#include "multijoueur/commande.h" // Brutus III
+
 #include "city/data_private.h"
 #include "city/figures.h"
 #include "city/military.h"
@@ -259,7 +261,7 @@ static void return_legion_to_fort(int legion_id)
 {
     formation *m = formation_get(formation_for_legion(legion_id));
     if (!m->in_distant_battle && !m->is_at_fort) {
-        formation_legion_return_home(m);
+        brutus_commande_1(BRUTUS_CMD_LEGION_RENTRER, m->id); // Brutus III
         window_invalidate();
     }
 }
@@ -274,8 +276,7 @@ static void button_empire_service(const generic_button *button)
 {
     int legion_id = button->parameter1;
     int formation_id = formation_for_legion(legion_id + scrollbar.scroll_position);
-    formation_toggle_empire_service(formation_id);
-    formation_calculate_figures();
+    brutus_commande_1(BRUTUS_CMD_LEGION_SERVICE, formation_id); // Brutus III
     window_invalidate();
 }
 

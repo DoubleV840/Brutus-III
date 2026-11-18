@@ -15,6 +15,7 @@
 #include "platform/renderer.h"
 #include "platform/switch/switch.h"
 #include "platform/vita/vita.h"
+#include "multijoueur/rejouage.h" // Brutus III
 
 #include "SDL.h"
 
@@ -168,6 +169,11 @@ int platform_screen_create(const char *title, int display_scale_percentage, int 
 
     if (!SDL.window) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to create window: %s", SDL_GetError());
+        // Brutus III : en rejouage sans affichage, on continue avec un rendu logiciel en mémoire
+        if (brutus_rejouage_demande() && platform_renderer_brutus_init_sans_fenetre(width, height)) {
+            set_scale_percentage(display_scale_percentage, width, height);
+            return platform_screen_resize(width, height, 0);
+        }
         return 0;
     }
 

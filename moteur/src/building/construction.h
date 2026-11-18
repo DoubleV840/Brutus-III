@@ -72,6 +72,19 @@ int building_construction_draw_as_constructing(void);
 */
 int building_construction_place_wall(int grid_offset);
 
+/* Brutus III : accroches de la couche de commandes (multijoueur/commande.c). */
+/** Coordonnées brutes (avant décalage d'orientation) du début et de la fin du glisser en cours. */
+void building_construction_brutus_lire_brut(int *x_start, int *y_start, int *x_end, int *y_end);
+/** Met de côté / remet l'état d'interface de la construction (type choisi, glisser, rotation). */
+void building_construction_brutus_sauver(void);
+void building_construction_brutus_restaurer(void);
+/** Retire l'aperçu du glisser en cours de la carte (comme une annulation), sans changer le type choisi. */
+void building_construction_brutus_retirer_apercu(void);
+/** Effet d'interface de la pose (rotation automatique des cycles de bâtiments), côté joueur local. */
+void building_construction_brutus_apres_placement_interface(void);
+/** Recrée l'aperçu du glisser après restauration (si un glisser était en cours). */
+void building_construction_brutus_relancer_apercu(void);
+
 #endif // BUILDING_CONSTRUCTION_H
 
 

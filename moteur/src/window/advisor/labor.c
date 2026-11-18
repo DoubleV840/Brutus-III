@@ -12,6 +12,7 @@
 #include "graphics/text.h"
 #include "graphics/window.h"
 #include "window/labor_priority.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #define ADVISOR_HEIGHT 26
 
@@ -108,9 +109,8 @@ static int handle_mouse(const mouse *m)
 
 static void arrow_button_wages(int is_down, int param2)
 {
-    city_labor_change_wages(is_down ? -1 : 1);
-    city_finance_estimate_wages();
-    city_finance_calculate_totals();
+    // Brutus III : passe par la file de commandes (le recalcul des estimations aussi)
+    brutus_commande_1(BRUTUS_CMD_SALAIRES, is_down ? -1 : 1);
     window_invalidate();
 }
 

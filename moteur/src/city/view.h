@@ -30,6 +30,9 @@ int city_view_orientation(void);
 
 void city_view_reset_orientation(void);
 
+/** Brutus III : impose l'orientation le temps d'une commande, sans déplacer la caméra. */
+void city_view_brutus_forcer_orientation(int orientation);
+
 int city_view_get_scale(void);
 void city_view_set_scale(int scale);
 

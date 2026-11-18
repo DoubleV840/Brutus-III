@@ -24,6 +24,10 @@ int map_property_is_native_land(int grid_offset);
 void map_property_mark_native_land(int grid_offset);
 void map_property_clear_all_native_land(void);
 
+/** Brutus III : garde / remet les marques de terre indigène (chargement d'une sauvegarde). */
+void map_property_brutus_sauver_terre_indigene(void);
+void map_property_brutus_restaurer_terre_indigene(void);
+
 int map_property_multi_tile_xy(int grid_offset);
 int map_property_multi_tile_x(int grid_offset);
 int map_property_multi_tile_y(int grid_offset);

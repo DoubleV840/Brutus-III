@@ -12,4 +12,7 @@ typedef enum {
 int has_bet_in_progress(void);
 void race_result_process(void);
 
+/** Brutus III : pose le pari (commande pari-course). Retourne 0 si refusé. */
+int city_race_bet_brutus_parier(int cheval, int montant);
+
 #endif //CITY_RACE_BET_H

@@ -9,6 +9,7 @@
 #include "map/building.h"
 #include "map/grid.h"
 #include "map/image.h"
+#include "multijoueur/empreinte.h" // Brutus III
 
 #define TYPE_DATA_ORIGINAL_BUFFER_SIZE 42
 #define TYPE_DATA_CURRENT_BUFFER_SIZE 26
@@ -235,8 +236,9 @@ void building_state_save_to_buffer(buffer *buf, const building *b)
     buffer_write_u8(buf, b->sickness_level);
     buffer_write_u8(buf, b->sickness_duration);
     buffer_write_u8(buf, b->sickness_doctor_cure);
-    buffer_write_u8(buf, b->fumigation_frame);
-    buffer_write_u8(buf, b->fumigation_direction);
+    // Brutus III : animation de fumigation modifiée par le dessin -> hors empreinte
+    buffer_write_u8(buf, brutus_empreinte_en_cours() ? 0 : b->fumigation_frame);
+    buffer_write_u8(buf, brutus_empreinte_en_cours() ? 0 : b->fumigation_direction);
 
     // extra resources
     for (int i = 0; i < RESOURCE_MAX; i++) {

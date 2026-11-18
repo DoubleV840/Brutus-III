@@ -3,8 +3,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Brutus III : pendant l'écriture d'une sauvegarde (ou d'une empreinte), les tampons neufs
+// sont remis à zéro, pour que les octets sautés (buffer_skip) soient toujours identiques.
+static int brutus_zero_init;
+
+void buffer_brutus_zero_init(int actif)
+{
+    brutus_zero_init = actif;
+}
+
 void buffer_init(buffer *buf, void *data, size_t size)
 {
+    if (brutus_zero_init && data && size) {
+        memset(data, 0, size);
+    }
     buf->data = data;
     buf->size = size;
     buf->index = 0;

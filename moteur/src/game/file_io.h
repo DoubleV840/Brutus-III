@@ -4,6 +4,9 @@
 #include "core/buffer.h"
 #include "scenario/data.h"
 
+#include <stdint.h> // Brutus III
+#include <stdio.h> // Brutus III
+
 typedef enum {
     SAVEGAME_FROM_CUSTOM_SCENARIO = 0,
     SAVEGAME_FROM_ORIGINAL_CAMPAIGN = 1,
@@ -54,5 +57,11 @@ int game_file_io_read_saved_game_info_from_buffer(buffer *buf, saved_game_info *
 int game_file_io_write_saved_game(const char *filename);
 
 int game_file_io_delete_saved_game(const char *filename);
+
+/** Brutus III : empreinte FNV-1a 64 bits de l'état de la partie (voir docs/determinisme.md). */
+uint64_t game_file_io_brutus_empreinte(void);
+
+/** Brutus III : idem, en écrivant l'empreinte de chaque morceau de la sauvegarde dans `detail` (diagnostic). */
+uint64_t game_file_io_brutus_empreinte_detail(FILE *detail, FILE *brut);
 
 #endif // GAME_FILE_IO_H

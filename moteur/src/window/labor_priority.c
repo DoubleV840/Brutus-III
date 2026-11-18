@@ -7,6 +7,7 @@
 #include "graphics/panel.h"
 #include "graphics/window.h"
 #include "input/input.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #define MIN_DIALOG_WIDTH 320
 
@@ -112,7 +113,7 @@ static void handle_input(const mouse *m, const hotkeys *h)
 static void button_set_priority(const generic_button *button)
 {
     int new_priority = button->parameter1;
-    city_labor_set_priority(data.category, new_priority);
+    brutus_commande_2(BRUTUS_CMD_PRIORITE_TRAVAIL, data.category, new_priority); // Brutus III
     window_go_back();
 }
 

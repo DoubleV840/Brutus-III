@@ -43,6 +43,7 @@
 #include "window/building_info.h"
 #include "window/city.h"
 #include "window/pause_menu.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #define NO_POSITION ((unsigned int)-1)
 
@@ -348,7 +349,7 @@ static void build_end(void)
         if (building_construction_type() != BUILDING_NONE) {
             sound_effect_play(SOUND_EFFECT_BUILD);
         }
-        building_construction_place();
+        brutus_commande_construire_depuis_interface(); // Brutus III : la pose passe par la file
         widget_minimap_invalidate();
     }
 }
@@ -701,9 +702,9 @@ static void military_map_click(int legion_formation_id, const map_tile *tile)
     }
     int other_formation_id = formation_legion_at_building(tile->grid_offset);
     if (other_formation_id && other_formation_id == legion_formation_id) {
-        formation_legion_return_home(m);
+        brutus_commande_1(BRUTUS_CMD_LEGION_RENTRER, legion_formation_id); // Brutus III
     } else {
-        formation_legion_move_to(m, tile);
+        brutus_commande_3(BRUTUS_CMD_LEGION_DEPLACER, legion_formation_id, tile->x, tile->y); // Brutus III
         if (config_get(CONFIG_UI_MOVE_LEGION_SOUND_SWAP)) {
             sound_speech_play_file("wavs/marching.wav"); //replacement marching sound
         } else {

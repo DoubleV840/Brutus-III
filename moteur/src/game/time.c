@@ -82,6 +82,12 @@ int game_time_total_years(void)
     return game_time_total_months() / GAME_TIME_MONTHS_PER_YEAR;
 }
 
+// Brutus III : jours écoulés depuis le début de la partie (sauvegardé), pour le tick absolu
+int game_time_brutus_total_days(void)
+{
+    return data.total_days;
+}
+
 void game_time_save_state(buffer *buf)
 {
     buffer_write_i32(buf, data.tick);

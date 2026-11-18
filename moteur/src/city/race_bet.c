@@ -14,6 +14,18 @@ int has_bet_in_progress(void)
     return city_data.games.chosen_horse != NO_BET && city_data.games.bet_amount;
 }
 
+// Brutus III : pari posé par la commande BRUTUS_CMD_PARI_COURSE (avant : écrit par window/race_bet.c)
+int city_race_bet_brutus_parier(int cheval, int montant)
+{
+    if (city_data.games.chosen_horse != NO_BET || cheval < BLUE_HORSE || cheval > GREEN_HORSE ||
+        montant <= 0 || montant > city_data.emperor.personal_savings) {
+        return 0;
+    }
+    city_data.games.chosen_horse = cheval;
+    city_data.games.bet_amount = montant;
+    return 1;
+}
+
 void race_result_process(void)
 {
     if (city_data.games.chosen_horse != NO_BET) {
