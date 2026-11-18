@@ -63,7 +63,7 @@ fi
 
 echo
 echo "Vérification : aucun fichier du jeu suivi par git…"
-if git ls-files | grep -iE '\.(sg2|555|smk|eng|emp)$' | grep -v '^moteur/'; then
+if git ls-files | grep -iE '\.(sg2|555|smk|eng|emp|map|wav)$' | grep -v '^moteur/'; then
   echo "ATTENTION : des fichiers du jeu sont suivis par git (liste ci-dessus). Ne pousse rien et préviens le CEO."
   exit 1
 fi
