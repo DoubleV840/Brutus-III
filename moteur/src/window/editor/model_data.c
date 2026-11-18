@@ -1,0 +1,406 @@
+#include "model_data.h"
+
+#include "building/industry.h"
+#include "building/properties.h"
+#include "building/type.h"
+#include "core/lang.h"
+#include "core/string.h"
+#include "game/resource.h"
+#include "graphics/font.h"
+#include "graphics/button.h"
+#include "graphics/generic_button.h"
+#include "graphics/graphics.h"
+#include "graphics/grid_box.h"
+#include "graphics/lang_text.h"
+#include "graphics/text.h"
+#include "graphics/panel.h"
+#include "graphics/window.h"
+#include "input/input.h"
+#include "translation/translation.h"
+#include "window/editor/attributes.h"
+#include "window/editor/map.h"
+#include "window/file_dialog.h"
+#include "window/numeric_input.h"
+#include "window/popup_dialog.h"
+
+#include <stdio.h>
+
+#define NO_SELECTION (unsigned int) -1
+#define UNLIMITED 1000000000 //fits in 32bit signed/unsigned int
+#define NEGATIVE_UNLIMITED -1000000000 //fits in 32bit signed int
+
+static void button_edit_production(const generic_button *button);
+static void button_edit_model_value(const generic_button *button);
+
+static void button_static_click(const generic_button *button);
+
+static void populate_list(void);
+static void draw_model_item(const grid_box_item *item);
+static void model_item_click(const grid_box_item *item);
+
+static void building_tooltip(const grid_box_item *item, tooltip_context *c);
+
+static struct {
+    unsigned int total_items;
+    building_type items[BUILDING_TYPE_MAX];
+
+    unsigned int data_buttons_focus_id;
+    unsigned int static_buttons_focus_id;
+    unsigned int target_index;
+    building_model_data_type data_type;
+} data;
+
+
+static generic_button data_buttons[] = {
+    {205, 2, 48, 20, button_edit_model_value, 0, MODEL_COST},
+    {260, 2, 48, 20, button_edit_model_value, 0, MODEL_DESIRABILITY_VALUE},
+    {315, 2, 48, 20, button_edit_model_value, 0, MODEL_DESIRABILITY_STEP},
+    {370, 2, 48, 20, button_edit_model_value, 0, MODEL_DESIRABILITY_STEP_SIZE},
+    {425, 2, 48, 20, button_edit_model_value, 0, MODEL_DESIRABILITY_RANGE},
+    {480, 2, 48, 20, button_edit_model_value, 0, MODEL_LABORERS},
+    {535, 2, 48, 20, button_edit_production}
+};
+#define NUM_DATA_BUTTONS (sizeof(data_buttons) / sizeof(generic_button))
+
+static generic_button static_buttons[] = {
+    {28, 25 * BLOCK_SIZE, 12 * BLOCK_SIZE, 24, button_static_click, 0, 0},
+    {232, 25 * BLOCK_SIZE, 12 * BLOCK_SIZE, 24, button_static_click, 0, 1},
+    {436, 25 * BLOCK_SIZE, 12 * BLOCK_SIZE, 24, button_static_click, 0, 2}
+};
+#define NUM_STATIC_BUTTONS (sizeof(static_buttons) / sizeof(generic_button))
+
+static grid_box_type model_buttons = {
+    .x = 25,
+    .y = 88,
+    .width = 40 * BLOCK_SIZE ,
+    .height = 20 * BLOCK_SIZE,
+    .item_height = 28,
+    .item_margin.horizontal = 8,
+    .item_margin.vertical = 2,
+    .extend_to_hidden_scrollbar = 1,
+    .on_click = model_item_click,
+    .draw_item = draw_model_item,
+    .handle_tooltip = building_tooltip
+};
+
+static void init(void)
+{
+    data.target_index = NO_SELECTION;
+    populate_list();
+    grid_box_init(&model_buttons, data.total_items);
+}
+
+static void populate_list(void)
+{
+    data.total_items = 0;
+    for (int i = 0; i < BUILDING_TYPE_MAX; i++) {
+        const building_properties *props = building_properties_for_type(i);
+        if (((props->size && props->event_data.attr) &&
+            (i != BUILDING_GRAND_GARDEN && i != BUILDING_DOLPHIN_FOUNTAIN)) ||
+            i == BUILDING_CLEAR_LAND || i == BUILDING_REPAIR_LAND) {
+            data.items[data.total_items++] = i;
+        }
+    }
+}
+
+static int building_produces_resource(building_type type)
+{
+    return building_is_raw_resource_producer(type) || building_is_workshop(type) || type == BUILDING_WHARF
+        || building_is_farm(type) || type == BUILDING_CITY_MINT || type == BUILDING_BARRACKS;
+}
+
+static void reset_confirmed(int accepted, int checked)
+{
+    if (accepted) {
+        model_reset_buildings();
+        resource_init();
+        window_request_refresh();
+    }
+}
+
+static void button_static_click(const generic_button *button)
+{
+    switch (button->parameter1) {
+        case 0:
+            window_file_dialog_show(FILE_TYPE_MODEL_DATA, FILE_DIALOG_SAVE);
+            break;
+        case 1:
+            window_popup_dialog_show_confirmation(translation_for(TR_BUTTON_RESET_DEFAULTS),
+                translation_for(TR_PARAMETER_BUILDING_MODEL_REST_CONFIRMATION), NULL, reset_confirmed);
+            break;
+        case 2:
+            window_file_dialog_show(FILE_TYPE_MODEL_DATA, FILE_DIALOG_LOAD);
+            break;
+        default:
+            break;
+    }
+}
+
+static void set_model_value(int value)
+{
+    model_building *model = model_get_building(data.items[data.target_index]);
+    *model_get_ptr_for_building_data_type(model, data.data_type) = value;
+    data.target_index = NO_SELECTION;
+}
+
+static void button_edit_model_value(const generic_button *button)
+{
+    data.data_type = button->parameter1;
+    window_numeric_input_bound_show(model_buttons.focused_item.x, model_buttons.focused_item.y, button, 9,
+        model_get_min_for_data_type(data.data_type), model_get_max_for_data_type(data.data_type), set_model_value);
+}
+
+static void set_production(int value)
+{
+    resource_data *resource = resource_get_data(resource_get_from_industry(data.items[data.target_index]));
+    resource->production_per_month = value;
+    data.target_index = NO_SELECTION;
+}
+
+static void button_edit_production(const generic_button *button)
+{
+    building_type type = data.items[data.target_index];
+    if (building_produces_resource(type)) {
+        window_numeric_input_bound_show(model_buttons.focused_item.x, model_buttons.focused_item.y, button,
+            9, NEGATIVE_UNLIMITED, UNLIMITED, set_production);
+    }
+}
+
+static void model_item_click(const grid_box_item *item)
+{
+    data.target_index = item->index;
+}
+
+static void get_building_translation(building_type b_type, uint8_t *buffer, int buffer_size)
+{
+    const building_properties *props = building_properties_for_type(b_type);
+    const uint8_t *b_type_string = props->event_data.key ? translation_for(props->event_data.key) : lang_get_building_type_string(b_type);
+
+    string_copy(b_type_string, buffer, buffer_size);
+}
+
+static void draw_model_item(const grid_box_item *item)
+{
+    button_border_draw(item->x, item->y, item->width, item->height, 0);
+    int b_type = data.items[item->index];
+    uint8_t b_string[128];
+
+    get_building_translation(b_type, b_string, sizeof(b_string));
+    text_draw_ellipsized(b_string, item->x + 8, item->y + 8, 12 * BLOCK_SIZE, FONT_NORMAL_BLACK, 0);
+
+    for (unsigned int i = 0; i < NUM_DATA_BUTTONS - !building_produces_resource(b_type); i++) {
+        button_border_draw(item->x + data_buttons[i].x, item->y + data_buttons[i].y,
+            data_buttons[i].width, data_buttons[i].height, item->is_focused && data.data_buttons_focus_id == i + 1);
+
+        model_building *model = model_get_building(b_type);
+        model_building *default_model = (model_building *) &building_properties_for_type(b_type)->building_model_data;
+        int value = *model_get_ptr_for_building_data_type(model, i);
+        int default_value = *model_get_ptr_for_building_data_type(default_model, i);
+        if (i == 6) {
+            value = resource_get_data(resource_get_from_industry(b_type))->production_per_month;
+            default_value = resource_get_defaults(resource_get_from_industry(b_type))->production_per_month;
+        }
+        color_t color = 0;
+        if (value > default_value) {
+            color = COLOR_FONT_DARK_GREEN;
+        } else if (value < default_value) {
+            color = COLOR_FONT_RED;
+        }
+        text_draw_number(value, 0, NULL, item->x + data_buttons[i].x + 8, item->y + data_buttons[i].y + 6,
+            FONT_SMALL_PLAIN, color);
+    }
+}
+
+static void draw_background(void)
+{
+    window_editor_map_draw_all();
+
+    graphics_in_dialog();
+
+    outer_panel_draw(16, 32, 42, 27);
+    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_EDITOR_SCENARIO_CHANGE_MODEL_DATA, 26, 42, 38 * BLOCK_SIZE, FONT_LARGE_BLACK);
+    lang_text_draw_centered(13, 3, 16, 27 * BLOCK_SIZE + 8, 42 * BLOCK_SIZE, FONT_NORMAL_BLACK);
+
+    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_PARAMETER_MODEL, 80, 75, 30, FONT_SMALL_PLAIN);
+    lang_text_draw_centered_without_bounds(CUSTOM_TRANSLATION, TR_PARAMETER_COST, data_buttons[0].x + 35, 75, 30, FONT_SMALL_PLAIN);
+    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_EDITOR_MODEL_DATA_DES_VALUE, data_buttons[1].x + 35, 75, 30, FONT_SMALL_PLAIN);
+    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_EDITOR_MODEL_DATA_DES_STEP, data_buttons[2].x + 35, 75, 30, FONT_SMALL_PLAIN);
+    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_EDITOR_MODEL_DATA_DES_STEP_SIZE, data_buttons[3].x + 35, 75, 30, FONT_SMALL_PLAIN);
+    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_EDITOR_MODEL_DATA_DES_RANGE, data_buttons[4].x + 35, 75, 30, FONT_SMALL_PLAIN);
+    lang_text_draw_centered_without_bounds(CUSTOM_TRANSLATION, TR_PARAMETER_LABORERS, data_buttons[5].x + 35, 75, 30, FONT_SMALL_PLAIN);
+    lang_text_draw_centered_without_bounds(CUSTOM_TRANSLATION, TR_EDITOR_MODEL_PRODUCTION, data_buttons[6].x + 35, 75, 30, FONT_SMALL_PLAIN);
+
+    graphics_reset_dialog();
+
+    grid_box_request_refresh(&model_buttons);
+}
+
+static void draw_foreground(void)
+{
+    graphics_in_dialog();
+
+    for (unsigned int i = 0; i < NUM_STATIC_BUTTONS; i++) {
+        button_border_draw(static_buttons[i].x, static_buttons[i].y,
+            static_buttons[i].width, static_buttons[i].height, data.static_buttons_focus_id == i + 1);
+        translation_key key;
+        switch (i) {
+            default:
+            case 0:
+                key = TR_EDITOR_SCENARIO_EVENTS_EXPORT;
+                break;
+            case 1:
+                key = TR_BUTTON_RESET_DEFAULTS;
+                break;
+            case 2:
+                key = TR_EDITOR_SCENARIO_EVENTS_IMPORT;
+                break;
+        }
+        lang_text_draw_centered(CUSTOM_TRANSLATION, key,
+            static_buttons[i].x, static_buttons[i].y + 6, static_buttons[i].width, FONT_NORMAL_BLACK);
+    }
+
+    grid_box_draw(&model_buttons);
+
+    graphics_reset_dialog();
+}
+
+static void handle_input(const mouse *m, const hotkeys *h)
+{
+    const mouse *m_dialog = mouse_in_dialog(m);
+    if (generic_buttons_handle_mouse(m_dialog, 0, 0, static_buttons, NUM_STATIC_BUTTONS, &data.static_buttons_focus_id)) {
+        return;
+    }
+    grid_box_handle_input(&model_buttons, m_dialog, 1);
+
+    int x = 0, y = 0;
+    if (model_buttons.focused_item.is_focused) {
+        x = model_buttons.focused_item.x;
+        y = model_buttons.focused_item.y;
+    }
+    if (generic_buttons_handle_mouse(m_dialog, x, y, data_buttons, NUM_DATA_BUTTONS, &data.data_buttons_focus_id)) {
+        return;
+    }
+
+    if (input_go_back_requested(m, h)) {
+        window_editor_attributes_show();
+    }
+}
+
+static int desirability_tooltip(tooltip_context *c)
+{
+    const mouse *m_global = mouse_get();
+    const mouse *m = mouse_in_dialog(m_global);
+
+    for (int i = 0; i < 4; i++) {
+        int x = data_buttons[i + 1].x + 30;
+        int y = 73;
+        int height = 14;
+        int width = 48;
+
+        if (x <= m->x && x + width > m->x &&
+            y <= m->y && y + height > m->y) {
+            c->text_group = CUSTOM_TRANSLATION;
+            c->text_id = TR_EDITOR_DESIRABILITY_VALUE + i;
+            c->type = TOOLTIP_BUTTON;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void building_tooltip(const grid_box_item *item, tooltip_context *c)
+{
+    static uint8_t text[128];
+    get_building_translation(data.items[item->index], text, sizeof(text));
+    const int max_width = 12 * BLOCK_SIZE;
+    if (text_get_width(text, FONT_NORMAL_BLACK) > max_width &&
+        !data.data_buttons_focus_id) {
+        c->precomposed_text = text;
+        c->type = TOOLTIP_BUTTON;
+    }
+}
+
+static int model_value_tooltip(tooltip_context *c)
+{
+    if (!model_buttons.focused_item.is_focused) {
+        return 0;
+    }
+
+    const mouse *m_global = mouse_get();
+    const mouse *m = mouse_in_dialog(m_global);
+
+    int b_type = data.items[model_buttons.focused_item.index];
+
+    for (unsigned int i = 0; i < NUM_DATA_BUTTONS; i++) {
+        int x = model_buttons.focused_item.x + data_buttons[i].x;
+        int y = model_buttons.focused_item.y + data_buttons[i].y;
+        int width = data_buttons[i].width;
+        int height = data_buttons[i].height;
+
+        if (x <= m->x && x + width > m->x &&
+            y <= m->y && y + height > m->y) {
+
+            int current_value;
+            int default_value;
+
+            if (i == 6) {
+                current_value =
+                    resource_get_data(resource_get_from_industry(b_type))->production_per_month;
+
+                default_value = resource_get_defaults(resource_get_from_industry(b_type))->production_per_month;
+            } else {
+                model_building *model = model_get_building(b_type);
+
+                model_building *default_model =
+                    (model_building *) &building_properties_for_type(b_type)->building_model_data;
+
+                current_value = *model_get_ptr_for_building_data_type(model, i);
+
+                default_value = *model_get_ptr_for_building_data_type(default_model, i);
+            }
+
+            /* show tooltip only for modified values */
+            if (current_value == default_value) {
+                continue;
+            }
+
+            static uint8_t text[128];
+
+            snprintf((char *) text, sizeof(text), "%s %d",
+                translation_for(TR_EDITOR_MODEL_DATA_DEFAULT), default_value);
+
+            c->precomposed_text = text;
+            c->type = TOOLTIP_BUTTON;
+
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void get_tooltip(tooltip_context *c)
+{
+    if (model_value_tooltip(c)) {
+        return;
+    }
+
+    if (desirability_tooltip(c)) {
+        return;
+    }
+
+    grid_box_handle_tooltip(&model_buttons, c);
+}
+
+void window_model_data_show(void)
+{
+    init();
+    window_type window = {
+        WINDOW_EDITOR_MODEL_DATA,
+        draw_background,
+        draw_foreground,
+        handle_input,
+        get_tooltip
+    };
+    window_show(&window);
+}

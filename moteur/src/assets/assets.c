@@ -1,0 +1,335 @@
+#include "assets.h"
+
+#include "assets/group.h"
+#include "assets/image.h"
+#include "assets/xml.h"
+#include "core/dir.h"
+#include "core/log.h"
+#include "graphics/renderer.h"
+#include "core/png_read.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+static struct {
+    int roadblock_image_id;
+    asset_image *roadblock_image;
+    int asset_lookup[ASSET_MAX_KEY];
+    int font_lookup[ASSET_FONT_MAX_KEY];
+} data;
+
+void assets_init(int force_reload, color_t **main_images, int *main_image_widths)
+{
+    if (graphics_renderer()->has_image_atlas(ATLAS_EXTRA_ASSET) && !force_reload) {
+        asset_image_reload_climate();
+        return;
+    }
+
+    graphics_renderer()->free_image_atlas(ATLAS_EXTRA_ASSET);
+
+    const dir_listing *xml_files = dir_find_files_with_extension(ASSETS_DIRECTORY "/" ASSETS_IMAGE_PATH, "xml");
+
+    if (!group_create_all(xml_files->num_files) || !asset_image_init_array()) {
+        log_error("Not enough memory to initialize extra assets. The game will probably crash.", 0, 0);
+    }
+
+    xml_init();
+
+    for (int i = 0; i < xml_files->num_files; ++i) {
+        xml_process_assetlist_file(xml_files->files[i].name);
+    }
+
+    xml_finish();
+
+    asset_image_load_all(main_images, main_image_widths);
+
+    group_set_for_external_files();
+
+    // By default, if the requested image is not found, the roadblock image will be shown.
+    // This ensures compatibility with previous release versions of Augustus, which only had roadblocks
+    data.roadblock_image_id = assets_get_group_id("Admin_Logistics");
+    data.roadblock_image = asset_image_get_from_id(data.roadblock_image_id - IMAGE_MAIN_ENTRIES);
+    data.asset_lookup[ASSET_HIGHWAY_BASE_START] = assets_get_image_id("Admin_Logistics", "Highway_Base_Start");
+    data.asset_lookup[ASSET_HIGHWAY_BARRIER_START] = assets_get_image_id("Admin_Logistics", "Highway_Barrier_Start");
+    data.asset_lookup[ASSET_AQUEDUCT_WITH_WATER] = assets_get_image_id("Admin_Logistics", "Aqueduct_Bridge_Left_Water");
+    data.asset_lookup[ASSET_AQUEDUCT_WITHOUT_WATER] = assets_get_image_id("Admin_Logistics", "Aqueduct_Bridge_Left_Empty");
+    data.asset_lookup[ASSET_GOLD_SHIELD] = assets_get_image_id("UI", "GoldShield");
+    data.asset_lookup[ASSET_HAGIA_SOPHIA_FIX] = assets_get_image_id("UI", "H Sophia Fix");
+    data.asset_lookup[ASSET_FIRST_ORNAMENT] = assets_get_image_id("UI", "First Ornament");
+    data.asset_lookup[ASSET_CENTER_CAMERA_ON_BUILDING] = assets_get_image_id("UI", "Center Camera Button");
+    data.asset_lookup[ASSET_OX] = assets_get_image_id("Walkers", "Ox_Portrait");
+    data.asset_lookup[ASSET_UI_RISKS] = assets_get_image_id("UI", "Risk_Widget_Collapse");
+    data.asset_lookup[ASSET_UI_SELECTION_CHECKMARK] = assets_get_image_id("UI", "Selection_Checkmark");
+    data.asset_lookup[ASSET_UI_SELECTION_CROSS] = assets_get_image_id("UI", "Denied_Walker_Checkmark");
+    data.asset_lookup[ASSET_UI_GEAR_ICON] = assets_get_image_id("UI", "gear_icon");
+    data.asset_lookup[ASSET_UI_COPY_ICON] = assets_get_image_id("UI", "copy_icon");
+    data.asset_lookup[ASSET_UI_PASTE_ICON] = assets_get_image_id("UI", "paste_icon");
+    data.asset_lookup[ASSET_UI_ASCEPIUS] = assets_get_image_id("UI", "Asclepius Button");
+    // empire icons
+    data.asset_lookup[ASSET_UI_EMP_ICON_1] = assets_get_image_id("UI", "Empire_Icon_Roman_01");         // tr_town
+    data.asset_lookup[ASSET_UI_EMP_ICON_2] = assets_get_image_id("UI", "Empire_Icon_Roman_02");         // ro_town
+    data.asset_lookup[ASSET_UI_EMP_ICON_3] = assets_get_image_id("UI", "Empire_Icon_Roman_03");         // tr_village
+    data.asset_lookup[ASSET_UI_EMP_ICON_4] = assets_get_image_id("UI", "Empire_Icon_Roman_04");         // ro_village
+    data.asset_lookup[ASSET_UI_EMP_ICON_5] = assets_get_image_id("UI", "Empire_Icon_Roman_05");         // ro_capital
+    data.asset_lookup[ASSET_UI_EMP_ICON_6] = assets_get_image_id("UI", "Empire_Icon_Distant_01");       // dis_town
+    data.asset_lookup[ASSET_UI_EMP_ICON_7] = assets_get_image_id("UI", "Empire_Icon_Distant_02");       // dis_village
+    data.asset_lookup[ASSET_UI_EMP_ICON_8] = assets_get_image_id("UI", "Empire_Icon_Construction_01");  // construction
+    data.asset_lookup[ASSET_UI_EMP_ICON_9] = assets_get_image_id("UI", "Empire_Icon_Resource_01");      // res_food
+    data.asset_lookup[ASSET_UI_EMP_ICON_10] = assets_get_image_id("UI", "Empire_Icon_Resource_02");     // res_goods
+    data.asset_lookup[ASSET_UI_EMP_ICON_11] = assets_get_image_id("UI", "Empire_Icon_Resource_03");     // res_sea
+    data.asset_lookup[ASSET_UI_EMP_ICON_12] = assets_get_image_id("UI", "Empire_Icon_Trade_01");        // tr_sea
+    data.asset_lookup[ASSET_UI_EMP_ICON_13] = assets_get_image_id("UI", "Empire_Icon_Trade_02");        // tr_land
+    data.asset_lookup[ASSET_UI_EMP_ICON_OLD_WATCHTOWER] = assets_get_image_id("UI", "Empire_Icon_Watchtower"); // tower
+    // Tile data assets
+    data.asset_lookup[ASSET_UI_FOUNTAIN_RANGE] = assets_get_image_id("UI", "Water_Range");
+    data.asset_lookup[ASSET_UI_RESERVOIR_RANGE] = assets_get_image_id("UI", "Reservoir_Range_Overlay_Icon");
+    data.asset_lookup[ASSET_UI_GRID] = assets_get_image_id("UI", "Grid_Full");
+    // Empire sidebar and trade ledger assets
+    data.asset_lookup[ASSET_UI_CENTERED_BOAT] = assets_get_image_id("UI", "Sea_Trade_Icon_Centered");
+    data.asset_lookup[ASSET_UI_CENTERED_CART] = assets_get_image_id("UI", "Land_Trade_Icon_Centered");
+    data.asset_lookup[ASSET_UI_CART_AND_BOAT] = assets_get_image_id("UI", "Both_Trade_Icons");
+    data.asset_lookup[ASSET_UI_ARROW_UP] = assets_get_image_id("UI", "Arrow_Up_Masked");
+    data.asset_lookup[ASSET_UI_ARROW_DOWN] = assets_get_image_id("UI", "Arrow_Down_Masked");
+    data.asset_lookup[ASSET_UI_EMP_PANEL_HOR] = assets_get_image_id("UI", "Empire_Panel_01"); // horizontal panel
+    data.asset_lookup[ASSET_UI_EMP_PANEL_VER] = assets_get_image_id("UI", "Empire_Panel_01b"); // vertical panel
+    data.asset_lookup[ASSET_UI_EMP_PANEL_XBAR_DRAG] = assets_get_image_id("UI", "Empire_Panel_02"); // crossbar
+    data.asset_lookup[ASSET_UI_BTN_MENU_LEFT_PANEL] = assets_get_image_id("UI", "Button_Menu_Left_Panel");
+    data.asset_lookup[ASSET_UI_BTN_MENU_MIDDLE_PANEL] = assets_get_image_id("UI", "Button_Menu_Middle_Panel");
+    data.asset_lookup[ASSET_UI_BTN_MENU_RIGHT_PANEL] = assets_get_image_id("UI", "Button_Menu_Right_Panel");
+    data.asset_lookup[ASSET_UI_BTN_MENU_LEFT_PANEL_MIRROR_V] = assets_get_image_id("UI", "Button_Menu_Left_Panel_Mirror_V");
+    data.asset_lookup[ASSET_UI_BTN_MENU_MIDDLE_PANEL_MIRROR_V] = assets_get_image_id("UI", "Button_Menu_Middle_Panel_Mirror_V");
+    data.asset_lookup[ASSET_UI_BTN_MENU_RIGHT_PANEL_MIRROR_V] = assets_get_image_id("UI", "Button_Menu_Right_Panel_Mirror_V");
+    data.asset_lookup[ASSET_UI_BTN_MENU_FRAME_01] = assets_get_image_id("UI", "Button_Menu_Frame_01");
+    data.asset_lookup[ASSET_UI_BTN_MENU_FRAME_02] = assets_get_image_id("UI", "Button_Menu_Frame_02");
+    data.asset_lookup[ASSET_UI_BTN_MENU_FRAME_03] = assets_get_image_id("UI", "Button_Menu_Frame_03");
+    data.asset_lookup[ASSET_UI_BTN_MENU_FRAME_04] = assets_get_image_id("UI", "Button_Menu_Frame_04");
+    data.asset_lookup[ASSET_UI_BTN_MENU_FRAME_06] = assets_get_image_id("UI", "Button_Menu_Frame_06");
+    data.asset_lookup[ASSET_UI_BTN_MENU_FRAME_07] = assets_get_image_id("UI", "Button_Menu_Frame_07");
+    data.asset_lookup[ASSET_UI_BTN_MENU_FRAME_08] = assets_get_image_id("UI", "Button_Menu_Frame_08");
+    data.asset_lookup[ASSET_UI_BTN_MENU_FRAME_09] = assets_get_image_id("UI", "Button_Menu_Frame_09");
+    data.asset_lookup[ASSET_UI_SEGMENTED_BORDER_01] = assets_get_image_id("UI", "segmented_border_01");
+    data.asset_lookup[ASSET_UI_SEGMENTED_BORDER_02] = assets_get_image_id("UI", "segmented_border_02");
+    data.asset_lookup[ASSET_UI_SEGMENTED_BORDER_03] = assets_get_image_id("UI", "segmented_border_03");
+    data.asset_lookup[ASSET_UI_SEGMENTED_BORDER_04] = assets_get_image_id("UI", "segmented_border_04");
+    data.asset_lookup[ASSET_UI_SEGMENTED_BORDER_06] = assets_get_image_id("UI", "segmented_border_06");
+    data.asset_lookup[ASSET_UI_SEGMENTED_BORDER_07] = assets_get_image_id("UI", "segmented_border_07");
+    data.asset_lookup[ASSET_UI_SEGMENTED_BORDER_08] = assets_get_image_id("UI", "segmented_border_08");
+    data.asset_lookup[ASSET_UI_SEGMENTED_BORDER_09] = assets_get_image_id("UI", "segmented_border_09");
+    data.asset_lookup[ASSET_UI_SORTING_ICON] = assets_get_image_id("UI", "Sorting_Icon");
+    data.asset_lookup[ASSET_UI_FILTER_ICON] = assets_get_image_id("UI", "Filter_Icon");
+    data.asset_lookup[ASSET_UI_SORTING_ICON_HOVER] = assets_get_image_id("UI", "Sorting_Icon_Hover");
+    data.asset_lookup[ASSET_UI_FILTER_ICON_HOVER] = assets_get_image_id("UI", "Filter_Icon_Hover");
+    data.asset_lookup[ASSET_UI_ARROW_MASKED_UP] = assets_get_image_id("UI", "Arrow_Up_Masked");
+    data.asset_lookup[ASSET_UI_ARROW_MASKED_DOWN] = assets_get_image_id("UI", "Arrow_Down_Masked");
+    data.asset_lookup[ASSET_UI_TRADE_LEDGER] = assets_get_image_id("UI", "Trade_Ledger_Small");
+    data.asset_lookup[ASSET_UI_TRADE_LEDGER_HOVER] = assets_get_image_id("UI", "Trade_Ledger_Small_Hover");
+    data.asset_lookup[ASSET_UI_TRADE_LEDGER_BUTTON_IDLE] = assets_get_image_id("UI", "Trade_Ledger_Button_Idle");
+    data.asset_lookup[ASSET_UI_TRADE_LEDGER_BUTTON_HOVER] = assets_get_image_id("UI", "Trade_Ledger_Button_Click");
+    data.asset_lookup[ASSET_UI_DIAGONAL_LINES_L] = assets_get_image_id("UI", "Diagonal_Lines_L");
+    data.asset_lookup[ASSET_UI_DIAGONAL_LINES_R] = assets_get_image_id("UI", "Diagonal_Lines_R");
+    data.asset_lookup[ASSET_UI_FONT_BROWN_UP_ARROW] = assets_get_image_id("UI", "Font_Brown_Up_Arrow");
+    data.asset_lookup[ASSET_UI_FONT_BROWN_DOWN_ARROW] = assets_get_image_id("UI", "Font_Brown_Down_Arrow");
+    data.asset_lookup[ASSET_UI_TRADE_LEDGER_EXPORT] = assets_get_image_id("UI", "Trade_Ledger_Export");
+    data.asset_lookup[ASSET_UI_TRADE_LEDGER_IMPORT] = assets_get_image_id("UI", "Trade_Ledger_Import");
+    data.asset_lookup[ASSET_UI_RESOURCE_PICKER] = assets_get_image_id("UI", "resource_picker");
+    data.asset_lookup[ASSET_UI_PLUS_BUTTON_IDLE] = assets_get_image_id("UI", "Plus_Button_Idle");
+    data.asset_lookup[ASSET_UI_PLUS_BUTTON_CLICK] = assets_get_image_id("UI", "Plus_Button_Click");
+    data.asset_lookup[ASSET_UI_MINUS_BUTTON_IDLE] = assets_get_image_id("UI", "Minus_Button_Idle");
+    data.asset_lookup[ASSET_UI_MINUS_BUTTON_CLICK] = assets_get_image_id("UI", "Minus_Button_Click");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_UP] = assets_get_image_id("UI", "Scrollbar_Up_01");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_DOWN] = assets_get_image_id("UI", "Scrollbar_Down_01");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE] = assets_get_image_id("UI", "Scrollbar_Middle_01");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_LINES_ALPHA] = assets_get_image_id("UI", "Scrollbar_Lines_Alpha");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_LINES_ALPHA_B] = assets_get_image_id("UI", "Scrollbar_Lines_Alpha_B");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_01_END_TOP] = assets_get_image_id("UI", "Scrollbar_Middle_01_End_Top");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_01_END_BOTTOM] = assets_get_image_id("UI", "Scrollbar_Middle_01_End_Bottom");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_01_TRIMMED] = assets_get_image_id("UI", "Scrollbar_Middle_01_Trimmed");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_01_TRIMMED_MIRROR] = assets_get_image_id("UI", "Scrollbar_Middle_01_Trimmed_MirrorV");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_02_END_TOP] = assets_get_image_id("UI", "Scrollbar_Middle_02_End_Top");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_02_END_BOTTOM] = assets_get_image_id("UI", "Scrollbar_Middle_02_End_Bottom");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_02_TRIMMED] = assets_get_image_id("UI", "Scrollbar_Middle_02_Trimmed");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_02_TRIMMED_MIRROR] = assets_get_image_id("UI", "Scrollbar_Middle_02_Trimmed_MirrorV");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_03_END_TOP] = assets_get_image_id("UI", "Scrollbar_Middle_03_End_Top");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_03_END_BOTTOM] = assets_get_image_id("UI", "Scrollbar_Middle_03_End_Bottom");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_03_TRIMMED] = assets_get_image_id("UI", "Scrollbar_Middle_03_Trimmed");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_03_TRIMMED_MIRROR] = assets_get_image_id("UI", "Scrollbar_Middle_03_Trimmed_MirrorV");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_04_END_TOP] = assets_get_image_id("UI", "Scrollbar_Middle_04_End_Top");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_04_END_BOTTOM] = assets_get_image_id("UI", "Scrollbar_Middle_04_End_Bottom");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_04_TRIMMED] = assets_get_image_id("UI", "Scrollbar_Middle_04_Trimmed");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_04_TRIMMED_MIRROR] = assets_get_image_id("UI", "Scrollbar_Middle_04_Trimmed_MirrorV");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_01B_END_LEFT] = assets_get_image_id("UI", "Scrollbar_Middle_01b_End_Left");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_01B_END_RIGHT] = assets_get_image_id("UI", "Scrollbar_Middle_01b_End_Right");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_01B_TRIMMED] = assets_get_image_id("UI", "Scrollbar_Middle_01b_Trimmed");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_01B_TRIMMED_MIRROR] = assets_get_image_id("UI", "Scrollbar_Middle_01b_Trimmed_MirrorH");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_02B_END_LEFT] = assets_get_image_id("UI", "Scrollbar_Middle_02b_End_Left");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_02B_END_RIGHT] = assets_get_image_id("UI", "Scrollbar_Middle_02b_End_Right");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_02B_TRIMMED] = assets_get_image_id("UI", "Scrollbar_Middle_02b_Trimmed");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_02B_TRIMMED_MIRROR] = assets_get_image_id("UI", "Scrollbar_Middle_02b_Trimmed_MirrorH");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_03B_END_LEFT] = assets_get_image_id("UI", "Scrollbar_Middle_03b_End_Left");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_03B_END_RIGHT] = assets_get_image_id("UI", "Scrollbar_Middle_03b_End_Right");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_03B_TRIMMED] = assets_get_image_id("UI", "Scrollbar_Middle_03b_Trimmed");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_03B_TRIMMED_MIRROR] = assets_get_image_id("UI", "Scrollbar_Middle_03b_Trimmed_MirrorH");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_04B_END_LEFT] = assets_get_image_id("UI", "Scrollbar_Middle_04b_End_Left");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_04B_END_RIGHT] = assets_get_image_id("UI", "Scrollbar_Middle_04b_End_Right");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_04B_TRIMMED] = assets_get_image_id("UI", "Scrollbar_Middle_04b_Trimmed");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MIDDLE_04B_TRIMMED_MIRROR] = assets_get_image_id("UI", "Scrollbar_Middle_04b_Trimmed_MirrorH");
+    data.asset_lookup[ASSET_UI_SCROLL_BG_01] = assets_get_image_id("UI", "Scrollbar_Dark_Start");
+    data.asset_lookup[ASSET_UI_SCROLL_BG_02] = assets_get_image_id("UI", "Scrollbar_Dark_Mid");
+    data.asset_lookup[ASSET_UI_SCROLL_BG_03] = assets_get_image_id("UI", "Scrollbar_Dark_End");
+    data.asset_lookup[ASSET_UI_SCROLL_BG_01B] = assets_get_image_id("UI", "Scrollbar_Dark_Start_B");
+    data.asset_lookup[ASSET_UI_SCROLL_BG_02B] = assets_get_image_id("UI", "Scrollbar_Dark_Mid_B");
+    data.asset_lookup[ASSET_UI_SCROLL_BG_03B] = assets_get_image_id("UI", "Scrollbar_Dark_End_B");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_LEFT_01] = assets_get_image_id("UI", "Scrollbar_Left_01");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_LEFT_02] = assets_get_image_id("UI", "Scrollbar_Left_02");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_LEFT_03] = assets_get_image_id("UI", "Scrollbar_Left_03");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_LEFT_04] = assets_get_image_id("UI", "Scrollbar_Left_04");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_RIGHT_01] = assets_get_image_id("UI", "Scrollbar_Right_01");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_RIGHT_02] = assets_get_image_id("UI", "Scrollbar_Right_02");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_RIGHT_03] = assets_get_image_id("UI", "Scrollbar_Right_03");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_RIGHT_04] = assets_get_image_id("UI", "Scrollbar_Right_04");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MINI_THUMB_01] = assets_get_image_id("UI", "Scrollbar_Thumb_01");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MINI_THUMB_02] = assets_get_image_id("UI", "Scrollbar_Thumb_02");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MINI_THUMB_03] = assets_get_image_id("UI", "Scrollbar_Thumb_03");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MINI_THUMB_04] = assets_get_image_id("UI", "Scrollbar_Thumb_04");
+    data.asset_lookup[ASSET_UI_SCROLLBAR_MINI_THUMB_LINES] = assets_get_image_id("UI", "Scrollbar_Thumb_Lines");
+    data.asset_lookup[ASSET_UI_HOURGLASS_ICON] = assets_get_image_id("UI", "hourglass_icon");
+    data.asset_lookup[ASSET_UI_CONSUMED] = assets_get_image_id("UI", "consumed");
+    data.asset_lookup[ASSET_UI_CONSUMED_ALPHA] = assets_get_image_id("UI", "consumed_alpha");
+    data.asset_lookup[ASSET_UI_CONSUMED_BROKEN] = assets_get_image_id("UI", "consumed_broken");
+    data.asset_lookup[ASSET_UI_CONSUMED_BROKEN_ALPHA] = assets_get_image_id("UI", "consumed_broken_alpha");
+    data.asset_lookup[ASSET_UI_EXPORT_ALPHA_RIGHT] = assets_get_image_id("UI", "export_alpha_right");
+    data.asset_lookup[ASSET_UI_EXPORT_RIGHT] = assets_get_image_id("UI", "export_right");
+    data.asset_lookup[ASSET_UI_IMPORT_RED_ALPHA_LEFT] = assets_get_image_id("UI", "import_red_alpha_left");
+    data.asset_lookup[ASSET_UI_IMPORT_RED_LEFT] = assets_get_image_id("UI", "import_red_left");
+    data.asset_lookup[ASSET_UI_PRODUCED] = assets_get_image_id("UI", "produced");
+    data.asset_lookup[ASSET_UI_STOCK] = assets_get_image_id("UI", "stock");
+    data.asset_lookup[ASSET_AESTHETIC_BUILDING_WILLOW_TREE] = assets_get_image_id("Aesthetics", "ornamental willow");
+    // font assets - keep last
+    data.font_lookup[ASSET_FONT_SQ_BRACKET_LEFT] = assets_get_image_id("UI", "leftbracket_white_l");
+    data.font_lookup[ASSET_FONT_SQ_BRACKET_RIGHT] = assets_get_image_id("UI", "rightbracket_white_l");
+    data.font_lookup[ASSET_FONT_CRLY_BRACKET_LEFT] = assets_get_image_id("UI", "curlybracket_white_left");
+    data.font_lookup[ASSET_FONT_CRLY_BRACKET_RIGHT] = assets_get_image_id("UI", "curlybracket_white_right");
+    data.font_lookup[ASSET_FONT_ABSTRACT_CARET_SYMBOL] = assets_get_image_id("UI", "abstract_caret_symbol");
+
+    // Tile data assets
+    data.asset_lookup[ASSET_UI_FOUNTAIN_RANGE] = assets_get_image_id("UI", "Water_Range");
+    data.asset_lookup[ASSET_UI_RESERVOIR_RANGE] = assets_get_image_id("UI", "Reservoir_Range_Overlay_Icon");
+    data.asset_lookup[ASSET_UI_GRID] = assets_get_image_id("UI", "Grid_Full");
+}
+
+int assets_load_single_group(const char *file_name, color_t **main_images, int *main_image_widths)
+{
+    if (!group_create_all(1) || !asset_image_init_array()) {
+        log_error("Not enough memory to initialize extra assets. The game will probably crash.", 0, 0);
+        return 0;
+    }
+    xml_init();
+    graphics_renderer()->free_image_atlas(ATLAS_EXTRA_ASSET);
+    return xml_process_assetlist_file(file_name) && asset_image_load_all(main_images, main_image_widths);
+}
+
+int assets_get_group_id(const char *assetlist_name)
+{
+    image_groups *group = group_get_from_name(assetlist_name);
+    if (group) {
+        return group->first_image_index + IMAGE_MAIN_ENTRIES;
+    }
+    log_info("Asset group not found: ", assetlist_name, 0);
+    return data.roadblock_image_id;
+}
+
+int assets_get_image_id(const char *assetlist_name, const char *image_name)
+{
+    if (!image_name || !*image_name) {
+        return data.roadblock_image_id;
+    }
+    image_groups *group = group_get_from_name(assetlist_name);
+    if (!group) {
+        log_info("Asset group not found: ", assetlist_name, 0);
+        return data.roadblock_image_id;
+    }
+    const asset_image *img = asset_image_get_from_id(group->first_image_index);
+    while (img && img->index <= (unsigned int) group->last_image_index) {
+        if (img->id && strcmp(img->id, image_name) == 0) {
+            return img->index + IMAGE_MAIN_ENTRIES;
+        }
+        img = asset_image_get_from_id(img->index + 1);
+    }
+    log_info("Asset image not found: ", image_name, 0);
+    log_info("Asset group is: ", assetlist_name, 0);
+    return data.roadblock_image_id;
+}
+
+int assets_get_external_image(const char *path, int force_reload)
+{
+    if (!path || !*path) {
+        return 0;
+    }
+    image_groups *group = group_get_from_name(ASSET_EXTERNAL_FILE_LIST);
+    asset_image *img = asset_image_get_from_id(group->first_image_index);
+    int was_found = 0;
+    while (img && img->index <= (unsigned int) group->last_image_index) {
+        if (img->id && strcmp(img->id, path) == 0) {
+            if (!force_reload) {
+                return img->index + IMAGE_MAIN_ENTRIES;
+            } else {
+                was_found = 1;
+                break;
+            }
+        }
+        img = asset_image_get_from_id(img->index + 1);
+    }
+    if (was_found) {
+        graphics_renderer()->free_unpacked_image(&img->img);
+        asset_image_unload(img);
+    }
+    const asset_image *new_img = asset_image_create_external(path);
+    if (!new_img) {
+        return 0;
+    }
+    if (group->first_image_index == -1) {
+        group->first_image_index = new_img->index;
+    }
+    group->last_image_index = new_img->index;
+    return new_img->index + IMAGE_MAIN_ENTRIES;
+}
+
+int assets_lookup_image_id(asset_id id)
+{
+    return data.asset_lookup[id];
+}
+
+const image *assets_get_image(int image_id)
+{
+    asset_image *img = asset_image_get_from_id(image_id - IMAGE_MAIN_ENTRIES);
+    if (!img) {
+        img = data.roadblock_image;
+    }
+    if (!img) {
+        return image_get(0);
+    }
+    return &img->img;
+}
+
+const image *assets_get_font_image(int letter_id)
+{
+    const image *img = image_get(data.font_lookup[letter_id - IMAGE_FONT_CUSTOM_OFFSET]);
+    return img; // offset used to differentiate from normal letters
+}
+
+void assets_load_unpacked_asset(int image_id)
+{
+    asset_image *img = asset_image_get_from_id(image_id - IMAGE_MAIN_ENTRIES);
+    if (!img) {
+        return;
+    }
+    const color_t *pixels;
+    if (img->is_reference) {
+        asset_image *referenced_asset =
+            asset_image_get_from_id(img->first_layer.calculated_image_id - IMAGE_MAIN_ENTRIES);
+        pixels = referenced_asset->data;
+    } else {
+        pixels = img->data;
+    }
+    graphics_renderer()->load_unpacked_image(&img->img, pixels);
+}
