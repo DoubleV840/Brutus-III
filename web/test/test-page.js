@@ -47,7 +47,7 @@ function element(id) {
   };
 }
 
-function loadPage() {
+function loadPage(options = {}) {
   const elements = {};
   const errors = [];
   const document = {
@@ -60,7 +60,7 @@ function loadPage() {
   };
   const ctx = {
     document, navigator: { userAgent: 'node-test' }, location: { href: 'http://localhost:8000/augustus.html' },
-    indexedDB, IDBKeyRange, console, setTimeout, clearTimeout, setInterval, clearInterval,
+    indexedDB: options.noIndexedDB ? undefined : indexedDB, IDBKeyRange, console, setTimeout, clearTimeout, setInterval, clearInterval,
     TextDecoder, TextEncoder, WebAssembly, performance, URL, Blob, fetch, atob, btoa, queueMicrotask,
     requestAnimationFrame: (f) => setTimeout(f, 16),
     FileReader: function FileReader() {},
@@ -141,6 +141,42 @@ const exists = (p, f) => { try { p.FS().stat(f); return true; } catch (e) { retu
   await until(() => shown(p, 'chooseFolder') || shown(p, 'startOptions'), 'écran après changement');
   check(exists(p, '/C3/c3.SG2') && !exists(p, '/C3/C3.sg2') && !exists(p, '/C3/wavs'), 'changement de dossier : ancien jeu remplacé');
   check(exists(p, '/C3/Rome.sav') && exists(p, '/C3/Rome2.svx'), 'changement de dossier : sauvegardes gardées');
+
+  // 5b. Échec d'enregistrement en jeu : le joueur est prévenu.
+  p.Module.running = true;
+  const realSyncfs = p.FS().syncfs;
+  p.FS().syncfs = (populate, cb) => { p.FS().syncfs = realSyncfs; cb(new Error('quota dépassé')); };
+  p.Module.syncFS();
+  check(/Échec de l'enregistrement/.test(p.elements.OSDStatus.innerHTML) && p.elements.OSD.style.display === 'block',
+    'échec d\'enregistrement affiché en jeu');
+  p.Module.running = false;
+
+  // 5c. Échec WebGL/SDL (code -2) : message, rien n'est effacé.
+  p.Module.quitGame(-2);
+  check(/WebGL/.test(p.elements.status.innerHTML), 'code -2 : message WebGL');
+  await sleep(300);
+  p = loadPage();
+  await until(() => shown(p, 'chooseFolder') || shown(p, 'startOptions'), 'écran après code -2');
+  check(exists(p, '/C3/c3.SG2') && exists(p, '/C3/Rome.sav'), 'code -2 : fichiers du jeu et sauvegardes gardés');
+
+  // 5d. Erreur de stockage : la base n'est plus supprimée.
+  p.Module.handleFSError(new Error('erreur simulée'));
+  check(/pas été effacées/.test(p.elements.status.innerHTML), 'erreur de stockage : message clair');
+  await sleep(300);
+  p = loadPage();
+  await until(() => shown(p, 'chooseFolder') || shown(p, 'startOptions'), 'écran après erreur de stockage');
+  check(exists(p, '/C3/c3.SG2') && exists(p, '/C3/Rome.sav'), 'erreur de stockage : base IndexedDB gardée');
+
+  // 5e. Données invalides (code 1) : le jeu est retiré, les sauvegardes restent.
+  p.Module.quitGame(1);
+  await until(() => shown(p, 'chooseFolder'), 'code 1 : dossier redemandé');
+  check(!exists(p, '/C3/c3.SG2') && exists(p, '/C3/Rome.sav'), 'code 1 : jeu retiré, sauvegardes gardées');
+
+  // 5f. Navigateur sans IndexedDB : message clair, pas d'« Erreur inattendue ».
+  const noDb = loadPage({ noIndexedDB: true });
+  await until(() => /stockage local|Erreur/.test(noDb.elements.status.innerHTML), 'message sans IndexedDB');
+  check(noDb.errors.length === 0 && /stockage local/.test(noDb.elements.status.innerHTML),
+    'sans IndexedDB : message « stockage local »');
 
   // 6. Dossier invalide : message, rien n'est effacé.
   p.Module.loadGameFiles(Promise.resolve([{ path: 'x/rien.txt', file: fakeFile('x') }]));

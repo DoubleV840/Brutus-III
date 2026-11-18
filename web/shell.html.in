@@ -620,11 +620,18 @@
             }
           }, 1000);
         },
-        // Appelé par le moteur à la fermeture du jeu (status != 0 : erreur).
+        // Appelé par le moteur à la fermeture du jeu. Codes d'erreur (platform/SDL2/augustus.c) :
+        // 1 et 2 = fichiers du jeu invalides ; -1 et -2 = SDL, fenêtre ou WebGL indisponible.
         quitGame: function(status) {
           Module.running = false;
           infoElement.style.display = 'flex';
-          if (status) {
+          if (status < 0) {
+            // Rien à voir avec les fichiers : on n'efface rien.
+            Module.setStatus("Le jeu n'a pas pu démarrer : WebGL ou l'audio est indisponible dans ce navigateur " +
+              "(code " + status + ").<br><br>Active l'accélération matérielle ou essaie un autre navigateur, " +
+              "puis clique pour recharger la page. Les fichiers et les sauvegardes sont gardés.");
+            reloadOnClick();
+          } else if (status) {
             Module.setStatus("Ces fichiers ne sont pas une installation valide de Caesar III.<br><br>Nettoyage...");
             Module.clearPath(C3Dir, true);
             FS.syncfs(false, function() {
@@ -637,6 +644,24 @@
         },
         startFS: function() {
           Module.setStatus("Lecture du stockage du navigateur...");
+          var hasIndexedDB = false;
+          try {
+            hasIndexedDB = typeof indexedDB !== 'undefined' && indexedDB !== null;
+          } catch (e) {
+            // certains navigateurs lèvent une exception en navigation privée
+          }
+          if (!hasIndexedDB) {
+            Module.setStatus("Ce navigateur bloque le stockage local (navigation privée ?).<br><br>" +
+              "Brutus III en a besoin pour garder les fichiers du jeu et les sauvegardes. " +
+              "Ouvre la page dans une fenêtre normale.");
+            return;
+          }
+          // Demande un stockage persistant : sinon le navigateur peut l'effacer s'il manque de place.
+          if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist().catch(function(e) {
+              console.warn(e);
+            });
+          }
           try {
             // Emscripten 7 ne met plus IDBFS dans la portée de la page :
             // il est exporté par le moteur (EXPORTED_RUNTIME_METHODS) dans Module.IDBFS.
@@ -682,6 +707,17 @@
               Module.syncFS();
               return;
             }
+            if (err) {
+              // Le joueur doit le savoir : sa sauvegarde n'est pas dans le navigateur.
+              var failure = "Échec de l'enregistrement (" + err + ") : ne ferme pas l'onglet, sauvegarde à nouveau";
+              if (Module.running) {
+                Module.showOSD(failure);
+              } else {
+                Module.setStatus(failure + ".<br><br>Clique pour recharger la page.");
+                reloadOnClick();
+              }
+              return;
+            }
             Module.clearOSD();
             if (!Module.running) {
               Module.showFirstScreen();
@@ -712,17 +748,16 @@
             Module.showChooseFolder(false, "Tout a été effacé.");
           });
         },
+        // Brutus III : ne supprime plus la base IndexedDB (Augustus le faisait), pour ne jamais
+        // perdre les sauvegardes sur une erreur passagère (quota, base verrouillée).
         handleFSError: function(err) {
           console.error(err);
-          var DBDeleteRequest = indexedDB.deleteDatabase(C3Dir);
-          var DBDeleteAction = function() {
-            Module.setStatus("Erreur du stockage du navigateur :<br><br>" + err +
-              "<br><br>Clique pour recharger la page, puis choisis à nouveau le dossier du jeu.");
-            reloadOnClick();
-          };
-          DBDeleteRequest.onerror = DBDeleteAction;
-          DBDeleteRequest.onsuccess = DBDeleteAction;
-          DBDeleteRequest.onblocked = DBDeleteAction;
+          Module.setStatus("Erreur du stockage du navigateur :<br><br>" + err +
+            "<br><br>Tes sauvegardes n'ont pas été effacées. Libère de la place sur le disque " +
+            "ou ferme les autres onglets Brutus III, puis clique pour recharger la page et réessayer." +
+            "<br><br>Si l'erreur revient, efface les données du site dans les réglages du navigateur " +
+            "(les fichiers du jeu et les sauvegardes seront perdus).");
+          reloadOnClick();
         },
         // Copie le dossier choisi dans /C3, puis enregistre dans IndexedDB.
         loadGameFiles: function(entriesPromise) {
