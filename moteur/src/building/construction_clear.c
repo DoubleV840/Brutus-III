@@ -486,8 +486,16 @@ static void confirm_repair_buildings(int accepted, int checked)
         confirm.repair_confirmed = -1;
     }
     if (accepted == 1) {
-        repair_land_confirmed(0, confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end, 0);
+        // Brutus III : la réparation passe par la file de commandes (BRUTUS_CMD_REPARER_CONFIRME)
+        brutus_commande_4(BRUTUS_CMD_REPARER_CONFIRME, confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end);
     }
+}
+
+// Brutus III : exécution de la commande reparer-confirme
+void building_construction_brutus_reparer_confirme(int x_start, int y_start, int x_end, int y_end)
+{
+    memset(confirm.repairable_buildings, 0, sizeof(confirm.repairable_buildings));
+    repair_land_confirmed(0, x_start, y_start, x_end, y_end, 0);
 }
 
 int building_construction_repair_land(int measure_only, int x_start, int y_start, int x_end, int y_end, int *buildings_count)

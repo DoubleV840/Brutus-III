@@ -44,6 +44,8 @@ typedef enum {
     BRUTUS_CMD_LEGION_RENTRER,      // formation
     BRUTUS_CMD_LEGION_FORMATION,    // formation disposition
     BRUTUS_CMD_LEGION_SERVICE,      // formation
+    BRUTUS_CMD_REPARER_CONFIRME,    // x0 y0 x1 y1 : réparation acceptée dans la confirmation
+    BRUTUS_CMD_PARI_COURSE,         // cheval(1-4) montant
     BRUTUS_CMD_NOMBRE
 } brutus_commande_type;
 
@@ -90,8 +92,14 @@ void brutus_commande_3(brutus_commande_type type, int32_t a, int32_t b, int32_t 
 void brutus_commande_4(brutus_commande_type type, int32_t a, int32_t b, int32_t c, int32_t d);
 void brutus_commande_5(brutus_commande_type type, int32_t a, int32_t b, int32_t c, int32_t d, int32_t e);
 
-/** Met en file une commande déjà datée (rejouage, réseau plus tard). */
+/**
+ * Met en file une commande déjà datée (rejouage, réseau plus tard).
+ * Retourne 0 si le type est inconnu ou si la file est pleine (commande perdue, comptée et signalée).
+ */
 int brutus_commande_ajouter(const brutus_commande *cmd);
+
+/** 1 si la file est pleine (l'appelant peut appliquer les commandes prêtes avant d'ajouter). */
+int brutus_commandes_file_pleine(void);
 
 /**
  * Applique, dans l'ordre (tick, joueur, ordre d'arrivée), toutes les commandes
@@ -105,6 +113,15 @@ void brutus_commandes_vider(void);
 
 /** Nombre de commandes appliquées depuis le lancement. */
 unsigned int brutus_commandes_total_appliquees(void);
+
+/** Nombre de commandes appliquées mais refusées par la validation (paramètres invalides). */
+unsigned int brutus_commandes_total_refusees(void);
+
+/** Nombre de commandes perdues parce que la file était pleine. */
+unsigned int brutus_commandes_total_perdues(void);
+
+/** Écrit, par type de commande, le nombre d'appliquées et de refusées (lignes « # bilan … »). */
+void brutus_commandes_ecrire_bilan(FILE *fp);
 
 /** Construction depuis l'interface (fin du glisser) : remplace building_construction_place(). */
 void brutus_commande_construire_depuis_interface(void);

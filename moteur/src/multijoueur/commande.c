@@ -8,15 +8,18 @@
 #include "building/menu.h"
 #include "building/rotation.h"
 #include "building/storage.h"
+#include "city/buildings.h"
 #include "city/emperor.h"
 #include "city/festival.h"
 #include "city/finance.h"
 #include "city/gods.h"
 #include "city/labor.h"
+#include "city/race_bet.h"
 #include "city/ratings.h"
 #include "city/victory.h"
 #include "city/resource.h"
 #include "city/view.h"
+#include "core/log.h"
 #include "core/random.h"
 #include "empire/city.h"
 #include "figure/formation.h"
@@ -28,6 +31,7 @@
 #include "map/bridge.h"
 #include "map/building.h"
 #include "map/grid.h"
+#include "scenario/allowed_building.h"
 #include "scenario/request.h"
 
 #include <stdlib.h>
@@ -41,6 +45,10 @@ static struct {
     int taille;
     unsigned int prochaine_sequence;
     unsigned int total_appliquees;
+    unsigned int total_refusees;
+    unsigned int total_perdues;
+    unsigned int appliquees_par_type[BRUTUS_CMD_NOMBRE];
+    unsigned int refusees_par_type[BRUTUS_CMD_NOMBRE];
     uint32_t repere;
     FILE *journal;
     int joueur_local;
@@ -78,6 +86,8 @@ static const struct {
     [BRUTUS_CMD_LEGION_RENTRER] = { "legion-rentrer", 1 },
     [BRUTUS_CMD_LEGION_FORMATION] = { "legion-formation", 2 },
     [BRUTUS_CMD_LEGION_SERVICE] = { "legion-service", 1 },
+    [BRUTUS_CMD_REPARER_CONFIRME] = { "reparer-confirme", 4 },
+    [BRUTUS_CMD_PARI_COURSE] = { "pari-course", 2 },
 };
 
 uint32_t brutus_tick_absolu(void)
@@ -120,13 +130,23 @@ int brutus_commande_nb_params(brutus_commande_type type)
 
 int brutus_commande_ajouter(const brutus_commande *cmd)
 {
-    if (etat.taille >= FILE_MAX || !brutus_commande_nom(cmd->type)) {
+    if (!brutus_commande_nom(cmd->type)) {
+        return 0;
+    }
+    if (etat.taille >= FILE_MAX) {
+        etat.total_perdues++;
+        log_error("Brutus III : file de commandes pleine, commande perdue :", brutus_commande_nom(cmd->type), 0);
         return 0;
     }
     etat.file[etat.taille] = *cmd;
     etat.sequence[etat.taille] = etat.prochaine_sequence++;
     etat.taille++;
     return 1;
+}
+
+int brutus_commandes_file_pleine(void)
+{
+    return etat.taille >= FILE_MAX;
 }
 
 void brutus_commande_envoyer(brutus_commande_type type, int nb_params, const int32_t *params)
@@ -188,6 +208,26 @@ unsigned int brutus_commandes_total_appliquees(void)
     return etat.total_appliquees;
 }
 
+unsigned int brutus_commandes_total_refusees(void)
+{
+    return etat.total_refusees;
+}
+
+unsigned int brutus_commandes_total_perdues(void)
+{
+    return etat.total_perdues;
+}
+
+void brutus_commandes_ecrire_bilan(FILE *fp)
+{
+    for (int t = BRUTUS_CMD_AUCUNE + 1; t < BRUTUS_CMD_NOMBRE; t++) {
+        if (etat.appliquees_par_type[t]) {
+            fprintf(fp, "# bilan %s appliquees %u refusees %u\n", DESCRIPTION[t].nom,
+                etat.appliquees_par_type[t], etat.refusees_par_type[t]);
+        }
+    }
+}
+
 void brutus_journal_enregistrer(FILE *fp)
 {
     etat.journal = fp;
@@ -222,6 +262,16 @@ static building *stockage_en(int x, int y)
     return b;
 }
 
+// Même condition que l'interface (window/building/distribution.c, toggle_resource_state)
+static building *distributeur_en(int x, int y)
+{
+    building *b = batiment_en(x, y);
+    if (!b || !(building_type_is_distributor(b->type) || building_has_supplier_inventory(b->type))) {
+        return 0;
+    }
+    return b;
+}
+
 static int ressource_valide(int r)
 {
     return r >= RESOURCE_MIN && r < RESOURCE_MAX;
@@ -239,14 +289,32 @@ static formation *legion(int id)
     return m;
 }
 
-static void executer_construire(const brutus_commande *c)
+static int construction_autorisee(building_type type)
+{
+    if (type <= BUILDING_NONE || type >= BUILDING_TYPE_MAX) {
+        return 0;
+    }
+    // Toujours au menu (voir building/menu.c, enable_house et enable_clear)
+    if (type == BUILDING_CLEAR_LAND || type == BUILDING_REPAIR_LAND ||
+        (type >= BUILDING_HOUSE_VACANT_LOT && type <= BUILDING_HOUSE_LUXURY_PALACE)) {
+        return 1;
+    }
+    // Les arcs gagnés restent disponibles même si le scénario les interdit (menu.c, enable_normal)
+    if (type == BUILDING_TRIUMPHAL_ARCH) {
+        return city_buildings_triumphal_arch_available();
+    }
+    return scenario_allowed_building(type);
+}
+
+static int executer_construire(const brutus_commande *c)
 {
     building_type type = c->p[0];
     int x0 = c->p[1], y0 = c->p[2], x1 = c->p[3], y1 = c->p[4];
-    if (type <= BUILDING_NONE || type >= BUILDING_TYPE_MAX ||
+    if (!construction_autorisee(type) ||
         x0 < 0 || y0 < 0 || x1 < 0 || y1 < 0 || x0 >= GRID_SIZE || y0 >= GRID_SIZE ||
-        x1 >= GRID_SIZE || y1 >= GRID_SIZE) {
-        return;
+        x1 >= GRID_SIZE || y1 >= GRID_SIZE ||
+        c->p[8] < 0 || c->p[8] > 6 || (c->p[8] & 1)) {
+        return 0;
     }
     // L'état d'interface du joueur local (type choisi, glisser en cours) est mis de côté.
     int apercu = building_construction_in_progress();
@@ -274,26 +342,59 @@ static void executer_construire(const brutus_commande *c)
 
     city_view_brutus_forcer_orientation(orientation_avant);
     building_construction_brutus_restaurer();
+    // Le type choisi par le joueur local a pu devenir indisponible (dernier arc de triomphe posé :
+    // le moteur d'origine désélectionne alors le type, voir construction_building.c).
+    if (building_construction_type() == BUILDING_TRIUMPHAL_ARCH && !city_buildings_triumphal_arch_available()) {
+        building_construction_clear_type();
+        apercu = 0;
+    }
     if (apercu) {
         building_construction_brutus_relancer_apercu();
     }
+    return 1;
 }
 
-static void executer(const brutus_commande *c)
+static int zone_valide(const int32_t *p)
+{
+    return p[0] >= 0 && p[1] >= 0 && p[2] >= 0 && p[3] >= 0 &&
+        p[0] < GRID_SIZE && p[1] < GRID_SIZE && p[2] < GRID_SIZE && p[3] < GRID_SIZE;
+}
+
+static int demande_envoyable(int id)
+{
+    if (id < 0 || (unsigned int) id >= scenario_request_count_total()) {
+        return 0;
+    }
+    const scenario_request *r = scenario_request_get(id);
+    // Même état que scenario_request_can_comply() : une demande déjà envoyée est refusée
+    // (deux joueurs qui envoient la même demande ne retirent pas les marchandises deux fois).
+    return r && r->resource != RESOURCE_NONE && r->visible &&
+        (r->state == REQUEST_STATE_NORMAL || r->state == REQUEST_STATE_OVERDUE);
+}
+
+// Retourne 1 si la commande a été exécutée, 0 si elle a été refusée (paramètres invalides).
+static int executer(const brutus_commande *c)
 {
     const int32_t *p = c->p;
     building *b;
     formation *m;
     switch (c->type) {
         case BRUTUS_CMD_CONSTRUIRE:
-            executer_construire(c);
-            break;
+            return executer_construire(c);
         case BRUTUS_CMD_DEMOLIR_CONFIRME:
-            if (p[0] >= 0 && p[1] >= 0 && p[2] >= 0 && p[3] >= 0 &&
-                p[0] < GRID_SIZE && p[1] < GRID_SIZE && p[2] < GRID_SIZE && p[3] < GRID_SIZE) {
-                building_construction_brutus_demolir_confirme(p[0], p[1], p[2], p[3], p[4], p[5]);
+            if (!zone_valide(p) || p[4] < 1 || p[4] > 3) {
+                return 0;
             }
+            building_construction_brutus_demolir_confirme(p[0], p[1], p[2], p[3], p[4], p[5]);
             break;
+        case BRUTUS_CMD_REPARER_CONFIRME:
+            if (!zone_valide(p)) {
+                return 0;
+            }
+            building_construction_brutus_reparer_confirme(p[0], p[1], p[2], p[3]);
+            break;
+        case BRUTUS_CMD_PARI_COURSE:
+            return city_race_bet_brutus_parier(p[0], p[1]);
         case BRUTUS_CMD_ANNULER:
             game_undo_perform();
             break;
@@ -302,8 +403,10 @@ static void executer(const brutus_commande *c)
                 game_orientation_rotate_left();
             } else if (p[0] == 1) {
                 game_orientation_rotate_right();
-            } else {
+            } else if (p[0] == 2) {
                 game_orientation_rotate_north();
+            } else {
+                return 0;
             }
             break;
         case BRUTUS_CMD_IMPOTS:
@@ -317,121 +420,143 @@ static void executer(const brutus_commande *c)
             city_finance_calculate_totals();
             break;
         case BRUTUS_CMD_PRIORITE_TRAVAIL:
-            if (p[0] >= 0 && p[0] < 10 && p[1] >= 0 && p[1] <= city_labor_max_selectable_priority(p[0])) {
-                city_labor_set_priority(p[0], p[1]);
+            if (!(p[0] >= 0 && p[0] < 10 && p[1] >= 0 && p[1] <= city_labor_max_selectable_priority(p[0]))) {
+                return 0;
             }
+            city_labor_set_priority(p[0], p[1]);
             break;
         case BRUTUS_CMD_STOCKAGE_ETAT:
-            if ((b = stockage_en(p[0], p[1])) && ressource_valide(p[2])) {
-                if (p[4]) {
-                    building_storage_cycle_partial_resource_state(b->storage_id, p[2], p[3] != 0);
-                } else {
-                    building_storage_cycle_resource_state(b->storage_id, p[2], p[3] != 0);
-                }
+            if (!(b = stockage_en(p[0], p[1])) || !ressource_valide(p[2])) {
+                return 0;
+            }
+            if (p[4]) {
+                building_storage_cycle_partial_resource_state(b->storage_id, p[2], p[3] != 0);
+            } else {
+                building_storage_cycle_resource_state(b->storage_id, p[2], p[3] != 0);
             }
             break;
         case BRUTUS_CMD_STOCKAGE_TOUT:
-            if ((b = stockage_en(p[0], p[1]))) {
-                if (p[2]) {
-                    building_storage_accept_all(b->storage_id);
-                } else {
-                    building_storage_accept_none(b->storage_id);
-                }
+            if (!(b = stockage_en(p[0], p[1]))) {
+                return 0;
+            }
+            if (p[2]) {
+                building_storage_accept_all(b->storage_id);
+            } else {
+                building_storage_accept_none(b->storage_id);
             }
             break;
         case BRUTUS_CMD_STOCKAGE_VIDER:
-            if ((b = stockage_en(p[0], p[1]))) {
-                building_storage_toggle_empty_all(b->storage_id);
+            if (!(b = stockage_en(p[0], p[1]))) {
+                return 0;
             }
+            building_storage_toggle_empty_all(b->storage_id);
             break;
         case BRUTUS_CMD_STOCKAGE_PERMISSION:
-            if ((b = batiment_en(p[0], p[1])) && b->storage_id > 0 &&
-                p[2] >= BUILDING_STORAGE_PERMISSION_MARKET && p[2] <= BUILDING_STORAGE_PERMISSION_CAESAR) {
-                if (p[3] < 0) {
-                    building_storage_toggle_permission(p[2], b);
-                } else {
-                    building_storage_set_permission(p[2], b, p[3] != 0);
-                }
+            if (!(b = batiment_en(p[0], p[1])) || b->storage_id <= 0 ||
+                p[2] < BUILDING_STORAGE_PERMISSION_MARKET || p[2] > BUILDING_STORAGE_PERMISSION_CAESAR) {
+                return 0;
+            }
+            if (p[3] < 0) {
+                building_storage_toggle_permission(p[2], b);
+            } else {
+                building_storage_set_permission(p[2], b, p[3] != 0);
             }
             break;
         case BRUTUS_CMD_DISTRIBUTION_BIEN:
-            if ((b = batiment_en(p[0], p[1])) && ressource_valide(p[2])) {
-                building_distribution_toggle_good_accepted(b, p[2]);
+            if (!(b = distributeur_en(p[0], p[1])) || !ressource_valide(p[2])) {
+                return 0;
             }
+            building_distribution_toggle_good_accepted(b, p[2]);
             break;
         case BRUTUS_CMD_DISTRIBUTION_TOUT:
-            if ((b = batiment_en(p[0], p[1]))) {
-                if (p[2]) {
-                    building_distribution_accept_all_goods(b);
-                } else {
-                    building_distribution_unaccept_all_goods(b);
-                }
+            if (!(b = distributeur_en(p[0], p[1]))) {
+                return 0;
+            }
+            if (p[2]) {
+                building_distribution_accept_all_goods(b);
+            } else {
+                building_distribution_unaccept_all_goods(b);
             }
             break;
         case BRUTUS_CMD_MISE_EN_SOMMEIL:
-            if ((b = batiment_en(p[0], p[1])) && b->state != BUILDING_STATE_RUBBLE) {
-                building_mothball_toggle(b);
+            if (!(b = batiment_en(p[0], p[1])) || b->state == BUILDING_STATE_RUBBLE) {
+                return 0;
             }
+            building_mothball_toggle(b);
             break;
         case BRUTUS_CMD_FETE:
-            if (!city_finance_out_of_money() && p[0] >= 0 && p[0] < MAX_GODS) {
-                city_festival_select_god(p[0]);
-                if (city_festival_select_size(p[1])) {
-                    city_festival_schedule();
-                }
+            if (city_finance_out_of_money() || p[0] < 0 || p[0] >= MAX_GODS) {
+                return 0;
             }
+            city_festival_select_god(p[0]);
+            if (!city_festival_select_size(p[1])) {
+                return 0;
+            }
+            city_festival_schedule();
             break;
         case BRUTUS_CMD_DON_CESAR:
-            if (city_emperor_set_gift_size(p[0]) && city_emperor_can_send_gift(GIFT_MODEST)) {
-                city_emperor_send_gift();
+            // gifts[] n'est pas borné dans city/emperor.c : on borne ici.
+            if (p[0] < GIFT_MODEST || p[0] >= GIFT_MAX || !city_emperor_can_send_gift(p[0]) ||
+                !city_emperor_set_gift_size(p[0])) {
+                return 0;
             }
+            city_emperor_send_gift();
             break;
         case BRUTUS_CMD_SALAIRE_GOUVERNEUR:
-            if (p[0] >= 0 && p[0] <= 10 && !city_victory_has_won()) {
-                city_emperor_set_salary_rank(p[0]);
-                city_finance_update_salary();
-                city_ratings_update_favor_explanation();
+            if (p[0] < 0 || p[0] > 10 || city_victory_has_won()) {
+                return 0;
             }
+            city_emperor_set_salary_rank(p[0]);
+            city_finance_update_salary();
+            city_ratings_update_favor_explanation();
             break;
         case BRUTUS_CMD_COMMERCE_OUVRIR:
-            if (p[0] > 0 && p[0] < empire_city_get_array_size() && empire_city_get(p[0]) &&
-                !empire_city_get(p[0])->is_open) {
-                empire_city_open_trade(p[0], 1);
-                building_menu_update();
+            if (p[0] <= 0 || p[0] >= empire_city_get_array_size() || !empire_city_get(p[0]) ||
+                empire_city_get(p[0])->is_open) {
+                return 0;
             }
+            empire_city_open_trade(p[0], 1);
+            building_menu_update();
             break;
         case BRUTUS_CMD_COMMERCE_STATUT:
-            if (ressource_valide(p[0])) {
-                city_resource_cycle_trade_status(p[0], p[1]);
+            if (!ressource_valide(p[0]) || (p[1] != TRADE_STATUS_IMPORT && p[1] != TRADE_STATUS_EXPORT)) {
+                return 0;
             }
+            city_resource_cycle_trade_status(p[0], p[1]);
             break;
         case BRUTUS_CMD_COMMERCE_SEUIL:
-            if (ressource_valide(p[0])) {
-                if (p[1]) {
-                    city_resource_change_export_over(p[0], p[2]);
-                } else {
-                    city_resource_change_import_over(p[0], p[2]);
-                }
+            if (!ressource_valide(p[0])) {
+                return 0;
+            }
+            if (p[1]) {
+                city_resource_change_export_over(p[0], p[2]);
+            } else {
+                city_resource_change_import_over(p[0], p[2]);
             }
             break;
         case BRUTUS_CMD_RESSOURCE_SOMMEIL:
-            if (ressource_valide(p[0])) {
-                city_resource_toggle_mothballed(p[0]);
+            if (!ressource_valide(p[0])) {
+                return 0;
             }
+            city_resource_toggle_mothballed(p[0]);
             break;
         case BRUTUS_CMD_RESSOURCE_RESERVE:
-            if (ressource_valide(p[0])) {
-                city_resource_toggle_stockpiled(p[0]);
+            if (!ressource_valide(p[0])) {
+                return 0;
             }
+            city_resource_toggle_stockpiled(p[0]);
             break;
         case BRUTUS_CMD_DEMANDE_CESAR:
-            if (p[0] >= 0) {
-                scenario_request_dispatch(p[0]);
+            if (!demande_envoyable(p[0])) {
+                return 0;
             }
+            scenario_request_dispatch(p[0]);
             break;
         case BRUTUS_CMD_LEGION_DEPLACER:
-            if ((m = legion(p[0])) && !m->in_distant_battle && !m->cursed_by_mars &&
-                p[1] >= 0 && p[2] >= 0 && p[1] < GRID_SIZE && p[2] < GRID_SIZE) {
+            if (!(m = legion(p[0])) || m->in_distant_battle || m->cursed_by_mars ||
+                p[1] < 0 || p[2] < 0 || p[1] >= GRID_SIZE || p[2] >= GRID_SIZE) {
+                return 0;
+            } else {
                 map_tile tuile;
                 tuile.x = p[1];
                 tuile.y = p[2];
@@ -444,22 +569,28 @@ static void executer(const brutus_commande *c)
                 formation_legion_return_home_all();
             } else if ((m = legion(p[0])) && !m->in_distant_battle) {
                 formation_legion_return_home(m);
+            } else {
+                return 0;
             }
             break;
         case BRUTUS_CMD_LEGION_FORMATION:
-            if ((m = legion(p[0])) && !m->in_distant_battle) {
-                formation_legion_change_layout(m, p[1]);
+            // Dispositions choisissables par le joueur : de FORMATION_COLUMN à FORMATION_MOP_UP
+            if (!(m = legion(p[0])) || m->in_distant_battle || p[1] < FORMATION_COLUMN || p[1] > FORMATION_MOP_UP) {
+                return 0;
             }
+            formation_legion_change_layout(m, p[1]);
             break;
         case BRUTUS_CMD_LEGION_SERVICE:
-            if (legion(p[0])) {
-                formation_toggle_empire_service(p[0]);
-                formation_calculate_figures();
+            if (!legion(p[0])) {
+                return 0;
             }
+            formation_toggle_empire_service(p[0]);
+            formation_calculate_figures();
             break;
         default:
-            break;
+            return 0;
     }
+    return 1;
 }
 
 static int comparer(const void *a, const void *b)
@@ -523,8 +654,12 @@ int brutus_commandes_appliquer(uint32_t tick)
         if (etat.journal) {
             brutus_commande_ecrire(etat.journal, c);
         }
-        executer(c);
+        if (!executer(c)) {
+            etat.total_refusees++;
+            etat.refusees_par_type[c->type]++;
+        }
         etat.total_appliquees++;
+        etat.appliquees_par_type[c->type]++;
     }
     random_brutus_reinitialiser_compteur();
     etat.repere++;

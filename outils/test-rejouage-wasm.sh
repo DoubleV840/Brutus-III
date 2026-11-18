@@ -54,6 +54,7 @@ for n in 1 2; do
   fi
   grep "Brutus III" "$SORTIE/rejouage-wasm-$n.log" || true
   echo "   durée : $(( $(date +%s) - debut )) s"
+  node "$RACINE/outils/verifier-fin-rejouage.mjs" "$SORTIE/empreintes-wasm-$n.txt"
 done
 
 code=0

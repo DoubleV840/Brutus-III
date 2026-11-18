@@ -12,6 +12,7 @@
 #include "graphics/text.h"
 #include "graphics/window.h"
 #include "input/input.h"
+#include "multijoueur/commande.h" // Brutus III
 #include "race_bet.h"
 #include "translation/translation.h"
 
@@ -179,8 +180,8 @@ static void button_confirm(const generic_button *button)
 {
     // save bet and go back
     if (!city_data.games.chosen_horse && data.chosen_horse && data.bet_amount) {
-        city_data.games.chosen_horse = data.chosen_horse;
-        city_data.games.bet_amount = data.bet_amount;
+        // Brutus III : le pari passe par la file de commandes (appliqué au tick suivant)
+        brutus_commande_2(BRUTUS_CMD_PARI_COURSE, (int32_t) data.chosen_horse, (int32_t) data.bet_amount);
         window_go_back();
     }
 }

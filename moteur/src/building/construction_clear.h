@@ -32,6 +32,9 @@ unsigned int building_construction_clear_land(int x_start, int y_start, int x_en
 void building_construction_brutus_demolir_confirme(int x_start, int y_start, int x_end, int y_end,
     int quoi, int accepte);
 
+/** Brutus III : répare la zone après acceptation de la confirmation (commande BRUTUS_CMD_REPARER_CONFIRME). */
+void building_construction_brutus_reparer_confirme(int x_start, int y_start, int x_end, int y_end);
+
 /**
  * Gets the color used for highlighting clearing or repairing land
  * @return Color

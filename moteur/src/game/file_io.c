@@ -1184,6 +1184,11 @@ static void savegame_save_to_state(savegame_state *state)
 // puis on hache chaque morceau, sauf ceux qui ne relèvent pas de la simulation.
 uint64_t game_file_io_brutus_empreinte(void)
 {
+    return game_file_io_brutus_empreinte_detail(0, 0);
+}
+
+uint64_t game_file_io_brutus_empreinte_detail(FILE *detail, FILE *brut)
+{
     resource_set_mapping(RESOURCE_CURRENT_VERSION);
     init_savegame_data(SAVE_GAME_CURRENT_VERSION);
     brutus_empreinte_marquer(1);
@@ -1212,8 +1217,13 @@ uint64_t game_file_io_brutus_empreinte(void)
     for (int i = 0; i < savegame_data.num_pieces; i++) {
         buffer *b = &savegame_data.pieces[i].buf;
         if (b == state->city_view_camera || b == state->bookmarks || b == state->sprite_backup_grid ||
-            b == state->city_sounds) {
-            continue; // caméra, signets, copie de secours de l'annulation, sons : hors simulation
+            b == state->city_sounds || b == state->empire || b == state->city_graph_order ||
+            b == state->building_list_small || b == state->building_list_large || b == state->routing_counters) {
+            // Hors simulation : caméra, signets, copie de secours de l'annulation, sons, défilement et
+            // objet choisi de la carte de l'empire, réglage du graphique de population.
+            // Sans effet sur la suite : listes de travail des bâtiments (vidées au chargement,
+            // building/list.c) et compteurs statistiques de routage (jamais relus, map/routing.c).
+            continue;
         }
         uint32_t taille = (uint32_t) b->size;
         uint8_t taille_le[4] = {
@@ -1222,6 +1232,29 @@ uint64_t game_file_io_brutus_empreinte(void)
         h = brutus_fnv1a(h, taille_le, 4);
         if (b->data && b->size) {
             h = brutus_fnv1a(h, b->data, b->size);
+        }
+        if (detail) {
+            // Diagnostic : empreinte de chaque morceau, pour trouver celui qui diverge
+            uint64_t hp = b->data && b->size ? brutus_fnv1a(BRUTUS_FNV_DEPART, b->data, b->size) : 0;
+            // champ = rang du champ dans savegame_state (ordre de déclaration)
+            int champ = -1;
+            buffer **champs = (buffer **) state;
+            for (int k = 0; k < (int) (sizeof(savegame_state) / sizeof(buffer *)); k++) {
+                if (champs[k] == b) {
+                    champ = k;
+                    break;
+                }
+            }
+            fprintf(detail, "morceau %d champ %d taille %u %016llx\n", i, champ, (unsigned int) b->size,
+                (unsigned long long) hp);
+        }
+        if (brut) {
+            // Diagnostic : contenu brut (numéro, taille, octets) pour une comparaison octet par octet
+            fwrite(&i, sizeof(i), 1, brut);
+            fwrite(&taille, sizeof(taille), 1, brut);
+            if (b->data && b->size) {
+                fwrite(b->data, 1, b->size, brut);
+            }
         }
     }
     clear_savegame_pieces();

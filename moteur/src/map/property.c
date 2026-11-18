@@ -82,6 +82,24 @@ void map_property_clear_all_native_land(void)
     map_grid_and_u8(edge_grid.items, EDGE_NO_NATIVE_LAND);
 }
 
+// Brutus III : copie des marques de terre indigène, pour les retrouver telles quelles après le
+// chargement (map_property_set_multi_tile_xy les efface, voir game/file.c initialize_saved_game).
+static uint8_t brutus_terre_indigene[GRID_SIZE * GRID_SIZE];
+
+void map_property_brutus_sauver_terre_indigene(void)
+{
+    for (int i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+        brutus_terre_indigene[i] = edge_grid.items[i] & EDGE_NATIVE_LAND;
+    }
+}
+
+void map_property_brutus_restaurer_terre_indigene(void)
+{
+    for (int i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+        edge_grid.items[i] = (edge_grid.items[i] & EDGE_NO_NATIVE_LAND) | brutus_terre_indigene[i];
+    }
+}
+
 int map_property_multi_tile_xy(int grid_offset)
 {
     return edge_grid.items[grid_offset] & EDGE_MASK_XY;

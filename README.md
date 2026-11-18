@@ -51,7 +51,7 @@ cd web/test && npm install && npm test   # après bash outils/build-web.sh
 Les actions du joueur passent par une file de commandes (`moteur/src/multijoueur/`, inventaire dans `docs/commandes.md`). Test de rejouage sans affichage (il demande les fichiers du jeu ; sans eux, il est sauté) :
 
 ```bash
-bash outils/test-rejouage.sh        # natif : même journal rejoué 2 fois, empreintes comparées
+bash outils/test-rejouage.sh        # natif : même journal rejoué 2 fois, empreintes comparées, puis sauvegarde → rechargement → suite
 bash outils/test-rejouage-wasm.sh   # wasm sous Node (cible séparée) + comparaison natif ↔ wasm
 ```
 

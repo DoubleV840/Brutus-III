@@ -7,6 +7,7 @@
 #include "city/population.h"
 #include "core/config.h"
 #include "game/file.h"
+#include "game/file_io.h"
 #include "game/settings.h"
 #include "game/state.h"
 #include "game/tick.h"
@@ -43,7 +44,8 @@ static struct {
     const char *sauvegarde_finale;
     long ticks;
     long tous_les;
-} options = { MODE_AUCUN, 0, 0, 0, 0, 0, 0, -1, 50 };
+    const char *detail;
+} options = { MODE_AUCUN, 0, 0, 0, 0, 0, 0, -1, 50, 0 };
 
 // Le moteur change de dossier courant au démarrage : les chemins relatifs sont rendus
 // absolus tout de suite (par rapport au dossier courant de lancement).
@@ -83,6 +85,8 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
             options.tous_les = strtol(argv[++i], 0, 10);
         } else if (strcmp(a, "--sauvegarde-finale") == 0 && i + 1 < argc) {
             options.sauvegarde_finale = argv[++i];
+        } else if (strcmp(a, "--detail-empreinte") == 0 && i + 1 < argc) {
+            options.detail = argv[++i];
         } else if (strcmp(a, "--creer-sauvegarde") == 0 && i + 2 < argc) {
             options.mode = MODE_CREER_SAUVEGARDE;
             options.carte = argv[++i];
@@ -104,6 +108,7 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
         options.empreintes = absolu(options.empreintes);
         options.sortie = absolu(options.sortie);
         options.sauvegarde_finale = absolu(options.sauvegarde_finale);
+        options.detail = absolu(options.detail);
         // Sans affichage ni son (sauf si l'appelant a choisi autre chose)
 #ifdef _WIN32
         if (!getenv("SDL_VIDEODRIVER")) {
@@ -221,6 +226,29 @@ static int lire_journal(const char *chemin, liste_commandes *liste)
     return 1;
 }
 
+// Diagnostic (--detail-empreinte) : empreinte de chaque morceau de la sauvegarde, au début et à la fin.
+static void ecrire_detail(const char *moment)
+{
+    if (!options.detail) {
+        return;
+    }
+    FILE *fp = fopen(options.detail, strcmp(moment, "debut") == 0 ? "w" : "a");
+    if (!fp) {
+        return;
+    }
+    fprintf(fp, "# %s tick %u\n", moment, (unsigned int) brutus_tick_absolu());
+    game_file_io_brutus_empreinte_detail(fp, 0);
+    fclose(fp);
+    // Contenu brut des morceaux, pour comparer octet par octet (<detail>.<moment>.bin)
+    char chemin[4096];
+    snprintf(chemin, sizeof(chemin), "%s.%s.bin", options.detail, moment);
+    FILE *brut = fopen(chemin, "wb");
+    if (brut) {
+        game_file_io_brutus_empreinte_detail(0, brut);
+        fclose(brut);
+    }
+}
+
 static int rejouer(void)
 {
     if (!options.empreintes) {
@@ -241,6 +269,13 @@ static int rejouer(void)
         return 6;
     }
     uint32_t debut = brutus_tick_absolu();
+    // Reprise depuis une sauvegarde intermédiaire (test de rechargement) : les commandes
+    // datées d'avant le tick de départ sont déjà dans la sauvegarde, on les saute.
+    int suivante = 0;
+    while (suivante < journal.taille && journal.items[suivante].tick < debut) {
+        suivante++;
+    }
+    const int avant_depart = suivante;
     long ticks = options.ticks;
     if (ticks < 0) {
         ticks = journal.taille ? (long) (journal.items[journal.taille - 1].tick - debut) + 1 : 0;
@@ -249,20 +284,21 @@ static int rejouer(void)
         }
     }
     fprintf(sortie, "# brutus-empreintes 1\n");
-    fprintf(sortie, "# tick_depart %u ticks %ld tous_les %ld commandes_journal %d\n",
-        (unsigned int) debut, ticks, options.tous_les, journal.taille);
+    fprintf(sortie, "# tick_depart %u ticks %ld tous_les %ld commandes_journal %d commandes_avant_depart %d\n",
+        (unsigned int) debut, ticks, options.tous_les, journal.taille, avant_depart);
     fprintf(sortie, "%u %016llx\n", (unsigned int) debut, (unsigned long long) brutus_empreinte_partie());
+    ecrire_detail("debut");
 
-    int suivante = 0;
     unsigned int nb_empreintes = 1;
     for (long t = 0; t < ticks; t++) {
         uint32_t tick = brutus_tick_absolu();
         while (suivante < journal.taille && journal.items[suivante].tick <= tick) {
-            if (!brutus_commande_ajouter(&journal.items[suivante])) {
+            if (brutus_commandes_file_pleine()) {
                 // File pleine : on applique tout de suite ce qui est prêt et on recommence.
                 brutus_commandes_appliquer(tick);
                 continue;
             }
+            brutus_commande_ajouter(&journal.items[suivante]);
             suivante++;
         }
         game_tick_run();
@@ -276,11 +312,14 @@ static int rejouer(void)
             }
         }
     }
-    fprintf(sortie, "# fin tick %u empreintes %u commandes_appliquees %u commandes_restantes %d"
-        " population %d tresor %d batiments %d\n",
+    brutus_commandes_ecrire_bilan(sortie);
+    fprintf(sortie, "# fin tick %u empreintes %u commandes_appliquees %u commandes_refusees %u"
+        " commandes_perdues %u commandes_restantes %d population %d tresor %d batiments %d\n",
         (unsigned int) brutus_tick_absolu(), nb_empreintes, brutus_commandes_total_appliquees(),
+        brutus_commandes_total_refusees(), brutus_commandes_total_perdues(),
         journal.taille - suivante, city_population(), city_finance_treasury(), compter_batiments());
     fclose(sortie);
+    ecrire_detail("fin");
     free(journal.items);
     printf("Brutus III : rejouage terminé : %ld ticks, %u empreintes, %u commandes appliquées, "
         "population %d, trésor %d, %d bâtiments\n", ticks, nb_empreintes, brutus_commandes_total_appliquees(),

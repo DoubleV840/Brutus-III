@@ -201,7 +201,7 @@ const services = [B.PUITS, B.PUITS, B.FONTAINE, B.PREFECTURE, B.INGENIEURS, B.MA
 const actions = [
   [22, 'maisons'], [20, 'service'], [6, 'route'], [6, 'demolition'], [6, 'impots'], [3, 'salaires'],
   [6, 'priorite'], [12, 'stockage'], [2, 'sommeil'], [1, 'fete'], [1, 'aqueduc'], [1, 'mur'],
-  [2, 'distribution'], [1, 'annuler'], [1, 'legion'],
+  [2, 'distribution'], [1, 'annuler'], [1, 'legion'], [4, 'divers'],
 ];
 const totalPoids = actions.reduce((s, [p]) => s + p, 0);
 function tirerAction() {
@@ -342,6 +342,29 @@ while (t < TICKS - 50) {
     case 'legion':
       ajouter(t, 'legion-rentrer', 0);
       break;
+    case 'divers': {
+      // Commandes rares : commerce, César, pari, réparation, légion. Beaucoup sont refusées
+      // (pas d'épargne, pas de légion, pas de demande en cours) : la validation est exercée aussi.
+      const r = entier(0, 10);
+      if (r === 0) ajouter(t, 'commerce-statut', entier(1, 20), entier(1, 2));
+      else if (r === 1) ajouter(t, 'commerce-seuil', entier(1, 20), entier(0, 1), alea() < 0.5 ? 1 : -1);
+      else if (r === 2) ajouter(t, 'ressource-reserve', entier(1, 20));
+      else if (r === 3) ajouter(t, 'ressource-sommeil', entier(1, 20));
+      else if (r === 4) ajouter(t, 'salaire-gouverneur', entier(0, 4));
+      else if (r === 5) ajouter(t, 'don-cesar', entier(0, 2));
+      else if (r === 6) ajouter(t, 'pari-course', entier(1, 4), 10 * entier(1, 5));
+      else if (r === 7) ajouter(t, 'demande-cesar', entier(0, 3));
+      else if (r === 8) ajouter(t, 'legion-formation', entier(1, 3), entier(0, 6));
+      else if (r === 9) {
+        const x = entier(CX - rayon, CX + rayon);
+        const y = entier(CY - rayon, CY + rayon);
+        ajouter(t, 'reparer-confirme', x, y, x + entier(0, 3), y + entier(0, 3));
+      } else if (batiments.length) {
+        const [x, y] = choisir(batiments);
+        ajouter(t, 'distribution-tout', x, y, entier(0, 1));
+      }
+      break;
+    }
   }
 }
 

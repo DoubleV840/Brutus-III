@@ -280,6 +280,7 @@ static void check_backward_compatibility(void)
 
 static void initialize_saved_game(void)
 {
+    map_property_brutus_sauver_terre_indigene(); // Brutus III : voir plus bas
     load_empire_data(!game_campaign_is_original(), scenario_empire_id());
     if (resource_mapping_get_version() < RESOURCE_SEPARATE_FISH_AND_MEAT_VERSION) {
         empire_city_update_our_fish_and_meat_production();
@@ -322,7 +323,12 @@ static void initialize_saved_game(void)
 
     migrate_altar_rotations(); // this has to go after all image loading since it migrates data from image_ids
 
-    map_natives_check_land(0);
+    // Brutus III : la terre indigène est déjà dans la sauvegarde (edge_grid), mais la remise à jour
+    // des bâtiments ci-dessus en efface une partie, et map_natives_check_land(0) la recalculait
+    // avec la colère du moment (passée à 100 depuis le dernier tick 6) : une partie rechargée
+    // différait alors de la partie continue. On remet les marques sauvegardées telles quelles ;
+    // elles sont recalculées au tick 6 de chaque jour (game/tick.c), comme avant.
+    map_property_brutus_restaurer_terre_indigene();
 
     city_message_clear_scroll();
 
