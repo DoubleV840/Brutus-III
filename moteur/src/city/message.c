@@ -12,9 +12,12 @@
 #include "game/settings.h"
 #include "game/time.h"
 #include "graphics/window.h"
+#include "multijoueur/commande.h" // Brutus III
 #include "scenario/request.h"
 #include "sound/effect.h"
 #include "window/message_dialog.h"
+
+#include <string.h> // Brutus III
 
 #define MAX_MESSAGES 1000
 #define MAX_QUEUE 20
@@ -56,11 +59,33 @@ static struct {
 
 static int should_play_sound = 1;
 
+// Brutus III : change à chaque ajout, lecture ou suppression (la liste des messages se refait)
+static unsigned int version_messages;
+
+unsigned int city_message_brutus_version(void)
+{
+    return version_messages;
+}
+
+// Brutus III : messages publiés par la simulation, en attente de la décision d'affichage
+// (fenêtre, file ou alerte), prise chez chaque joueur par city_message_brutus_afficher().
+// Hors sauvegarde et hors empreinte.
+#define MAX_A_AFFICHER 64
+static struct {
+    struct {
+        int sequence;
+        int use_popup;
+        int son;
+        int joueur; // -1 : tout le monde ; sinon seulement ce joueur (message dû à sa commande)
+    } items[MAX_A_AFFICHER];
+    int nb;
+} a_afficher;
+
 void city_message_init_scenario(void)
 {
-    for (int i = 0; i < MAX_MESSAGES; i++) {
-        data.messages[i].message_type = 0;
-    }
+    // Brutus III : emplacements vides entièrement remis à zéro (ils sont dans la sauvegarde)
+    memset(data.messages, 0, sizeof(data.messages));
+    a_afficher.nb = 0;
     for (int i = 0; i < MAX_QUEUE; i++) {
         data.queue[i] = 0;
     }
@@ -99,15 +124,7 @@ void city_message_init_problem_areas(void)
     data.problem_last_click_time = time_get_millis();
 }
 
-static int new_message_id(void)
-{
-    for (int i = 0; i < MAX_MESSAGES; i++) {
-        if (!data.messages[i].message_type) {
-            return i;
-        }
-    }
-    return -1;
-}
+// Brutus III : new_message_id() retiré (le nouveau message va toujours en tête, city_message_post)
 
 static int has_video(int text_id)
 {
@@ -157,7 +174,10 @@ static void show_message_popup(int message_id)
 {
     city_message *msg = &data.messages[message_id];
     data.consecutive_message_delay = 5;
-    msg->is_read = 1;
+    // Brutus III : « lu » est dans la partie : il passe par une commande (appliquée au tick suivant)
+    if (!msg->is_read) {
+        brutus_commande_1(BRUTUS_CMD_MESSAGE_LU, msg->sequence);
+    }
     if (msg->message_type != MESSAGE_CUSTOM_MESSAGE) {
         int text_id = city_message_get_text_id(msg->message_type);
         if (!has_video(text_id)) {
@@ -195,10 +215,15 @@ void city_message_apply_sound_interval(message_category category)
 
 void city_message_post(int use_popup, int message_type, int param1, int param2)
 {
-    int id = new_message_id();
-    if (id < 0) {
-        return;
+    // Brutus III : le tableau reste trié (séquence décroissante) et compact : le nouveau message,
+    // de séquence la plus haute, va en tête. Ainsi les tris de l'interface (liste des messages)
+    // ne changent rien à la partie.
+    if (data.messages[MAX_MESSAGES - 1].message_type) {
+        return; // plein (l'ancien new_message_id() rendait -1)
     }
+    memmove(&data.messages[1], &data.messages[0], sizeof(city_message) * (MAX_MESSAGES - 1));
+    memset(&data.messages[0], 0, sizeof(city_message));
+    int id = 0;
     data.total_messages++;
     data.current_message_id = id;
 
@@ -218,24 +243,99 @@ void city_message_post(int use_popup, int message_type, int param1, int param2)
         window_invalidate();
     }
 
-    // Since custom messages are scenario specific, don't show them as simple alerts at the top
-    // Also, beware: should we change this behavior, the below code will crash
-    if (message_type != MESSAGE_CUSTOM_MESSAGE && config_get(CONFIG_UI_MESSAGE_ALERTS)) {
-        city_warning_show_custom(lang_get_message(text_id)->title.text, NEW_WARNING_SLOT);
-        use_popup = 0;
+    // Brutus III : la suite (alerte, fenêtre, file, son) ne dépend que de l'écran de chacun :
+    // elle est décidée à l'affichage, par city_message_brutus_afficher(), juste après le tick
+    // ou la commande. Message dû à une commande : seulement chez le joueur qui l'a envoyée.
+    if (a_afficher.nb == MAX_A_AFFICHER) {
+        memmove(&a_afficher.items[0], &a_afficher.items[1], sizeof(a_afficher.items[0]) * (MAX_A_AFFICHER - 1));
+        a_afficher.nb--;
     }
-    if (is_invasion_message(msg->message_type) && setting_game_speed() > 70) {
-        setting_set_default_game_speed();
-    }
-    if ((use_popup && window_is(WINDOW_CITY)) || window_is(WINDOW_BUILDING_INFO)) {
-        show_message_popup(id);
-    } else if (use_popup) {
-        // add to queue to be processed when player returns to city
-        enqueue_message(msg->sequence);
-    } else if (should_play_sound) {
-        play_sound(text_id);
-    }
+    version_messages++;
+    a_afficher.items[a_afficher.nb].sequence = msg->sequence;
+    a_afficher.items[a_afficher.nb].use_popup = use_popup;
+    a_afficher.items[a_afficher.nb].son = should_play_sound;
+    a_afficher.items[a_afficher.nb].joueur = brutus_commande_joueur_en_cours();
+    a_afficher.nb++;
     should_play_sound = 1;
+}
+
+static int message_par_sequence(int sequence)
+{
+    for (int i = 0; i < MAX_MESSAGES; i++) {
+        if (data.messages[i].message_type && data.messages[i].sequence == sequence) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Brutus III : ce que city_message_post() faisait pour l'écran, chez chaque joueur.
+void city_message_brutus_afficher(void)
+{
+    int nb = a_afficher.nb;
+    a_afficher.nb = 0;
+    for (int n = 0; n < nb; n++) {
+        int joueur = a_afficher.items[n].joueur;
+        if (joueur >= 0 && joueur != brutus_joueur_local()) {
+            continue;
+        }
+        int id = message_par_sequence(a_afficher.items[n].sequence);
+        if (id < 0) {
+            continue;
+        }
+        city_message *msg = &data.messages[id];
+        int use_popup = a_afficher.items[n].use_popup;
+        int text_id = city_message_get_text_id(msg->message_type);
+        // Since custom messages are scenario specific, don't show them as simple alerts at the top
+        // Also, beware: should we change this behavior, the below code will crash
+        if (msg->message_type != MESSAGE_CUSTOM_MESSAGE && config_get(CONFIG_UI_MESSAGE_ALERTS)) {
+            city_warning_show_custom(lang_get_message(text_id)->title.text, NEW_WARNING_SLOT);
+            use_popup = 0;
+        }
+        if (is_invasion_message(msg->message_type) && setting_game_speed() > 70) {
+            setting_set_default_game_speed();
+        }
+        if ((use_popup && window_is(WINDOW_CITY)) || window_is(WINDOW_BUILDING_INFO)) {
+            show_message_popup(id);
+        } else if (use_popup) {
+            // add to queue to be processed when player returns to city
+            enqueue_message(msg->sequence);
+        } else if (a_afficher.items[n].son) {
+            play_sound(text_id);
+        }
+    }
+}
+
+int city_message_brutus_marquer_lu(int sequence)
+{
+    int id = message_par_sequence(sequence);
+    if (id < 0) {
+        return 0;
+    }
+    data.messages[id].is_read = 1;
+    version_messages++;
+    return 1;
+}
+
+int city_message_brutus_supprimer(int sequence)
+{
+    int id = message_par_sequence(sequence);
+    if (id < 0) {
+        return 0;
+    }
+    city_message_delete(id);
+    return 1;
+}
+
+void city_message_brutus_partie_chargee(void)
+{
+    a_afficher.nb = 0;
+    for (int i = 0; i < MAX_QUEUE; i++) {
+        data.queue[i] = 0;
+    }
+    // Ancienne sauvegarde (ou d'Augustus) : on remet le tableau dans l'ordre canonique, pareil
+    // chez tous les joueurs. Une sauvegarde de Brutus III est déjà dans cet ordre.
+    city_message_sort_and_compact();
 }
 
 void city_message_post_with_popup_delay(message_category category, int message_type, int param1, short param2)
@@ -544,7 +644,8 @@ const city_message *city_message_get(int message_id)
 
 int city_message_set_current(int message_id)
 {
-    return data.current_message_id = message_id;
+    // Brutus III : appelé par la liste des messages (interface) : ne change plus la partie
+    return message_id;
 }
 
 void city_message_mark_read(int message_id)
@@ -554,6 +655,7 @@ void city_message_mark_read(int message_id)
 
 void city_message_delete(int message_id)
 {
+    version_messages++; // Brutus III
     data.messages[message_id].message_type = 0;
     city_message_sort_and_compact();
 }

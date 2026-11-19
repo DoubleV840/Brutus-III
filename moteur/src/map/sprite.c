@@ -56,3 +56,13 @@ void map_sprite_load_state(buffer *buf, buffer *backup)
     map_grid_load_state_u8(sprite.items, buf);
     map_grid_load_state_u8(sprite_backup.items, backup);
 }
+
+// Brutus III : copies de secours utilisées par l'annulation, pour que game/undo.c garde
+// celles de la simulation à part de celles de l'aperçu du joueur local.
+void *map_sprite_brutus_secours(int index, size_t *taille)
+{
+    switch (index) {
+        case 0: *taille = sizeof(sprite_backup.items); return sprite_backup.items;
+        default: *taille = 0; return 0;
+    }
+}

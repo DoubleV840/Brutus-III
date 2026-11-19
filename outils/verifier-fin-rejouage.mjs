@@ -4,9 +4,9 @@
 //     Vérifie la ligne « # fin » : toutes les commandes du journal (après le tick de départ)
 //     appliquées, aucune restante, aucune perdue. Affiche le nombre de commandes refusées.
 //
-//   node outils/verifier-fin-rejouage.mjs --comparer <reference.txt> <reprise.txt>
-//     Vérifie que chaque empreinte de <reprise.txt> (rejouage repris depuis une sauvegarde)
-//     est identique à celle du même tick dans <reference.txt> (rejouage continu).
+//   node outils/verifier-fin-rejouage.mjs --comparer <reference.txt> <reprise.txt> [libellé]
+//     Vérifie que chaque empreinte de <reprise.txt> (rejouage repris depuis une sauvegarde, ou
+//     rejouage avec interface ouverte) est identique à celle du même tick dans <reference.txt>.
 import { readFileSync } from 'node:fs';
 
 function champs(ligne) {
@@ -40,16 +40,17 @@ const args = process.argv.slice(2);
 if (args[0] === '--comparer') {
   const reference = lire(args[1]);
   const reprise = lire(args[2]);
+  const libelle = args[3] || 'rechargement';
   if (!reprise.empreintes.size) echec(`aucune empreinte dans ${args[2]}`);
   let communes = 0;
   for (const [tick, valeur] of reprise.empreintes) {
     if (!reference.empreintes.has(tick)) echec(`tick ${tick} absent de la référence ${args[1]}`);
     if (reference.empreintes.get(tick) !== valeur) {
-      echec(`rechargement : empreinte différente au tick ${tick} (${valeur} au lieu de ${reference.empreintes.get(tick)})`);
+      echec(`${libelle} : empreinte différente au tick ${tick} (${valeur} au lieu de ${reference.empreintes.get(tick)})`);
     }
     communes++;
   }
-  console.log(`OK : rechargement identique au rejouage continu (${communes} empreintes comparées).`);
+  console.log(`OK : ${libelle} identique au rejouage de référence (${communes} empreintes comparées).`);
   process.exit(0);
 }
 

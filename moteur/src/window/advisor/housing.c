@@ -20,6 +20,7 @@
 #include "graphics/window.h"
 #include "scenario/property.h"
 #include "translation/translation.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #define ADVISOR_HEIGHT 27
 
@@ -120,6 +121,8 @@ const advisor_window_type *window_advisor_housing(void)
     static const advisor_window_type window = {
         draw_background
     };
-    house_population_update_room();
+    if (!brutus_multijoueur_actif()) { // Brutus III : écrit dans la partie (voir window/advisors.c)
+        house_population_update_room();
+    }
     return &window;
 }

@@ -46,6 +46,25 @@ typedef enum {
     BRUTUS_CMD_LEGION_SERVICE,      // formation
     BRUTUS_CMD_REPARER_CONFIRME,    // x0 y0 x1 y1 : réparation acceptée dans la confirmation
     BRUTUS_CMD_PARI_COURSE,         // cheval(1-4) montant
+    // M6a
+    BRUTUS_CMD_MESSAGE_LU,          // numéro de séquence du message
+    BRUTUS_CMD_MESSAGE_SUPPRIMER,   // numéro de séquence du message
+    BRUTUS_CMD_DEPOT_ORDRE,         // x y champ(0 ressource, 1 source, 2 destination, 3 condition, 4 seuil) valeur
+    BRUTUS_CMD_MONUMENT_ARRET,      // x y : arrêter / reprendre le chantier
+    BRUTUS_CMD_MONUMENT_MODULE,     // x y module
+    BRUTUS_CMD_MONNAIE_CONVERSION,  // x y ressource produite (deniers ou or)
+    BRUTUS_CMD_PRODUCTION_RESERVE,  // x y : mise en réserve d'un producteur
+    BRUTUS_CMD_DOCK_ROUTE,          // x y route accepter(0/1)
+    BRUTUS_CMD_COMMERCE_POLITIQUE,  // type(0 terre, 1 mer) politique
+    BRUTUS_CMD_BARRAGE_PERMISSION,  // x y permission (>= 0 bascule, -1 aucune, -2 toutes)
+    BRUTUS_CMD_CASERNE_PRIORITE,    // x y priorite
+    BRUTUS_CMD_CASERNE_LIVRAISON,   // x y
+    BRUTUS_CMD_JEUX,                // id des jeux
+    BRUTUS_CMD_DON_VILLE,           // montant
+    BRUTUS_CMD_LEGIONS_BATAILLE,    // annuler_service(0/1) : légions en service impérial vers la bataille lointaine
+    BRUTUS_CMD_LEGIONS_SERVICE_ANNULER, // (aucun) : plus aucune légion en service impérial
+    BRUTUS_CMD_VICTOIRE_CONTINUER,  // mois
+    BRUTUS_CMD_TRICHE,              // numero a b c d (game/cheats.c)
     BRUTUS_CMD_NOMBRE
 } brutus_commande_type;
 
@@ -56,6 +75,26 @@ typedef struct {
     int nb_params;
     int32_t p[BRUTUS_COMMANDE_MAX_PARAMS];
 } brutus_commande;
+
+/** Nombre maximal de joueurs (joueur 0 = hôte). */
+#define BRUTUS_JOUEURS_MAX 4
+
+/** Multijoueur : le nombre de ticks vient du lockstep (multijoueur/simulation.h). Solo par défaut. */
+void brutus_multijoueur_definir(int actif);
+int brutus_multijoueur_actif(void);
+
+/** Numéro du joueur de cette machine (0 = hôte, valeur par défaut). */
+void brutus_joueur_local_definir(int joueur);
+int brutus_joueur_local(void);
+
+/** Joueur de la commande en cours d'exécution, ou -1 hors commande (tick, chargement…). */
+int brutus_commande_joueur_en_cours(void);
+
+/**
+ * Vrai si un effet d'interface (fenêtre, avertissement, message) déclenché maintenant doit
+ * s'afficher sur cette machine : hors commande, ou commande envoyée par le joueur local.
+ */
+int brutus_interface_pour_moi(void);
 
 /** Tick absolu de la partie (jours écoulés x 50 + tick du jour), lu dans l'état sauvegardé. */
 uint32_t brutus_tick_absolu(void);
@@ -84,6 +123,13 @@ int brutus_commande_nb_params(brutus_commande_type type);
  */
 void brutus_commande_envoyer(brutus_commande_type type, int nb_params, const int32_t *params);
 
+/**
+ * Test de l'interface (rejouage) : les commandes envoyées par l'interface sont ignorées et
+ * comptées, pour vérifier que l'interface seule ne change pas la partie.
+ */
+void brutus_commandes_interface_ignorer(int ignorer);
+unsigned int brutus_commandes_interface_ignorees(void);
+
 /** Raccourcis */
 void brutus_commande_0(brutus_commande_type type);
 void brutus_commande_1(brutus_commande_type type, int32_t a);
@@ -97,6 +143,9 @@ void brutus_commande_5(brutus_commande_type type, int32_t a, int32_t b, int32_t 
  * Retourne 0 si le type est inconnu ou si la file est pleine (commande perdue, comptée et signalée).
  */
 int brutus_commande_ajouter(const brutus_commande *cmd);
+
+/** Nombre de commandes en file (pas encore appliquées). */
+int brutus_commandes_en_attente(void);
 
 /** 1 si la file est pleine (l'appelant peut appliquer les commandes prêtes avant d'ajouter). */
 int brutus_commandes_file_pleine(void);

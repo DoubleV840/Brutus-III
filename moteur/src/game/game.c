@@ -28,6 +28,7 @@
 #include "graphics/video.h"
 #include "graphics/window.h"
 #include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/simulation.h" // Brutus III
 #include "platform/file_manager.h"
 #include "platform/prefs.h"
 #include "platform/user_path.h"
@@ -228,10 +229,11 @@ int game_reload_language(void)
 void game_run(void)
 {
     game_animation_update();
-    // Brutus III : en solo, les commandes de l'interface sont appliquées dès l'image suivante,
-    // avant le prochain tick (même si la partie est en pause). Elles portent le numéro de ce tick.
+    // Brutus III : hors éditeur, commandes et ticks passent par multijoueur/simulation.c
+    // (solo : horloge et écran comme avant ; multijoueur : ticks imposés par le lockstep).
     if (!editor_is_active()) {
-        brutus_commandes_appliquer(brutus_tick_absolu());
+        brutus_simulation_image();
+        return;
     }
     int num_ticks = game_speed_get_elapsed_ticks();
     for (int i = 0; i < num_ticks; i++) {

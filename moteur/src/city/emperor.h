@@ -67,4 +67,13 @@ void city_emperor_force_attack(int size);
 
 void city_emperor_decrement_personal_savings(int amount);
 
+/** Brutus III : la taille de cadeau est abordable (sans écrire, fenêtre du cadeau). */
+int city_emperor_brutus_cadeau_abordable(int size);
+
+/** Brutus III : montant de don borné comme city_emperor_set_donation_amount (sans écrire). */
+int city_emperor_brutus_don_borne(int amount);
+
+/** Brutus III : taille de cadeau proposée à l'ouverture de la fenêtre (sans écrire). */
+int city_emperor_brutus_cadeau_initial(void);
+
 #endif // CITY_EMPEROR_H

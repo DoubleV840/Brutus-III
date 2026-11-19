@@ -35,4 +35,14 @@ void game_cheat_show_editor(uint8_t *args);
 int game_cheat_filled_markets(void);
 void game_cheat_reset_markets_filled(void);
 
+/* Brutus III : triches par la file de commandes (numéros spéciaux en plus de la console) */
+#include <stdint.h>
+#define BRUTUS_TRICHE_ARGENT 100
+#define BRUTUS_TRICHE_VICTOIRE 101
+#define BRUTUS_TRICHE_INVASION 102
+int game_cheat_brutus_executer(int numero, const int32_t *args);
+#define BRUTUS_TRICHE_EFFETS 4
+int game_cheat_brutus_effet(int numero);
+void game_cheat_brutus_definir_effet(int numero, int valeur);
+
 #endif // GAME_CHEATS_H

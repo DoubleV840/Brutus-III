@@ -71,3 +71,13 @@ void map_aqueduct_load_state(buffer *buf, buffer *backup)
     map_grid_load_state_u8(aqueduct.items, buf);
     map_grid_load_state_u8(aqueduct_backup.items, backup);
 }
+
+// Brutus III : copies de secours utilisées par l'annulation, pour que game/undo.c garde
+// celles de la simulation à part de celles de l'aperçu du joueur local.
+void *map_aqueduct_brutus_secours(int index, size_t *taille)
+{
+    switch (index) {
+        case 0: *taille = sizeof(aqueduct_backup.items); return aqueduct_backup.items;
+        default: *taille = 0; return 0;
+    }
+}

@@ -16,6 +16,11 @@
 #include "map/terrain.h"
 #include "multijoueur/commande.h"
 #include "multijoueur/empreinte.h"
+#include "multijoueur/entete.h"
+#include "multijoueur/rejouage_interface.h"
+#include "multijoueur/simulation.h"
+#include "game/game.h"
+#include "window/city.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,7 +50,16 @@ static struct {
     long ticks;
     long tous_les;
     const char *detail;
-} options = { MODE_AUCUN, 0, 0, 0, 0, 0, 0, -1, 50, 0 };
+    int multijoueur;
+    int interface_test;
+    long ticks_par_image;
+    long resync_au_tick[64];
+    int nb_resync;
+    int nb_reglages;
+    const char *reglages[32];
+    const char *prechargement;
+    long ticks_prechargement;
+} options = { MODE_AUCUN, 0, 0, 0, 0, 0, 0, -1, 50, 0, 0, 0, 2, { 0 }, 0, 0, { 0 }, 0, 0 };
 
 // Le moteur change de dossier courant au démarrage : les chemins relatifs sont rendus
 // absolus tout de suite (par rapport au dossier courant de lancement).
@@ -87,6 +101,33 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
             options.sauvegarde_finale = argv[++i];
         } else if (strcmp(a, "--detail-empreinte") == 0 && i + 1 < argc) {
             options.detail = argv[++i];
+        } else if (strcmp(a, "--multijoueur") == 0) {
+            options.multijoueur = 1;
+        } else if (strcmp(a, "--interface-test") == 0) {
+            options.multijoueur = 1;
+            options.interface_test = 1;
+        } else if (strcmp(a, "--ticks-par-image") == 0 && i + 1 < argc) {
+            options.ticks_par_image = strtol(argv[++i], 0, 10);
+        } else if (strcmp(a, "--resync-au-tick") == 0 && i + 1 < argc) {
+            // Liste séparée par des virgules : 30000,60000,90000
+            const char *p = argv[++i];
+            while (*p && options.nb_resync < 64) {
+                char *fin;
+                long v = strtol(p, &fin, 10);
+                if (fin == p) {
+                    break;
+                }
+                options.resync_au_tick[options.nb_resync++] = v;
+                p = *fin == ',' ? fin + 1 : fin;
+            }
+        } else if (strcmp(a, "--prechargement") == 0 && i + 2 < argc) {
+            options.prechargement = argv[++i];
+            options.ticks_prechargement = strtol(argv[++i], 0, 10);
+        } else if (strcmp(a, "--reglage") == 0 && i + 1 < argc) {
+            if (options.nb_reglages < 32) {
+                options.reglages[options.nb_reglages++] = argv[i + 1];
+            }
+            i++;
         } else if (strcmp(a, "--creer-sauvegarde") == 0 && i + 2 < argc) {
             options.mode = MODE_CREER_SAUVEGARDE;
             options.carte = argv[++i];
@@ -102,6 +143,9 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
     if (options.tous_les <= 0) {
         options.tous_les = 50;
     }
+    if (options.ticks_par_image <= 0) {
+        options.ticks_par_image = 2;
+    }
     if (options.mode != MODE_AUCUN) {
         options.sauvegarde = absolu(options.sauvegarde);
         options.journal = absolu(options.journal);
@@ -109,6 +153,7 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
         options.sortie = absolu(options.sortie);
         options.sauvegarde_finale = absolu(options.sauvegarde_finale);
         options.detail = absolu(options.detail);
+        options.prechargement = absolu(options.prechargement);
         // Sans affichage ni son (sauf si l'appelant a choisi autre chose)
 #ifdef _WIN32
         if (!getenv("SDL_VIDEODRIVER")) {
@@ -149,6 +194,22 @@ static void imposer_reglages(void)
     }
     while (setting_difficulty() < DIFFICULTY_NORMAL) {
         setting_increase_difficulty();
+    }
+    // M6a : réglages locaux demandés (--reglage nom=valeur), par exemple pour vérifier que
+    // l'en-tête d'une sauvegarde l'emporte sur eux.
+    for (int i = 0; i < options.nb_reglages; i++) {
+        char nom[128];
+        const char *egal = strchr(options.reglages[i], '=');
+        size_t n = egal ? (size_t) (egal - options.reglages[i]) : 0;
+        if (!egal || n >= sizeof(nom)) {
+            fprintf(stderr, "Brutus III : --reglage nom=valeur attendu : %s\n", options.reglages[i]);
+            continue;
+        }
+        memcpy(nom, options.reglages[i], n);
+        nom[n] = 0;
+        if (!brutus_entete_definir_local(nom, atoi(egal + 1))) {
+            fprintf(stderr, "Brutus III : réglage inconnu : %s\n", nom);
+        }
     }
 }
 
@@ -256,6 +317,16 @@ static int rejouer(void)
         return 3;
     }
     imposer_reglages();
+    // Diagnostic (--prechargement <sauvegarde> <ticks>) : une autre partie est chargée et jouée
+    // avant, pour vérifier qu'aucun état ne survit au chargement (cas de l'hôte qui recharge).
+    if (options.prechargement) {
+        if (!charger_sauvegarde(options.prechargement)) {
+            return 4;
+        }
+        for (long t = 0; t < options.ticks_prechargement; t++) {
+            brutus_avancer_ticks(1);
+        }
+    }
     if (!charger_sauvegarde(options.sauvegarde)) {
         return 4;
     }
@@ -290,19 +361,88 @@ static int rejouer(void)
     ecrire_detail("debut");
 
     unsigned int nb_empreintes = 1;
-    for (long t = 0; t < ticks; t++) {
+    // Le rejouage ne rejoue que le journal : ce que l'interface enverrait (message lu après une
+    // fenêtre de message…) est ignoré et compté.
+    brutus_commandes_interface_ignorer(1);
+    if (options.multijoueur) {
+        // M6a : les ticks viennent de l'extérieur (comme le lockstep), image par image (game_run).
+        brutus_multijoueur_definir(1);
+        if (options.interface_test) {
+            window_city_show();
+        }
+    }
+    long image = 0;
+    for (long t = 0; t < ticks;) {
         uint32_t tick = brutus_tick_absolu();
-        while (suivante < journal.taille && journal.items[suivante].tick <= tick) {
+        long pas = 1;
+        if (options.multijoueur) {
+            // Jamais au-delà de la prochaine empreinte ni de la fin
+            pas = options.ticks_par_image;
+            long prochaine = (t / options.tous_les + 1) * options.tous_les;
+            if (t + pas > prochaine) {
+                pas = prochaine - t;
+            }
+            if (t + pas > ticks) {
+                pas = ticks - t;
+            }
+        }
+        // Commandes du journal datées des ticks de ce pas (appliquées chacune avant son tick)
+        while (suivante < journal.taille && journal.items[suivante].tick <= tick + (uint32_t) (pas - 1)) {
             if (brutus_commandes_file_pleine()) {
-                // File pleine : on applique tout de suite ce qui est prêt et on recommence.
-                brutus_commandes_appliquer(tick);
-                continue;
+                if (journal.items[suivante].tick <= tick) {
+                    // File pleine : on applique tout de suite ce qui est prêt et on recommence.
+                    brutus_commandes_appliquer(tick);
+                    continue;
+                }
+                pas = (long) (journal.items[suivante].tick - tick); // le reste attendra
+                break;
             }
             brutus_commande_ajouter(&journal.items[suivante]);
             suivante++;
         }
-        game_tick_run();
-        if ((t + 1) % options.tous_les == 0 || t + 1 == ticks) {
+        if (options.multijoueur) {
+            if (options.interface_test) {
+                brutus_interface_test_image(image);
+            }
+            brutus_ticks_externes_ajouter((int) pas);
+            while (brutus_ticks_externes_en_attente() > 0) {
+                game_run();
+            }
+            if (options.interface_test) {
+                brutus_interface_test_dessiner(image);
+            }
+            image++;
+        } else {
+            // Comme une image du jeu en solo : tick, sauvegarde de début de mission, messages
+            brutus_avancer_ticks(1);
+        }
+        long avant = t;
+        t += pas;
+        // Points de resynchronisation en ticks absolus de la partie (pas depuis le départ)
+        int resync = 0;
+        uint32_t tick_apres = brutus_tick_absolu();
+        for (int r = 0; r < options.nb_resync; r++) {
+            if ((long) tick < options.resync_au_tick[r] && (long) tick_apres >= options.resync_au_tick[r]) {
+                resync = 1;
+            }
+        }
+        if (resync) {
+            // M6a : resynchronisation dans le même programme (cas de l'hôte) : écrire, recharger.
+            char chemin[4096];
+            snprintf(chemin, sizeof(chemin), "%s.resync-%u.svx", options.empreintes, (unsigned int) brutus_tick_absolu());
+            if (!game_file_write_saved_game(chemin) || !brutus_resynchroniser(chemin)) {
+                fprintf(stderr, "Brutus III : resynchronisation impossible (%s)\n", chemin);
+                fclose(sortie);
+                free(journal.items);
+                return 8;
+            }
+            game_state_unpause();
+            if (options.interface_test) {
+                window_city_show();
+            }
+            fprintf(sortie, "# resynchronisation tick %u\n", (unsigned int) brutus_tick_absolu());
+        }
+        if (t / options.tous_les != avant / options.tous_les || t == ticks) {
             fprintf(sortie, "%u %016llx\n", (unsigned int) brutus_tick_absolu(),
                 (unsigned long long) brutus_empreinte_partie());
             nb_empreintes++;
@@ -311,6 +451,12 @@ static int rejouer(void)
                     city_population(), city_finance_treasury(), compter_batiments());
             }
         }
+    }
+    if (options.interface_test) {
+        unsigned int ouvertures, glissers;
+        brutus_interface_test_bilan(&ouvertures, &glissers);
+        fprintf(sortie, "# interface images %ld fenetres %u glissers %u commandes_interface_ignorees %u\n",
+            image, ouvertures, glissers, brutus_commandes_interface_ignorees());
     }
     brutus_commandes_ecrire_bilan(sortie);
     fprintf(sortie, "# fin tick %u empreintes %u commandes_appliquees %u commandes_refusees %u"

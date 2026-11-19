@@ -83,6 +83,7 @@
 #include "scenario/scenario.h"
 #include "sound/city.h"
 #include "sound/music.h"
+#include "multijoueur/entete.h" // Brutus III
 
 #include <string.h>
 #include <time.h>
@@ -343,6 +344,7 @@ static void initialize_saved_game(void)
 
 static int start_scenario(const uint8_t *scenario_name, const char *scenario_file)
 {
+    brutus_entete_restaurer_locaux(); // Brutus III : nouvelle partie, réglages locaux
     int mission = scenario_campaign_mission();
     int rank = scenario_campaign_rank();
     map_bookmarks_clear();
@@ -403,6 +405,7 @@ int game_file_start_scenario_from_buffer(uint8_t *data, int length, int is_save_
             return 0;
         }
     } else {
+        brutus_entete_restaurer_locaux(); // Brutus III : nouvelle partie, réglages locaux
         clear_scenario_data();
         if (!game_file_io_read_scenario_from_buffer(&buf)) {
             return 0;

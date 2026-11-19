@@ -40,6 +40,7 @@
 #include "window/advisor/religion.h"
 #include "window/advisor/trade.h"
 #include "window/advisor/housing.h"
+#include "multijoueur/commande.h" // Brutus III
 
 static void button_change_advisor(const generic_button *button);
 static void button_help(int param1, int param2);
@@ -143,23 +144,27 @@ void window_advisors_set_advisor(advisor_type advisor)
 
 static void init(void)
 {
-    city_labor_allocate_workers();
+    // Brutus III : ces recalculs écrivent dans la partie. En multijoueur, ouvrir un conseiller
+    // ne doit rien changer (sinon désynchronisation) : on affiche les valeurs de la simulation.
+    if (!brutus_multijoueur_actif()) {
+        city_labor_allocate_workers();
 
-    city_finance_estimate_taxes();
-    city_finance_estimate_wages();
-    city_finance_update_interest();
-    city_finance_update_salary();
-    city_finance_calculate_totals();
+        city_finance_estimate_taxes();
+        city_finance_estimate_wages();
+        city_finance_update_interest();
+        city_finance_update_salary();
+        city_finance_calculate_totals();
 
-    city_migration_determine_no_immigration_cause();
+        city_migration_determine_no_immigration_cause();
 
-    city_houses_calculate_culture_demands();
-    city_culture_update_coverage();
+        city_houses_calculate_culture_demands();
+        city_culture_update_coverage();
 
-    city_resource_calculate_food_stocks_and_supply_wheat();
-    formation_calculate_figures();
+        city_resource_calculate_food_stocks_and_supply_wheat();
+        formation_calculate_figures();
 
-    city_ratings_update_explanations();
+        city_ratings_update_explanations();
+    }
 
     set_advisor_window();
 }

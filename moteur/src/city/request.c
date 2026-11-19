@@ -4,6 +4,7 @@
 #include "city/military.h"
 #include "city/resource.h"
 #include "scenario/request.h"
+#include "multijoueur/commande.h" // Brutus III
 
 int city_request_has_troop_request(void)
 {
@@ -41,7 +42,10 @@ int city_request_get_status(int index)
                 return CITY_REQUEST_STATUS_NOT_ENOUGH_RESOURCES;
             }
         }
-        if (!request->can_comply_dialog_shown) {
+        // Brutus III : appelé par l'interface (barre latérale, conseiller impérial) : en
+        // multijoueur, l'annonce « marchandises prêtes » est laissée à la simulation
+        // (scenario/request.c), sinon elle n'arriverait que chez un joueur.
+        if (!request->can_comply_dialog_shown && !brutus_multijoueur_actif()) {
             scenario_request_show_ready_message((scenario_request *) request);
         }
         return request->id + CITY_REQUEST_STATUS_MAX;

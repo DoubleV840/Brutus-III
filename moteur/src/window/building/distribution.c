@@ -1163,7 +1163,9 @@ const uint8_t *window_building_dock_get_tooltip(building_info_context *c)
 void window_building_draw_storage(building_info_context *c)
 {
     building *b = building_get(c->building_id);
-    building_warehouse_recount_resources(b);
+    if (!brutus_multijoueur_actif()) { // Brutus III : écrit dans la partie (cache tenu par la simulation)
+        building_warehouse_recount_resources(b);
+    }
     c->advisor_button = ADVISOR_TRADE;
     c->help_id = is_granary(c) ? 3 : 4;
     data.building_id = c->building_id;
@@ -1631,7 +1633,7 @@ static void button_stockpiling(const generic_button *button)
 {
     building *b = building_get(data.building_id);
     if (building_is_primary_product_producer(b->type)) {
-        building_stockpiling_toggle(b);
+        brutus_commande_2(BRUTUS_CMD_PRODUCTION_RESERVE, b->x, b->y); // Brutus III
     }
     window_invalidate();
 }
@@ -1640,7 +1642,8 @@ static void dock_toggle_route(const generic_button *button)
 {
     int route_id = button->parameter1;
     int can_trade = building_dock_can_trade_with_route(route_id, data.building_id);
-    building_dock_set_can_trade_with_route(route_id, data.building_id, !can_trade);
+    building *dock = building_get(data.building_id); // Brutus III
+    brutus_commande_4(BRUTUS_CMD_DOCK_ROUTE, dock->x, dock->y, route_id, !can_trade);
     window_invalidate();
 }
 
@@ -1764,9 +1767,8 @@ static void apply_policy_land(int selected_policy)
     if (selected_policy == NO_POLICY) {
         return;
     }
-    city_trade_policy_set(LAND_TRADE_POLICY, selected_policy);
+    brutus_commande_2(BRUTUS_CMD_COMMERCE_POLITIQUE, LAND_TRADE_POLICY, selected_policy); // Brutus III (+ coût)
     sound_speech_play_file(land_trade_policy.wav_file);
-    city_finance_process_sundry(TRADE_POLICY_COST);
 }
 
 static void button_caravanserai_policy(const generic_button *button)
@@ -1872,9 +1874,8 @@ static void apply_policy_sea(int selected_policy)
     if (selected_policy == NO_POLICY) {
         return;
     }
-    city_trade_policy_set(SEA_TRADE_POLICY, selected_policy);
+    brutus_commande_2(BRUTUS_CMD_COMMERCE_POLITIQUE, SEA_TRADE_POLICY, selected_policy); // Brutus III (+ coût)
     sound_speech_play_file(sea_trade_policy.wav_file);
-    city_finance_process_sundry(TRADE_POLICY_COST);
 }
 
 static void button_lighthouse_policy(const generic_button *button)

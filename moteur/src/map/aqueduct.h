@@ -1,6 +1,8 @@
 #ifndef MAP_AQUEDUCT_H
 #define MAP_AQUEDUCT_H
 
+#include <stddef.h> // Brutus III
+
 #include "core/buffer.h"
 
 
@@ -25,5 +27,8 @@ void map_aqueduct_restore(void);
 void map_aqueduct_save_state(buffer *buf, buffer *backup);
 
 void map_aqueduct_load_state(buffer *buf, buffer *backup);
+
+/** Brutus III : copie de secours n° index (0, 1…) et sa taille ; 0 au-delà. */
+void *map_aqueduct_brutus_secours(int index, size_t *taille);
 
 #endif // MAP_AQUEDUCT_H

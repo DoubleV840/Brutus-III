@@ -17,6 +17,7 @@
 #include "graphics/text.h"
 #include "graphics/window.h"
 #include "input/input.h"
+#include "multijoueur/commande.h" // Brutus III
 #include "scenario/custom_messages.h"
 #include "scenario/property.h"
 #include "translation/translation.h"
@@ -105,6 +106,7 @@ static struct {
     message_filter type_displayed;
     int message_count;
     int *filtered_message_list;
+    unsigned int version_messages; // Brutus III : liste refaite quand les messages changent
 } data;
 
 static void draw_message_type_button(int x, int y, int focused)
@@ -164,13 +166,17 @@ static void select_messages(void)
 
 static void init(void)
 {
-    city_message_sort_and_compact();
+    city_message_sort_and_compact(); // Brutus III : sans effet, le tableau est déjà trié (city/message.c)
     select_messages();
+    data.version_messages = city_message_brutus_version();
     scrollbar_init(&scrollbar, city_message_scroll_position(), data.message_count);
 }
 
+static void brutus_rafraichir(void);
+
 static void draw_background(void)
 {
+    brutus_rafraichir(); // Brutus III
     window_city_draw_all();
 
     graphics_in_dialog();
@@ -250,6 +256,7 @@ static void draw_messages(unsigned int total_messages)
 
 static void draw_foreground(void)
 {
+    brutus_rafraichir(); // Brutus III
     graphics_in_dialog();
 
     image_buttons_draw(16, 32 + BLOCK_SIZE * data.height_blocks - 42, &image_button_help, 1);
@@ -272,8 +279,21 @@ static void draw_foreground(void)
     graphics_reset_dialog();
 }
 
+// Brutus III : lu et supprimé passent par des commandes (appliquées à l'image ou au tick suivant) ;
+// en multijoueur, de nouveaux messages arrivent même liste ouverte. La liste est refaite avant
+// tout usage (dessin et clics).
+static void brutus_rafraichir(void)
+{
+    if (data.version_messages != city_message_brutus_version()) {
+        data.version_messages = city_message_brutus_version();
+        select_messages();
+        window_invalidate();
+    }
+}
+
 static void handle_input(const mouse *m, const hotkeys *h)
 {
+    brutus_rafraichir();
     const mouse *m_dialog = mouse_in_dialog(m);
     unsigned int old_button_id = data.focus_button_id;
     data.focus_button_id = 0;
@@ -356,7 +376,9 @@ static void button_message(const generic_button *button)
     int id = data.filtered_message_list[city_message_set_current(scrollbar.scroll_position + index)];
     if (id < city_message_count()) {
         const city_message *msg = city_message_get(id);
-        city_message_mark_read(id);
+        if (!msg->is_read) {
+            brutus_commande_1(BRUTUS_CMD_MESSAGE_LU, msg->sequence); // Brutus III
+        }
         if (msg->message_type != MESSAGE_CUSTOM_MESSAGE) {
             window_message_dialog_show_city_message(
                 city_message_get_text_id(msg->message_type),
@@ -374,38 +396,31 @@ static void button_delete(const generic_button *button)
     int id_to_delete = button->parameter1;
     int id = city_message_set_current(scrollbar.scroll_position + id_to_delete);
     if (id < data.message_count) {
-        city_message_delete(data.filtered_message_list[id]);
-        select_messages();
-        window_invalidate();
+        // Brutus III : suppression par commande, la liste se refait quand elle est appliquée
+        brutus_commande_1(BRUTUS_CMD_MESSAGE_SUPPRIMER, city_message_get(data.filtered_message_list[id])->sequence);
     }
 }
 
 static void button_delete_all_common(const generic_button *button)
 {
-    for (int id = 0; id < city_message_count();) {
+    // Brutus III : une commande par message supprimé
+    for (int id = 0; id < city_message_count(); id++) {
         const city_message *msg = city_message_get(id);
-        if (msg->message_type != MESSAGE_CUSTOM_MESSAGE) {
-            city_message_delete(id);
-        } else {
-            id++;
+        if (msg->message_type && msg->message_type != MESSAGE_CUSTOM_MESSAGE) {
+            brutus_commande_1(BRUTUS_CMD_MESSAGE_SUPPRIMER, msg->sequence);
         }
     }
-    select_messages();
-    window_invalidate();
 }
 
 static void button_delete_all_read(const generic_button *button)
 {
-    for (int id = 0; id < city_message_count();) {
+    // Brutus III : une commande par message supprimé
+    for (int id = 0; id < city_message_count(); id++) {
         const city_message *msg = city_message_get(id);
-        if (msg->is_read) {
-            city_message_delete(id);
-        } else {
-            id++;
+        if (msg->message_type && msg->is_read) {
+            brutus_commande_1(BRUTUS_CMD_MESSAGE_SUPPRIMER, msg->sequence);
         }
     }
-    select_messages();
-    window_invalidate();
 }
 
 static void button_mission_briefing(int param1, int param2)

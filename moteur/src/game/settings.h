@@ -76,4 +76,7 @@ int setting_personal_savings_for_mission(int mission_id);
 void setting_set_personal_savings_for_mission(int mission_id, int savings);
 void setting_clear_personal_savings(void);
 
+/** Brutus III : fixe un réglage de la partie (multijoueur/entete.h, brutus_reglage). */
+void setting_brutus_definir(int reglage, int valeur);
+
 #endif // GAME_SETTINGS_H

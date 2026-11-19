@@ -420,9 +420,17 @@ static void set_building_worker_weight(void)
     }
 }
 
+// Brutus III : point de départ tournant de la répartition (était une variable statique de la
+// fonction). Hors sauvegarde : remis à 1 à chaque chargement (hôte qui recharge = invité).
+static int start_building_id = 1;
+
+void city_labor_brutus_partie_chargee(void)
+{
+    start_building_id = 1;
+}
+
 static void allocate_workers_to_water(void)
 {
-    static int start_building_id = 1;
     labor_category_data *water_cat = &city_data.labor.categories[LABOR_CATEGORY_WATER - 1];
 
     int percentage_not_filled = 100 - calc_percentage(water_cat->workers_allocated, water_cat->workers_needed);

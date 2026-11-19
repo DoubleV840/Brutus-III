@@ -1,6 +1,8 @@
 #ifndef MAP_TERRAIN_H
 #define MAP_TERRAIN_H
 
+#include <stddef.h> // Brutus III
+
 #include <stdint.h>
 #include "core/buffer.h"
 
@@ -175,5 +177,8 @@ void map_terrain_migrate_old_bridges(void);
 void map_terrain_migrate_shared_buildings(void);
 
 void map_terrain_load_state(buffer *buf, int expanded_terrain_data, buffer *images, int legacy_image_buffer);
+
+/** Brutus III : copie de secours n° index (0, 1…) et sa taille ; 0 au-delà. */
+void *map_terrain_brutus_secours(int index, size_t *taille);
 
 #endif // MAP_TERRAIN_H

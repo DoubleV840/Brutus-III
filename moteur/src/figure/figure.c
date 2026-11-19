@@ -17,6 +17,7 @@
 #include "map/figure.h"
 #include "map/grid.h"
 #include "figure.h"
+#include "multijoueur/empreinte.h" // Brutus III
 
 #define FIGURE_ARRAY_SIZE_STEP 1000
 
@@ -437,9 +438,11 @@ static void figure_save(buffer *buf, const figure *f)
     buffer_write_u8(buf, f->target_height);
     buffer_write_u8(buf, f->collecting_item_id);
     buffer_write_u8(buf, f->trade_ship_failed_dock_attempts);
-    buffer_write_u8(buf, f->phrase_sequence_exact);
-    buffer_write_i8(buf, f->phrase_id);
-    buffer_write_u8(buf, f->phrase_sequence_city);
+    // Brutus III : phrases du dialogue d'une figure, changées par la fiche ouverte (interface,
+    // figure/phrase.c) et jamais lues par la simulation -> hors empreinte
+    buffer_write_u8(buf, brutus_empreinte_en_cours() ? 0 : f->phrase_sequence_exact);
+    buffer_write_i8(buf, brutus_empreinte_en_cours() ? 0 : f->phrase_id);
+    buffer_write_u8(buf, brutus_empreinte_en_cours() ? 0 : f->phrase_sequence_city);
     buffer_write_u16(buf, f->trader_id);
     buffer_write_u8(buf, f->wait_ticks_next_target);
     buffer_write_u8(buf, f->dont_draw_elevated);

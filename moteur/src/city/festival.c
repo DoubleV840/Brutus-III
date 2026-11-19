@@ -249,3 +249,9 @@ void city_festival_calculate_costs(void)
         }
     }
 }
+
+// Brutus III : la fenêtre des fêtes vérifie sans écrire (city_festival_select_size écrit)
+int city_festival_brutus_vin_insuffisant(void)
+{
+    return city_data.festival.not_enough_wine;
+}

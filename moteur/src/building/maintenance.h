@@ -8,4 +8,7 @@ int building_maintenance_get_closest_burning_ruin(int x, int y, int *distance);
 
 void building_maintenance_check_rome_access(void);
 
+/** Brutus III : partie chargée (état hors sauvegarde remis à zéro). */
+void building_maintenance_brutus_partie_chargee(void);
+
 #endif // BUILDING_MAINTENANCE_H

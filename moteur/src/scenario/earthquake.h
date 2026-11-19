@@ -13,4 +13,7 @@ void scenario_earthquake_save_state(buffer *buf);
 
 void scenario_earthquake_load_state(buffer *buf);
 
+/** Brutus III : partie chargée (état hors sauvegarde remis à zéro). */
+void scenario_earthquake_brutus_partie_chargee(void);
+
 #endif // SCENARIO_EARTHQUAKE_H

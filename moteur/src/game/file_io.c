@@ -50,6 +50,8 @@
 #include "map/tiles.h"
 #include "map/bridge.h" // Brutus III
 #include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/simulation.h" // Brutus III
+#include "multijoueur/entete.h" // Brutus III
 #include "multijoueur/empreinte.h" // Brutus III
 #include "scenario/allowed_building.h"
 #include "scenario/criteria.h"
@@ -1084,6 +1086,9 @@ static void savegame_load_from_state(savegame_state *state, savegame_version_t v
 
 static void savegame_save_to_state(savegame_state *state)
 {
+    // Brutus III : sauvegarde et empreinte voient la partie sans l'aperçu du joueur local, avec
+    // les copies de secours (annulation) de la simulation (multijoueur/simulation.h).
+    brutus_simulation_debut();
     buffer_brutus_zero_init(1); // Brutus III : tampons d'écriture remis à zéro (octets sautés déterministes)
     buffer_write_i32(state->file_version, SAVE_GAME_CURRENT_VERSION);
     buffer_write_u32(state->resource_version, RESOURCE_CURRENT_VERSION);
@@ -1177,6 +1182,7 @@ static void savegame_save_to_state(savegame_state *state)
     city_finance_ledger_save_state(state->finance_ledger);
     building_monument_save_stages(state->monument_stages);
     buffer_brutus_zero_init(0); // Brutus III
+    brutus_simulation_fin(); // Brutus III
 }
 
 // Brutus III : empreinte de l'état (voir multijoueur/empreinte.h et docs/determinisme.md).
@@ -1256,6 +1262,11 @@ uint64_t game_file_io_brutus_empreinte_detail(FILE *detail, FILE *brut)
                 fwrite(b->data, 1, b->size, brut);
             }
         }
+    }
+    // Brutus III : réglages de la partie (en-tête) : des réglages différents = autre partie
+    h = brutus_entete_empreinte(h);
+    if (detail) {
+        fprintf(detail, "entete %016llx\n", (unsigned long long) brutus_entete_empreinte(BRUTUS_FNV_DEPART));
     }
     clear_savegame_pieces();
     return h;
@@ -1807,11 +1818,15 @@ int game_file_io_read_save_game_from_buffer(buffer *buf)
         resource_set_mapping(resource_version);
         init_savegame_data(save_version);
         result = savegame_read_from_buffer(buf, save_version);
+        if (result) {
+            brutus_entete_lire_tampon(buf); // Brutus III : en-tête de partie (s'il y en a un)
+        }
     }
     if (!result) {
         log_error("Unable to load game, incompatible savefile.", 0, 0);
         return FILE_LOAD_WRONG_FILE_FORMAT;
     }
+    brutus_entete_appliquer_lu(); // Brutus III : réglages de la partie avant de lire l'état
     savegame_load_from_state(&savegame_data.state, save_version);
     clear_savegame_pieces();
     return FILE_LOAD_SUCCESS;
@@ -1841,12 +1856,16 @@ int game_file_io_read_saved_game(const char *filename, int offset)
         resource_set_mapping(resource_version);
         init_savegame_data(save_version);
         result = savegame_read_from_file(fp, save_version);
+        if (result) {
+            brutus_entete_lire_fichier(fp); // Brutus III : en-tête de partie (s'il y en a un)
+        }
     }
     file_close(fp);
     if (!result) {
         log_error("Unable to load game, incompatible savefile.", 0, 0);
         return FILE_LOAD_WRONG_FILE_FORMAT;
     }
+    brutus_entete_appliquer_lu(); // Brutus III : réglages de la partie avant de lire l'état
     savegame_load_from_state(&savegame_data.state, save_version);
     clear_savegame_pieces();
     return 1;
@@ -2067,6 +2086,7 @@ int game_file_io_write_saved_game(const char *filename)
     memory_block compress_buffer;
     core_memory_block_init(&compress_buffer, COMPRESS_BUFFER_INITIAL_SIZE);
     savegame_write_to_file(fp, &compress_buffer);
+    brutus_entete_ecrire_fichier(fp); // Brutus III : réglages de la partie, après les morceaux
     core_memory_block_free(&compress_buffer);
     clear_savegame_pieces();
     file_close(fp);

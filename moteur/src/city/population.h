@@ -1,6 +1,8 @@
 #ifndef CITY_POPULATION_H
 #define CITY_POPULATION_H
 
+#include <stddef.h> // Brutus III
+
 int city_population(void);
 int city_population_school_age(void);
 int city_population_academy_age(void);
@@ -93,5 +95,8 @@ int city_population_count_at_level(int level);
  * Resets the people that should be restored when undoing house deletion
  */
 void city_population_reset_undo(void);
+
+/** Brutus III : tableau des habitants à rendre par l'annulation, et sa taille. */
+int *city_population_brutus_annulation(size_t *taille);
 
 #endif // CITY_POPULATION_H

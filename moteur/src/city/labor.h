@@ -35,4 +35,7 @@ void city_labor_set_priority(int category, int new_priority);
 
 int city_labor_max_selectable_priority(int category);
 
+/** Brutus III : partie chargée (état hors sauvegarde remis à zéro). */
+void city_labor_brutus_partie_chargee(void);
+
 #endif // CITY_LABOR_H

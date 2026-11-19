@@ -37,4 +37,10 @@ void city_games_remove_naval_battle_distant_battle_bonus(void);
 
 games_type *city_games_get_game_type(int id);
 
+/** Brutus III : jeux possibles maintenant (mêmes conditions que la fenêtre). */
+int city_games_brutus_possible(int game_id);
+
+/** Brutus III : jeux choisis (commande jeux). */
+void city_games_brutus_choisir(int game_id);
+
 #endif // CITY_GAMES_H

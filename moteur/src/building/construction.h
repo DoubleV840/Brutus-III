@@ -85,6 +85,15 @@ void building_construction_brutus_apres_placement_interface(void);
 /** Recrée l'aperçu du glisser après restauration (si un glisser était en cours). */
 void building_construction_brutus_relancer_apercu(void);
 
+/** Brutus III : retire l'aperçu du joueur local de la carte (avant la simulation). */
+void building_construction_brutus_suspendre_apercu(void);
+
+/** Brutus III : un glisser est en cours (même retiré le temps de la simulation). */
+int building_construction_brutus_apercu_actif(void);
+
+/** Brutus III : remet l'aperçu retiré par building_construction_brutus_suspendre_apercu(). */
+void building_construction_brutus_reprendre_apercu(void);
+
 #endif // BUILDING_CONSTRUCTION_H
 
 

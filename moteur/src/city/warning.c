@@ -1,4 +1,5 @@
 #include "warning.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #include "city/view.h"
 #include "core/lang.h"
@@ -151,6 +152,10 @@ static warning *get_warning_slot(int id, const uint8_t *text)
 int city_warning_show_custom(const uint8_t *text, int id)
 {
     if (!setting_warnings()) {
+        return 0;
+    }
+    // Brutus III : avertissement dû à la commande d'un autre joueur : pas chez nous
+    if (!brutus_interface_pour_moi()) {
         return 0;
     }
     warning *w = get_warning_slot(id, text);

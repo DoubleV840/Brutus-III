@@ -159,3 +159,13 @@ void map_image_load_state_legacy(buffer *buf)
 {
     map_grid_load_state_u16_to_u32(images.items, buf);
 }
+
+// Brutus III : copies de secours utilisées par l'annulation, pour que game/undo.c garde
+// celles de la simulation à part de celles de l'aperçu du joueur local.
+void *map_image_brutus_secours(int index, size_t *taille)
+{
+    switch (index) {
+        case 0: *taille = sizeof(images_backup.items); return images_backup.items;
+        default: *taille = 0; return 0;
+    }
+}

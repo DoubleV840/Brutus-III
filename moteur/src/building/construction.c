@@ -42,6 +42,8 @@
 #include "map/water_supply.h"
 #include "scenario/allowed_building.h"
 #include "scenario/map.h"
+#include "map/routing_data.h" // Brutus III
+#include "multijoueur/simulation.h" // Brutus III
 
 #include <string.h> // Brutus III : memcpy
 
@@ -754,6 +756,10 @@ int building_construction_in_progress(void)
     return data.in_progress;
 }
 
+static void brutus_routage_sauver(void); // Brutus III
+static void brutus_apercu_retire_hors_carte(void); // Brutus III
+static int brutus_apercu_suspension_en_cours; // Brutus III
+
 // Brutus III : coordonnées brutes du glisser (avant décalage d'orientation), pour les commandes
 static struct {
     int x_start;
@@ -776,6 +782,9 @@ void building_construction_start(int x, int y, int grid_offset)
 
     if (game_undo_start_build(data.type)) {
         data.in_progress = 1;
+        if (!brutus_simulation_en_cours()) {
+            brutus_routage_sauver(); // Brutus III : aperçu du joueur local (voir plus bas)
+        }
         int can_start = 1;
         switch (data.type) {
             case BUILDING_ROAD:
@@ -858,6 +867,7 @@ void building_construction_cancel(void)
     if (data.in_progress && building_construction_is_updatable()) {
         game_undo_restore_building_state();
         game_undo_restore_map(1);
+        brutus_apercu_retire_hors_carte(); // Brutus III
         data.in_progress = 0;
         data.cost_preview = 0;
     } else {
@@ -1526,6 +1536,7 @@ void building_construction_brutus_retirer_apercu(void)
     if (data.in_progress && building_construction_is_updatable()) {
         game_undo_restore_building_state();
         game_undo_restore_map(1);
+        brutus_apercu_retire_hors_carte(); // Brutus III
     }
     data.in_progress = 0;
     data.cost_preview = 0;
@@ -1555,6 +1566,95 @@ void building_construction_brutus_relancer_apercu(void)
     if (data.in_progress) {
         building_construction_update(x_end, y_end, map_grid_offset(x_end, y_end));
     }
+}
+
+// Brutus III : l'aperçu du joueur local est retiré de la carte pendant la simulation
+// (multijoueur/simulation.c), puis remis à partir des mêmes points de départ et d'arrivée.
+static int brutus_apercu_suspendu;
+
+// Grilles de routage au début de l'aperçu : l'aperçu des murs, routes, aqueducs… les recalcule
+// avec les tuiles provisoires (map_routing_update_land/walls), la copie de secours de l'annulation
+// ne les contient pas. Elles sont remises telles quelles avant la simulation.
+static struct {
+    int valide;
+    int8_t terrain_land_citizen[GRID_SIZE * GRID_SIZE];
+    int8_t terrain_land_noncitizen[GRID_SIZE * GRID_SIZE];
+    int8_t terrain_water[GRID_SIZE * GRID_SIZE];
+    int8_t terrain_walls[GRID_SIZE * GRID_SIZE];
+} brutus_routage;
+
+static void brutus_routage_sauver(void)
+{
+    memcpy(brutus_routage.terrain_land_citizen, terrain_land_citizen.items, sizeof(brutus_routage.terrain_land_citizen));
+    memcpy(brutus_routage.terrain_land_noncitizen, terrain_land_noncitizen.items,
+        sizeof(brutus_routage.terrain_land_noncitizen));
+    memcpy(brutus_routage.terrain_water, terrain_water.items, sizeof(brutus_routage.terrain_water));
+    memcpy(brutus_routage.terrain_walls, terrain_walls.items, sizeof(brutus_routage.terrain_walls));
+    brutus_routage.valide = 1;
+}
+
+static void brutus_routage_restaurer(void)
+{
+    if (!brutus_routage.valide) {
+        return;
+    }
+    brutus_routage.valide = 0;
+    memcpy(terrain_land_citizen.items, brutus_routage.terrain_land_citizen, sizeof(brutus_routage.terrain_land_citizen));
+    memcpy(terrain_land_noncitizen.items, brutus_routage.terrain_land_noncitizen,
+        sizeof(brutus_routage.terrain_land_noncitizen));
+    memcpy(terrain_water.items, brutus_routage.terrain_water, sizeof(brutus_routage.terrain_water));
+    memcpy(terrain_walls.items, brutus_routage.terrain_walls, sizeof(brutus_routage.terrain_walls));
+}
+
+// Aperçu du joueur local retiré (annulation, fin du glisser, avant la simulation) : en plus du
+// terrain (game_undo_restore_map), toutes les images (restore_map_images ne remet pas celles des
+// bâtiments, que l'aperçu des murs et des routes recalcule) et les grilles de routage. Hors
+// simulation seulement : pendant une commande, ces copies ne sont pas celles de l'aperçu.
+static void brutus_apercu_retire_hors_carte(void)
+{
+    if (brutus_simulation_en_cours() && !brutus_apercu_suspension_en_cours) {
+        return;
+    }
+    map_image_restore();
+    brutus_routage_restaurer();
+}
+
+void building_construction_brutus_suspendre_apercu(void)
+{
+    // Marques « en construction » et « supprimé » : glisser et fantôme de démolition.
+    map_property_clear_constructing_and_deleted();
+    if (!data.in_progress) {
+        return;
+    }
+    if (building_construction_is_updatable()) {
+        game_undo_restore_building_state();
+        game_undo_restore_map(1);
+        brutus_apercu_suspension_en_cours = 1;
+        brutus_apercu_retire_hors_carte();
+        brutus_apercu_suspension_en_cours = 0;
+    }
+    data.in_progress = 0;
+    brutus_apercu_suspendu = 1;
+}
+
+int building_construction_brutus_apercu_actif(void)
+{
+    return data.in_progress || brutus_apercu_suspendu;
+}
+
+void building_construction_brutus_reprendre_apercu(void)
+{
+    if (!brutus_apercu_suspendu) {
+        return;
+    }
+    brutus_apercu_suspendu = 0;
+    // Le type a pu être effacé pendant la simulation (dernier arc de triomphe posé…).
+    if (data.type == BUILDING_NONE) {
+        data.cost_preview = 0;
+        return;
+    }
+    data.in_progress = 1;
+    building_construction_brutus_relancer_apercu();
 }
 
 int building_construction_draw_as_constructing(void)

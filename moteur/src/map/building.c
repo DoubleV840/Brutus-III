@@ -206,3 +206,15 @@ void map_building_get_health(const building *b, int grid_offset, int *current, i
     *current = current_hp;
     *max = max_hp;
 }
+
+// Brutus III : copies de secours utilisées par l'annulation, pour que game/undo.c garde
+// celles de la simulation à part de celles de l'aperçu du joueur local.
+void *map_building_brutus_secours(int index, size_t *taille)
+{
+    switch (index) {
+        case 0: *taille = sizeof(buildings_grid_backup.items); return buildings_grid_backup.items;
+        case 1: *taille = sizeof(damage_grid_backup.items); return damage_grid_backup.items;
+        case 2: *taille = sizeof(rubble_info_grid_backup.items); return rubble_info_grid_backup.items;
+        default: *taille = 0; return 0;
+    }
+}
