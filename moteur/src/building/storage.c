@@ -716,7 +716,7 @@ void building_storage_load_state(buffer *buf, int version)
 // Brutus III : ordre de dépôt remis en état (ressource par défaut, source et destination qui
 // n'acceptent pas la ressource retirées), comme le faisait l'ouverture de la fenêtre du dépôt
 // (window/building/depot.c). Appelé par la commande depot-ordre (ressource).
-static int brutus_stockage_valide_pour(unsigned int id, int resource)
+int building_depot_brutus_stockage_valide(unsigned int id, int resource)
 {
     if (!id || id >= (unsigned int) building_count()) {
         return 0;
@@ -737,10 +737,10 @@ void building_depot_brutus_normaliser_ordre(building *b)
     if (!o->resource_type) {
         o->resource_type = RESOURCE_MIN_FOOD;
     }
-    if (!brutus_stockage_valide_pour(o->src_storage_id, o->resource_type)) {
+    if (!building_depot_brutus_stockage_valide(o->src_storage_id, o->resource_type)) {
         o->src_storage_id = 0;
     }
-    if (!brutus_stockage_valide_pour(o->dst_storage_id, o->resource_type)) {
+    if (!building_depot_brutus_stockage_valide(o->dst_storage_id, o->resource_type)) {
         o->dst_storage_id = 0;
     }
 }

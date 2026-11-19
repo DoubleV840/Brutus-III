@@ -500,13 +500,29 @@ int game_cheat_brutus_executer(int numero, const int32_t *args)
     return 1;
 }
 
-// Brutus III : effets des triches hors sauvegarde : remis à zéro à chaque chargement
-void game_cheat_brutus_partie_chargee(void)
+// Brutus III : effets durables des triches, écrits dans l'en-tête de partie (multijoueur/entete.c)
+// pour suivre les sauvegardes et les resynchronisations. 0 légions, 1 consommation, 2 invasions,
+// 3 marchés.
+int game_cheat_brutus_effet(int numero)
 {
-    data.extra_legions_unlocked = 0;
-    data.disabled_legions_consumption = 0;
-    data.disabled_invasions = 0;
-    data.filled_markets = 0;
+    switch (numero) {
+        case 0: return data.extra_legions_unlocked;
+        case 1: return data.disabled_legions_consumption;
+        case 2: return data.disabled_invasions;
+        case 3: return data.filled_markets;
+        default: return 0;
+    }
+}
+
+void game_cheat_brutus_definir_effet(int numero, int valeur)
+{
+    switch (numero) {
+        case 0: data.extra_legions_unlocked = valeur; break;
+        case 1: data.disabled_legions_consumption = valeur; break;
+        case 2: data.disabled_invasions = valeur; break;
+        case 3: data.filled_markets = valeur; break;
+        default: break;
+    }
 }
 int game_cheat_extra_legions(void)
 {

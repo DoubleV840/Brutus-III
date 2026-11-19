@@ -14,7 +14,6 @@
 #include "graphics/window.h"
 #include "input/input.h"
 #include "window/advisors.h"
-#include "city/data_private.h" // Brutus III
 #include "multijoueur/commande.h" // Brutus III
 
 static void button_increase_amount(const generic_button *button);
@@ -26,8 +25,7 @@ static int montant;
 
 static void fixer_montant(int valeur)
 {
-    int maximum = city_emperor_personal_savings() - city_data.games.bet_amount;
-    montant = valeur < 0 ? 0 : (valeur > maximum ? (maximum > 0 ? maximum : 0) : valeur);
+    montant = city_emperor_brutus_don_borne(valeur);
 }
 static void button_cancel(const generic_button *button);
 static void arrow_button_amount(int is_down, int param2);
@@ -79,7 +77,7 @@ static void draw_background(void)
     arrow_buttons[0].x_offset = button_start;
     arrow_buttons[1].x_offset = arrow_buttons[0].x_offset + arrow_buttons[0].size;
 
-    text_draw_number(montant, '@', " ", button_start + 76, 248, FONT_NORMAL_WHITE, 0);
+    text_draw_number(montant, '@', " ", button_start + 76, 248, FONT_NORMAL_WHITE, 0); // Brutus III
 
     lang_text_draw_centered(13, 4, 336, 288, 160, FONT_NORMAL_BLACK);
     lang_text_draw_centered(52, 18, 144, 288, 160, FONT_NORMAL_BLACK);

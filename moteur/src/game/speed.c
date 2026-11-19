@@ -80,7 +80,8 @@ int game_speed_get_elapsed_ticks(void)
             millis_per_tick = MILLIS_PER_TICK_PER_SPEED[7]; // 70%, nice speed for flag animations
             break;
     }
-    if (building_construction_in_progress()) {
+    // Brutus III : aussi pendant la simulation, où l'aperçu est retiré (multijoueur/simulation.c)
+    if (building_construction_brutus_apercu_actif()) {
         return 0;
     }
     if (scroll_in_progress() && !scroll_is_smooth()) {

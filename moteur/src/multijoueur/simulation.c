@@ -85,6 +85,8 @@ int brutus_ticks_externes_en_attente(void)
 
 void brutus_simulation_image(void)
 {
+    // Messages publiés hors tick et hors commande (interface, chargement) : affichés maintenant.
+    city_message_brutus_afficher();
     if (brutus_multijoueur_actif()) {
         // Le lockstep décide : ni l'écran, ni la vitesse locale, ni la pause locale.
         int n = etat.ticks_externes;
@@ -96,15 +98,25 @@ void brutus_simulation_image(void)
         return;
     }
     // Solo : les commandes de l'interface sont appliquées dès l'image suivante, avant le prochain
-    // tick (même en pause). Elles portent le numéro de ce tick.
-    if (brutus_commandes_en_attente()) {
-        brutus_simulation_debut();
+    // tick (même en pause). Elles portent le numéro de ce tick. Puis les ticks selon l'horloge et
+    // l'écran, comme dans le jeu d'origine (calculés après les commandes, qui peuvent ouvrir une
+    // fenêtre). Un seul passage dans la simulation par image, et aucun s'il n'y a rien à faire.
+    int en_attente = brutus_commandes_en_attente();
+    int n = 0;
+    if (!en_attente) {
+        n = game_speed_get_elapsed_ticks();
+        if (!n) {
+            return;
+        }
+    }
+    brutus_simulation_debut();
+    if (en_attente) {
         brutus_commandes_appliquer(brutus_tick_absolu());
         city_message_brutus_afficher();
-        brutus_simulation_fin();
+        n = game_speed_get_elapsed_ticks();
     }
-    // Puis les ticks selon l'horloge et l'écran, comme dans le jeu d'origine.
-    brutus_avancer_ticks(game_speed_get_elapsed_ticks());
+    brutus_avancer_ticks(n);
+    brutus_simulation_fin();
 }
 
 int brutus_resynchroniser(const char *sauvegarde)

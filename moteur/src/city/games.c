@@ -216,8 +216,12 @@ static void imperial_games_start(void)
 // Brutus III : mêmes conditions que la fenêtre des jeux (window/hold_games.c), pour la commande jeux
 int city_games_brutus_possible(int game_id)
 {
+    // Jeux proposés par la fenêtre : 1 à MAX_GAMES (vérifié avant la recherche dans ALL_GAMES)
+    if (game_id < 1 || game_id > MAX_GAMES) {
+        return 0;
+    }
     games_type *game = city_games_get_game_type(game_id);
-    if (!game || game_id <= 0 || city_data.games.months_to_go > 0 || city_data.games.games_is_active) {
+    if (!game || city_data.games.months_to_go > 0 || city_data.games.games_is_active) {
         return 0;
     }
     if (!building_count_active(game->building_id_required) ||

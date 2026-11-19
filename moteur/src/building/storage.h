@@ -281,6 +281,9 @@ int building_storage_get_permission(building_storage_permission_states p, buildi
 void building_storage_set_permission(building_storage_permission_states p, building *b, int enable);
 building_storage_permission_states building_storage_get_permission_from_building_type(building_type type);
 
+/** Brutus III : ce bâtiment peut servir de source ou de destination d'un dépôt pour cette ressource. */
+int building_depot_brutus_stockage_valide(unsigned int id, int resource);
+
 /** Brutus III : remet en état l'ordre d'un dépôt (commande depot-ordre). */
 void building_depot_brutus_normaliser_ordre(building *b);
 

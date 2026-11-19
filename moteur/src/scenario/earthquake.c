@@ -223,6 +223,7 @@ void scenario_earthquake_process(void)
     }
     // --- Custom earthquake ---
     if (scenario.earthquake.severity == EARTHQUAKE_CUSTOM) {
+        // Brutus III : custom_delay est passé au niveau du fichier (voir plus haut)
         if (data.state == EVENT_NOT_STARTED) { // Start event
             if (game_time_year() == data.game_year && game_time_month() == data.month) {
                 data.state = EVENT_IN_PROGRESS;

@@ -41,6 +41,8 @@ void game_cheat_reset_markets_filled(void);
 #define BRUTUS_TRICHE_VICTOIRE 101
 #define BRUTUS_TRICHE_INVASION 102
 int game_cheat_brutus_executer(int numero, const int32_t *args);
-void game_cheat_brutus_partie_chargee(void);
+#define BRUTUS_TRICHE_EFFETS 4
+int game_cheat_brutus_effet(int numero);
+void game_cheat_brutus_definir_effet(int numero, int valeur);
 
 #endif // GAME_CHEATS_H

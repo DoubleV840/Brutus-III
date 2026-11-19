@@ -221,7 +221,7 @@ void game_tick_run(void)
     scenario_gladiator_revolt_process();
     scenario_emperor_change_process();
     city_victory_check();
-    brutus_simulation_fin();
+    brutus_simulation_fin(); // Brutus III
 }
 
 void game_tick_cheat_year(void)

@@ -2,6 +2,7 @@
 #include "multijoueur/entete.h"
 
 #include "core/log.h"
+#include "game/cheats.h"
 #include "game/settings.h"
 #include "multijoueur/commande.h"
 #include "multijoueur/empreinte.h"
@@ -15,6 +16,12 @@ static const char MARQUE[16] = "BRUTUS3-ENTETE1";
 
 static const char *NOMS_REGLAGES[BRUTUS_REGLAGE_NOMBRE] = {
     "brutus_difficulte", "brutus_dieux", "brutus_sauvegarde_mensuelle"
+};
+
+// Effets durables des triches (état de la partie, pas des réglages locaux : pas de copie locale)
+static const char *NOMS_TRICHES[BRUTUS_TRICHE_EFFETS] = {
+    "brutus_triche_legions", "brutus_triche_sans_consommation", "brutus_triche_sans_invasion",
+    "brutus_triche_marches_pleins"
 };
 
 static struct {
@@ -65,6 +72,9 @@ static const char *composer(void)
     }
     for (int r = 0; r < BRUTUS_REGLAGE_NOMBRE && n < TEXTE_MAX; r++) {
         n += snprintf(etat.texte + n, TEXTE_MAX - n, "%s=%d\n", NOMS_REGLAGES[r], reglage_en_vigueur(r));
+    }
+    for (int t = 0; t < BRUTUS_TRICHE_EFFETS && n < TEXTE_MAX; t++) {
+        n += snprintf(etat.texte + n, TEXTE_MAX - n, "%s=%d\n", NOMS_TRICHES[t], game_cheat_brutus_effet(t));
     }
     return etat.texte;
 }
@@ -129,9 +139,17 @@ static void garder_locaux(void)
     etat.locaux_valides = 1;
 }
 
+static void effacer_triches(void)
+{
+    for (int t = 0; t < BRUTUS_TRICHE_EFFETS; t++) {
+        game_cheat_brutus_definir_effet(t, 0);
+    }
+}
+
 void brutus_entete_restaurer_locaux(void)
 {
     etat.lu = 0;
+    effacer_triches(); // nouvelle partie ou sauvegarde sans en-tête : aucune triche active
     if (!etat.locaux_valides) {
         return;
     }
@@ -163,6 +181,7 @@ void brutus_entete_appliquer_lu(void)
             config_set(k, config_get_default_value(k));
         }
     }
+    effacer_triches();
     const char *ligne = etat.texte_lu;
     while (*ligne) {
         const char *fin = strchr(ligne, '\n');
@@ -184,6 +203,12 @@ void brutus_entete_appliquer_lu(void)
             for (int r = 0; r < BRUTUS_REGLAGE_NOMBRE && !trouve; r++) {
                 if (strcmp(NOMS_REGLAGES[r], nom) == 0) {
                     setting_brutus_definir(r, valeur);
+                    trouve = 1;
+                }
+            }
+            for (int t = 0; t < BRUTUS_TRICHE_EFFETS && !trouve; t++) {
+                if (strcmp(NOMS_TRICHES[t], nom) == 0) {
+                    game_cheat_brutus_definir_effet(t, valeur);
                     trouve = 1;
                 }
             }

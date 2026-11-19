@@ -184,7 +184,6 @@ void brutus_partie_chargee(void)
     city_message_brutus_partie_chargee();
     building_figure_brutus_partie_chargee();
     building_maintenance_brutus_partie_chargee();
-    game_cheat_brutus_partie_chargee();
     city_labor_brutus_partie_chargee();
     scenario_earthquake_brutus_partie_chargee();
     etat.repere++;
@@ -472,18 +471,6 @@ static int demande_envoyable(int id)
 
 // --- M6a : commandes restantes (docs/commandes.md) ---
 
-static int stockage_par_id(int id)
-{
-    if (id == 0) {
-        return 1; // aucun
-    }
-    if (id < 0 || id >= building_count()) {
-        return 0;
-    }
-    const building *s = building_get(id);
-    return s->state == BUILDING_STATE_IN_USE && s->storage_id > 0;
-}
-
 static int executer_depot_ordre(const int32_t *p)
 {
     building *b = batiment_en(p[0], p[1]);
@@ -491,17 +478,22 @@ static int executer_depot_ordre(const int32_t *p)
         return 0;
     }
     order *o = &b->data.depot.current_order;
+    // Comme l'ouverture de la fenêtre du dépôt le faisait : ressource par défaut (blé)
+    if (!o->resource_type) {
+        o->resource_type = RESOURCE_MIN_FOOD;
+    }
     switch (p[2]) {
         case 0: // ressource : comme set_order_resource + calculate_available_storages de l'interface
             if (!ressource_valide(p[3]) || !resource_is_storable(p[3])) {
                 return 0;
             }
             o->resource_type = p[3];
-            building_depot_brutus_normaliser_ordre(b);
-            return 1;
+            break;
         case 1:
         case 2:
-            if (!stockage_par_id(p[3]) || p[3] == b->id) {
+            // 0 = aucun ; sinon un stockage en service qui accepte la ressource de l'ordre
+            if (p[3] < 0 || (unsigned int) p[3] == b->id ||
+                (p[3] && !building_depot_brutus_stockage_valide(p[3], o->resource_type))) {
                 return 0;
             }
             if (p[2] == 1) {
@@ -515,22 +507,26 @@ static int executer_depot_ordre(const int32_t *p)
                     o->src_storage_id = 0;
                 }
             }
-            return 1;
+            break;
         case 3:
             if (p[3] < 0 || p[3] > 3) {
                 return 0;
             }
             o->condition.condition_type = p[3];
-            return 1;
+            break;
         case 4:
             if (p[3] < 0 || p[3] > 40) {
                 return 0;
             }
             o->condition.threshold = p[3];
-            return 1;
+            break;
         default:
             return 0;
     }
+    // Source ou destination qui n'acceptent plus la ressource retirées (ce que faisait aussi
+    // l'ouverture de la fenêtre)
+    building_depot_brutus_normaliser_ordre(b);
+    return 1;
 }
 
 static int executer_monnaie(const int32_t *p)
@@ -601,7 +597,9 @@ static int executer(const brutus_commande *c)
             break;
         case BRUTUS_CMD_MONUMENT_MODULE:
             // Comme add_module (window/building/culture.c) : coût puis module, si le moteur l'accepte
-            if (!(b = batiment_en(p[0], p[1])) || p[2] <= 0 || city_finance_out_of_money()) {
+            // Modules proposés par la fenêtre : 1 ou 2 (window/building/culture.c). Pas de refus
+            // pour dette : l'interface d'origine ne vérifiait pas l'argent.
+            if (!(b = batiment_en(p[0], p[1])) || (p[2] != 1 && p[2] != 2)) {
                 return 0;
             }
             if (!building_monument_add_module(b, p[2])) {
@@ -618,7 +616,8 @@ static int executer(const brutus_commande *c)
             building_stockpiling_toggle(b);
             break;
         case BRUTUS_CMD_DOCK_ROUTE:
-            if (!(b = batiment_en(p[0], p[1])) || b->type != BUILDING_DOCK || p[2] < 0 || p[2] >= 50) {
+            // route 0 à 30 : building_dock_set_can_trade_with_route fait 1 << route sur un int
+            if (!(b = batiment_en(p[0], p[1])) || b->type != BUILDING_DOCK || p[2] < 0 || p[2] > 30) {
                 return 0;
             }
             building_dock_set_can_trade_with_route(p[2], b->id, p[3] != 0);
@@ -632,7 +631,8 @@ static int executer(const brutus_commande *c)
             city_finance_process_sundry(TRADE_POLICY_COST);
             break;
         case BRUTUS_CMD_BARRAGE_PERMISSION:
-            if (!(b = batiment_en(p[0], p[1])) || !building_type_is_roadblock(b->type) || p[2] < -2 || p[2] >= 32) {
+            // permission -2 à 15 : bits d'un unsigned short (building/roadblock.c)
+            if (!(b = batiment_en(p[0], p[1])) || !building_type_is_roadblock(b->type) || p[2] < -2 || p[2] > 15) {
                 return 0;
             }
             if (p[2] == -1) {

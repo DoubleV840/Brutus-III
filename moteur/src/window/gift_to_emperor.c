@@ -30,18 +30,12 @@ static generic_button buttons[] = {
 static unsigned int focus_button_id;
 
 // Brutus III : taille du cadeau choisie dans la fenêtre, gardée ici (la partie ne change que
-// par la commande don-cesar). Même ajustement que city_emperor_init_selected_gift, sans écrire.
+// par la commande don-cesar).
 static int choix_cadeau;
 
 static void init(void)
 {
-    choix_cadeau = city_emperor_selected_gift_size();
-    if (choix_cadeau == GIFT_LAVISH && !city_emperor_can_send_gift(GIFT_LAVISH)) {
-        choix_cadeau = GIFT_GENEROUS;
-    }
-    if (choix_cadeau == GIFT_GENEROUS && !city_emperor_can_send_gift(GIFT_GENEROUS)) {
-        choix_cadeau = GIFT_MODEST;
-    }
+    choix_cadeau = city_emperor_brutus_cadeau_initial();
 }
 
 static void draw_background(void)
@@ -64,7 +58,7 @@ static void draw_background(void)
 static void draw_foreground(void)
 {
     graphics_in_dialog();
-    int current_gift = choix_cadeau;
+    int current_gift = choix_cadeau; // Brutus III
     inner_panel_draw(112, 208, 28, 5);
 
     if (city_emperor_can_send_gift(GIFT_MODEST)) {
@@ -101,7 +95,7 @@ static void draw_foreground(void)
     }
     // can give at least one type
     if (city_emperor_can_send_gift(GIFT_MODEST)) {
-        lang_text_draw_centered(52, 66 + choix_cadeau, 118, 341, 260, FONT_NORMAL_BLACK);
+        lang_text_draw_centered(52, 66 + choix_cadeau, 118, 341, 260, FONT_NORMAL_BLACK); // Brutus III
         button_border_draw(118, 336, 260, 20, focus_button_id == 4);
     }
     button_border_draw(400, 336, 160, 20, focus_button_id == 5);

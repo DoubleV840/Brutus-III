@@ -102,7 +102,7 @@ static void draw_background(void)
     graphics_in_dialog();
 
     outer_panel_draw(48, 48, 34, 20);
-    lang_text_draw_centered(58, 25 + choix.dieu, 48, 60, 544, FONT_LARGE_BLACK);
+    lang_text_draw_centered(58, 25 + choix.dieu, 48, 60, 544, FONT_LARGE_BLACK); // Brutus III : choix local
     for (int god = 0; god < MAX_GODS; god++) {
         if (god == choix.dieu) {
             button_border_draw(100 * god + 75, 91, 91, 101, 1);
@@ -114,7 +114,7 @@ static void draw_background(void)
     draw_buttons();
 
     if (!city_finance_out_of_money()) {
-        lang_text_draw_centered(58, 30 + choix.taille, 28, 322, 544, FONT_NORMAL_BLACK);
+        lang_text_draw_centered(58, 30 + choix.taille, 28, 322, 544, FONT_NORMAL_BLACK); // Brutus III
     } else {
         lang_text_draw_centered(CUSTOM_TRANSLATION, TR_OUT_OF_MONEY, 28, 322, 544, FONT_NORMAL_BLACK);
     }

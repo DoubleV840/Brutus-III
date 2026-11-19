@@ -172,8 +172,11 @@ static void init(void)
     scrollbar_init(&scrollbar, city_message_scroll_position(), data.message_count);
 }
 
+static void brutus_rafraichir(void);
+
 static void draw_background(void)
 {
+    brutus_rafraichir(); // Brutus III
     window_city_draw_all();
 
     graphics_in_dialog();
@@ -253,6 +256,7 @@ static void draw_messages(unsigned int total_messages)
 
 static void draw_foreground(void)
 {
+    brutus_rafraichir(); // Brutus III
     graphics_in_dialog();
 
     image_buttons_draw(16, 32 + BLOCK_SIZE * data.height_blocks - 42, &image_button_help, 1);
@@ -275,15 +279,21 @@ static void draw_foreground(void)
     graphics_reset_dialog();
 }
 
-static void handle_input(const mouse *m, const hotkeys *h)
+// Brutus III : lu et supprimé passent par des commandes (appliquées à l'image ou au tick suivant) ;
+// en multijoueur, de nouveaux messages arrivent même liste ouverte. La liste est refaite avant
+// tout usage (dessin et clics).
+static void brutus_rafraichir(void)
 {
-    // Brutus III : lu et supprimé passent par des commandes (appliquées à l'image ou au tick
-    // suivant) ; en multijoueur, de nouveaux messages arrivent même liste ouverte.
     if (data.version_messages != city_message_brutus_version()) {
         data.version_messages = city_message_brutus_version();
         select_messages();
         window_invalidate();
     }
+}
+
+static void handle_input(const mouse *m, const hotkeys *h)
+{
+    brutus_rafraichir();
     const mouse *m_dialog = mouse_in_dialog(m);
     unsigned int old_button_id = data.focus_button_id;
     data.focus_button_id = 0;

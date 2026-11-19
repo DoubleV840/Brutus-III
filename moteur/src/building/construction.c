@@ -1536,7 +1536,7 @@ void building_construction_brutus_retirer_apercu(void)
     if (data.in_progress && building_construction_is_updatable()) {
         game_undo_restore_building_state();
         game_undo_restore_map(1);
-        brutus_apercu_retire_hors_carte();
+        brutus_apercu_retire_hors_carte(); // Brutus III
     }
     data.in_progress = 0;
     data.cost_preview = 0;
@@ -1635,6 +1635,11 @@ void building_construction_brutus_suspendre_apercu(void)
     }
     data.in_progress = 0;
     brutus_apercu_suspendu = 1;
+}
+
+int building_construction_brutus_apercu_actif(void)
+{
+    return data.in_progress || brutus_apercu_suspendu;
 }
 
 void building_construction_brutus_reprendre_apercu(void)
