@@ -32,8 +32,16 @@ async function salonADeux() {
 async function refusAttendu(c, code, fermeture) {
   const e = await c.attendreType("erreur");
   assert.equal(e.code, code);
-  const f = await c.ferme;
-  assert.equal(f.code, fermeture);
+  assert.equal((await fermetureRecue(c)).code, fermeture);
+}
+
+/** Événement « close » du client, 5 s au plus (sinon échec clair au lieu d'un blocage). */
+async function fermetureRecue(c, delai = 5000) {
+  let minuteur;
+  const f = await Promise.race([c.ferme, new Promise((r) => { minuteur = setTimeout(() => r(null), delai); })]);
+  clearTimeout(minuteur);
+  assert.ok(f, `« close » non reçu en ${delai} ms (readyState ${c.ws.readyState} : 2 = trame de fermeture reçue, connexion TCP pas fermée)`);
+  return f;
 }
 
 /**
@@ -50,7 +58,7 @@ async function barriere(emetteur, ...recepteurs) {
     const liste = [];
     for (;;) {
       const m = await c.attendre();
-      if (m.type === "binaire" && new TextDecoder().decode(m.donnees) === temoin) break;
+      if (m.binaire && new TextDecoder().decode(m.donnees) === temoin) break;
       liste.push(m);
     }
     avant.push(liste);
@@ -431,13 +439,17 @@ describe("relais Brutus III", () => {
     const y = client(ClientRelais.rejoindre(relais.base, code, { jeton }));
     await Promise.all([x.bienvenue(), y.bienvenue()]);
     await refusAttendu(invite, "remplace", 4005);
-    const premiere = await Promise.race([x.ferme.then(() => x), y.ferme.then(() => y)]);
+    // L'une des deux nouvelles connexions a été remplacée par l'autre.
+    const premiere = await Promise.any([x, y].map((c) => c.attendreType("erreur").then((e) => {
+      assert.equal(e.code, "remplace");
+      return c;
+    })));
     const restante = premiere === x ? y : x;
-    assert.equal(premiere.fermeture.code, 4005);
+    assert.equal((await fermetureRecue(premiere)).code, 4005);
     // Un tour de l'hôte n'arrive qu'une fois au joueur 1, sur la connexion restante.
     hote.envoyer(TYPE.TOUR, 5);
     const [avant] = await barriere(hote, restante);
-    assert.deepEqual(avant.filter((m) => m.type === "binaire").map((m) => m.tick), [5]);
+    assert.deepEqual(avant.filter((m) => m.binaire).map((m) => m.tick), [5]);
     assert.equal(restante.fermeture, null);
   });
 

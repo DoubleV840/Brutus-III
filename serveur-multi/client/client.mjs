@@ -164,7 +164,9 @@ export class ClientRelais {
     this.ws.binaryType = "arraybuffer";
     this.ws.addEventListener("message", (e) => {
       if (typeof e.data !== "string") {
-        this.pousser({ type: "binaire", ...decoder(e.data) });
+        // `type` = type numérique du message (TYPE.TOUR…) ; `binaire` le distingue du JSON.
+        // (Avant : { type: "binaire", ...decoder() } → le type numérique écrasait "binaire".)
+        this.pousser({ ...decoder(e.data), binaire: true });
       } else if (e.data === "pong") {
         this.pousser({ type: "pong" }); // réponse du runtime au texte « ping », pas du JSON
       } else {
@@ -210,8 +212,9 @@ export class ClientRelais {
     });
   }
 
+  /** `type` : type JSON (« bienvenue »…), ou « binaire » pour tout message binaire. */
   attendreType(type, delai) {
-    return this.attendre((m) => m.type === type, delai);
+    return this.attendre((m) => (type === "binaire" ? m.binaire === true : !m.binaire && m.type === type), delai);
   }
 
   /** Message « bienvenue » ; garde code, joueur et jeton. */

@@ -24,6 +24,19 @@ describe("protocole (sans port)", () => {
     assert.equal(client.TAILLE_MAX_MESSAGE, protocole.TAILLE_MAX_MESSAGE);
   });
 
+  test("client : un message binaire reste « binaire » et garde son type numérique", async () => {
+    // Bogue corrigé : { type: "binaire", ...decoder() } → le type numérique écrasait "binaire".
+    const c = Object.create(client.ClientRelais.prototype);
+    c.file = [];
+    c.attentes = [];
+    c.pousser({ type: "joueur-arrive", joueur: 1 });
+    c.pousser({ ...client.decoder(client.encoder(client.TYPE.TOUR, 7)), binaire: true });
+    const m = await c.attendreType("binaire", 50);
+    assert.equal(m.type, client.TYPE.TOUR);
+    assert.equal(m.tick, 7);
+    assert.equal((await c.attendreType("joueur-arrive", 50)).joueur, 1);
+  });
+
   test("origines", () => {
     for (const o of [null, "https://brutus.ivwi.fr", "http://localhost", "http://localhost:8000", "https://127.0.0.1:5173"]) {
       assert.ok(protocole.origineAcceptee(o), String(o));
