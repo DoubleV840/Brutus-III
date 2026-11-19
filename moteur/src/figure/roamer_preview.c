@@ -10,6 +10,7 @@
 #include "map/building.h"
 #include "map/grid.h"
 #include "map/road_access.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #include <string.h>
 
@@ -204,7 +205,9 @@ static int determine_road_access(int x, int y, int size, building_type type, map
 
 void figure_roamer_preview_create(building_type b_type, int x, int y)
 {
-    if (!config_get(CONFIG_UI_SHOW_ROAMING_PATH)) {
+    // Brutus III : la figure d'essai passe par la grille des figures et les chemins partagés
+    // (map_figure_add, figure_route_add) : en multijoueur, pas d'aperçu des parcours.
+    if (!config_get(CONFIG_UI_SHOW_ROAMING_PATH) || brutus_multijoueur_actif()) {
         figure_roamer_preview_reset_building_types();
         return;
     }

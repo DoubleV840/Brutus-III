@@ -15,6 +15,7 @@
 #include "graphics/text.h"
 #include "window/hold_festival.h"
 #include "window/epithets.h"
+#include "multijoueur/commande.h" // Brutus III
 
 static void button_hold_festival(const generic_button *button);
 static void button_epithets(const generic_button *button);
@@ -170,7 +171,9 @@ static int draw_background(void)
     // oracles
     draw_oracle_row();
 
-    city_gods_calculate_least_happy();
+    if (!brutus_multijoueur_actif()) { // Brutus III : écrit dans la partie (voir window/advisors.c)
+        city_gods_calculate_least_happy();
+    }
 
     lang_text_draw_multiline(59, 21 + get_religion_advice(), 52, 208, 540, FONT_NORMAL_BLACK);
 

@@ -101,7 +101,9 @@ static void draw_request(int index, const scenario_request *request)
 
 static int draw_background(void)
 {
-    city_emperor_calculate_gift_costs();
+    if (!brutus_multijoueur_actif()) { // Brutus III : écrit dans la partie (voir window/advisors.c)
+        city_emperor_calculate_gift_costs();
+    }
 
     outer_panel_draw(0, 0, 40, ADVISOR_HEIGHT);
     image_draw(image_group(GROUP_ADVISOR_ICONS) + 2, 10, 10, COLOR_MASK_NONE, SCALE_NONE);
@@ -320,8 +322,10 @@ static void get_tooltip_text(advisor_tooltip_result *r)
 
 const advisor_window_type *window_advisor_imperial(void)
 {
-    city_resource_calculate_warehouse_stocks();
-    city_resource_calculate_food_stocks_and_supply_wheat();
+    if (!brutus_multijoueur_actif()) { // Brutus III : écrit dans la partie (voir window/advisors.c)
+        city_resource_calculate_warehouse_stocks();
+        city_resource_calculate_food_stocks_and_supply_wheat();
+    }
     static const advisor_window_type window = {
         draw_background,
         draw_foreground,

@@ -682,3 +682,13 @@ void map_terrain_load_state(buffer *buf, int expanded_terrain_data, buffer *imag
     }
     determine_original_trees(images, legacy_image_buffer);
 }
+
+// Brutus III : copies de secours utilisées par l'annulation, pour que game/undo.c garde
+// celles de la simulation à part de celles de l'aperçu du joueur local.
+void *map_terrain_brutus_secours(int index, size_t *taille)
+{
+    switch (index) {
+        case 0: *taille = sizeof(terrain_grid_backup.items); return terrain_grid_backup.items;
+        default: *taille = 0; return 0;
+    }
+}

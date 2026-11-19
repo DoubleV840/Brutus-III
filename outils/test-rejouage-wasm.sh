@@ -57,7 +57,24 @@ for n in 1 2; do
   node "$RACINE/outils/verifier-fin-rejouage.mjs" "$SORTIE/empreintes-wasm-$n.txt"
 done
 
+# M6a : multijoueur avec interface ouverte (conseillers, fiches, glissers…), sous wasm aussi
+echo "== Rejouage wasm, interface ouverte en multijoueur"
+debut=$(date +%s)
+if ! node "$JS" --rejouer "/hote$DEPART" "/hote$SORTIE/journal.txt" \
+    --empreintes "/hote$SORTIE/empreintes-wasm-interface.txt" --ticks "$TICKS" --tous-les "$TOUS_LES" \
+    --interface-test "/hote$JEU" > "$SORTIE/rejouage-wasm-interface.log" 2>&1; then
+  echo "ERREUR : le rejouage wasm avec interface a échoué. Fin du journal :" >&2
+  tail -20 "$SORTIE/rejouage-wasm-interface.log" >&2
+  exit 1
+fi
+echo "   durée : $(( $(date +%s) - debut )) s ; $(grep '^# interface' "$SORTIE/empreintes-wasm-interface.txt" | sed 's/^# //')"
+node "$RACINE/outils/verifier-fin-rejouage.mjs" "$SORTIE/empreintes-wasm-interface.txt"
+
 code=0
+if ! node "$RACINE/outils/verifier-fin-rejouage.mjs" --comparer "$SORTIE/empreintes-wasm-1.txt" \
+    "$SORTIE/empreintes-wasm-interface.txt" "interface ouverte (wasm)"; then
+  code=1
+fi
 if cmp -s "$SORTIE/empreintes-wasm-1.txt" "$SORTIE/empreintes-wasm-2.txt"; then
   echo "OK : wasm ↔ wasm identiques ($(grep -vc '^#' "$SORTIE/empreintes-wasm-1.txt") empreintes)."
 else

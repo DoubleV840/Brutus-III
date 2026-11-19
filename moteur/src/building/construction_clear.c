@@ -42,6 +42,24 @@ static struct {
     int repairable_buildings[1000];
 } confirm;
 
+// Brutus III : zone de la confirmation affichée chez le joueur local (fort, pont, monument,
+// réparation). Écrite seulement quand la fenêtre s'ouvre chez lui : la commande d'un autre
+// joueur exécutée entre-temps ne la change pas.
+static struct {
+    int x_start;
+    int y_start;
+    int x_end;
+    int y_end;
+} confirmation_locale;
+
+static void noter_confirmation_locale(void)
+{
+    confirmation_locale.x_start = confirm.x_start;
+    confirmation_locale.y_start = confirm.y_start;
+    confirmation_locale.x_end = confirm.x_end;
+    confirmation_locale.y_end = confirm.y_end;
+}
+
 static building *get_deletable_building(int grid_offset)
 {
     int building_id = map_building_at(grid_offset);
@@ -298,7 +316,8 @@ static unsigned int clear_land_confirmed(int x_start, int y_start, int x_end, in
 // Brutus III : la réponse à la confirmation devient une commande (appliquée au tick suivant)
 static void envoyer_confirmation(int quoi, int accepted)
 {
-    int32_t p[6] = { confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end, quoi, accepted == 1 };
+    int32_t p[6] = { confirmation_locale.x_start, confirmation_locale.y_start,
+        confirmation_locale.x_end, confirmation_locale.y_end, quoi, accepted == 1 };
     brutus_commande_envoyer(BRUTUS_CMD_DEMOLIR_CONFIRME, 6, p);
 }
 
@@ -400,14 +419,26 @@ unsigned int building_construction_clear_land(int x_start, int y_start, int x_en
     confirm.y_start = y_start;
     confirm.x_end = x_end;
     confirm.y_end = y_end;
+    // Brutus III : la confirmation ne s'ouvre que chez le joueur qui a envoyé la commande ;
+    // sa réponse revient par la commande demolir-confirme. Le résultat est le même chez tous.
+    int pour_moi = brutus_interface_pour_moi();
+    if (pour_moi && (ask_confirm_fort || ask_confirm_monument || ask_confirm_bridge)) {
+        noter_confirmation_locale();
+    }
     if (ask_confirm_fort) {
-        window_popup_dialog_show(POPUP_DIALOG_DELETE_FORT, confirm_delete_fort, 2);
+        if (pour_moi) {
+            window_popup_dialog_show(POPUP_DIALOG_DELETE_FORT, confirm_delete_fort, 2);
+        }
         return BUILDING_CONSTRUCTION_CLEAR_LAND_INTERRUPTED;
     } else if (ask_confirm_monument) {
-        window_popup_dialog_show_confirmation(translation_for(TR_CONFIRM_DELETE_MONUMENT), 0, 0, confirm_delete_monument);
+        if (pour_moi) {
+            window_popup_dialog_show_confirmation(translation_for(TR_CONFIRM_DELETE_MONUMENT), 0, 0, confirm_delete_monument);
+        }
         return BUILDING_CONSTRUCTION_CLEAR_LAND_INTERRUPTED;
     } else if (ask_confirm_bridge) {
-        window_popup_dialog_show(POPUP_DIALOG_DELETE_BRIDGE, confirm_delete_bridge, 2);
+        if (pour_moi) {
+            window_popup_dialog_show(POPUP_DIALOG_DELETE_BRIDGE, confirm_delete_bridge, 2);
+        }
         return BUILDING_CONSTRUCTION_CLEAR_LAND_INTERRUPTED;
     } else {
         return clear_land_confirmed(x_start, y_start, x_end, y_end);
@@ -487,7 +518,8 @@ static void confirm_repair_buildings(int accepted, int checked)
     }
     if (accepted == 1) {
         // Brutus III : la réparation passe par la file de commandes (BRUTUS_CMD_REPARER_CONFIRME)
-        brutus_commande_4(BRUTUS_CMD_REPARER_CONFIRME, confirm.x_start, confirm.y_start, confirm.x_end, confirm.y_end);
+        brutus_commande_4(BRUTUS_CMD_REPARER_CONFIRME, confirmation_locale.x_start, confirmation_locale.y_start,
+            confirmation_locale.x_end, confirmation_locale.y_end);
     }
 }
 
@@ -537,7 +569,11 @@ int building_construction_repair_land(int measure_only, int x_start, int y_start
         big_buffer[offset] = '\0';
         const uint8_t *pointer = big_buffer;
 
-        window_popup_dialog_show_confirmation(custom_text, pointer, 0, confirm_repair_buildings);
+        // Brutus III : seulement chez le joueur qui a envoyé la commande construire (réparation)
+        if (brutus_interface_pour_moi()) {
+            noter_confirmation_locale();
+            window_popup_dialog_show_confirmation(custom_text, pointer, 0, confirm_repair_buildings);
+        }
         return repair_cost;
     } else {
         return 0;// No buildings to repair, return 0 cost

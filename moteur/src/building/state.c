@@ -72,7 +72,9 @@ static void write_type_data(buffer *buf, const building *b)
         buffer_write_u8(buf, b->data.house.health);
         buffer_write_u8(buf, b->data.house.num_gods);
         buffer_write_u8(buf, b->data.house.devolve_delay);
-        buffer_write_u16(buf, b->data.house.evolve_text_id);
+        // Brutus III : texte « pourquoi la maison n'évolue pas », écrit aussi par la fiche
+        // ouverte (interface) et jamais relu par la simulation -> hors empreinte
+        buffer_write_u16(buf, brutus_empreinte_en_cours() ? 0 : b->data.house.evolve_text_id);
         // has to be u16 since custom translation keys are stored in there too
     } else if (b->type == BUILDING_CARAVANSERAI || b->type == BUILDING_LARGE_TEMPLE_CERES ||
         b->type == BUILDING_LARGE_TEMPLE_VENUS) {

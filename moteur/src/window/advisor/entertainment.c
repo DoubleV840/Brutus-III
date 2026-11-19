@@ -19,6 +19,7 @@
 #include "graphics/window.h"
 #include "translation/translation.h"
 #include "window/hold_games.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #define ADVISOR_HEIGHT 27
 
@@ -97,8 +98,10 @@ static void draw_games_info(void)
 
 static int draw_background(void)
 {
-    city_gods_calculate_moods(0);
-    city_culture_calculate();
+    if (!brutus_multijoueur_actif()) { // Brutus III : écrit dans la partie (voir window/advisors.c)
+        city_gods_calculate_moods(0);
+        city_culture_calculate();
+    }
 
     outer_panel_draw(0, 0, 40, ADVISOR_HEIGHT);
     image_draw(image_group(GROUP_ADVISOR_ICONS) + 8, 10, 10, COLOR_MASK_NONE, SCALE_NONE);

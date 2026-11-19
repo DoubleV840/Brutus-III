@@ -50,6 +50,7 @@
 #include "map/tiles.h"
 #include "map/bridge.h" // Brutus III
 #include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/simulation.h" // Brutus III
 #include "multijoueur/empreinte.h" // Brutus III
 #include "scenario/allowed_building.h"
 #include "scenario/criteria.h"
@@ -1084,6 +1085,9 @@ static void savegame_load_from_state(savegame_state *state, savegame_version_t v
 
 static void savegame_save_to_state(savegame_state *state)
 {
+    // Brutus III : sauvegarde et empreinte voient la partie sans l'aperçu du joueur local, avec
+    // les copies de secours (annulation) de la simulation (multijoueur/simulation.h).
+    brutus_simulation_debut();
     buffer_brutus_zero_init(1); // Brutus III : tampons d'écriture remis à zéro (octets sautés déterministes)
     buffer_write_i32(state->file_version, SAVE_GAME_CURRENT_VERSION);
     buffer_write_u32(state->resource_version, RESOURCE_CURRENT_VERSION);
@@ -1177,6 +1181,7 @@ static void savegame_save_to_state(savegame_state *state)
     city_finance_ledger_save_state(state->finance_ledger);
     building_monument_save_stages(state->monument_stages);
     buffer_brutus_zero_init(0); // Brutus III
+    brutus_simulation_fin(); // Brutus III
 }
 
 // Brutus III : empreinte de l'état (voir multijoueur/empreinte.h et docs/determinisme.md).

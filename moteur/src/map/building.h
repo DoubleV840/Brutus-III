@@ -1,6 +1,8 @@
 #ifndef MAP_BUILDING_H
 #define MAP_BUILDING_H
 
+#include <stddef.h> // Brutus III
+
 #include "building/building.h"
 #include "building/type.h"
 #include "core/buffer.h"
@@ -60,5 +62,8 @@ void map_building_save_state(buffer *buildings, buffer *damage, buffer *rubble);
 void map_building_load_state(buffer *buildings, buffer *damage, buffer *rubble, savegame_version_t version);
 
 int map_building_is_reservoir(int x, int y);
+
+/** Brutus III : copie de secours n° index (0, 1…) et sa taille ; 0 au-delà. */
+void *map_building_brutus_secours(int index, size_t *taille);
 
 #endif // MAP_BUILDING_H

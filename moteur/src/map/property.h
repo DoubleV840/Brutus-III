@@ -1,6 +1,8 @@
 #ifndef MAP_PROPERTY_H
 #define MAP_PROPERTY_H
 
+#include <stddef.h> // Brutus III
+
 #include "core/buffer.h"
 
 enum {
@@ -73,5 +75,8 @@ void map_property_restore(void);
 void map_property_save_state(buffer *bitfields, buffer *edge);
 void map_property_load_state(buffer *bitfields, buffer *edge);
 void map_property_load_state_u8(buffer *bitfields, buffer *edge);
+
+/** Brutus III : copie de secours n° index (0, 1…) et sa taille ; 0 au-delà. */
+void *map_property_brutus_secours(int index, size_t *taille);
 
 #endif // MAP_PROPERTY_H

@@ -325,3 +325,14 @@ void map_property_load_state_u8(buffer *bitfields, buffer *edge)
     }
     map_grid_load_state_u8(edge_grid.items, edge);
 }
+
+// Brutus III : copies de secours utilisées par l'annulation, pour que game/undo.c garde
+// celles de la simulation à part de celles de l'aperçu du joueur local.
+void *map_property_brutus_secours(int index, size_t *taille)
+{
+    switch (index) {
+        case 0: *taille = sizeof(bitfields_backup.items); return bitfields_backup.items;
+        case 1: *taille = sizeof(edge_backup.items); return edge_backup.items;
+        default: *taille = 0; return 0;
+    }
+}

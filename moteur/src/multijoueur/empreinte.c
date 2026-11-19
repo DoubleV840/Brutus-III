@@ -2,6 +2,7 @@
 #include "multijoueur/empreinte.h"
 
 #include "game/file_io.h"
+#include "multijoueur/simulation.h"
 
 static int en_cours;
 
@@ -27,5 +28,9 @@ void brutus_empreinte_marquer(int valeur)
 
 uint64_t brutus_empreinte_partie(void)
 {
-    return game_file_io_brutus_empreinte();
+    // M6a : sans l'aperçu du joueur local, avec les copies de secours de la simulation
+    brutus_simulation_debut();
+    uint64_t h = game_file_io_brutus_empreinte();
+    brutus_simulation_fin();
+    return h;
 }

@@ -262,4 +262,17 @@ void city_message_load_state(buffer *messages, buffer *extra, buffer *counts, bu
 
 void city_message_clear_old_messages(void);
 
+/** Brutus III : décide, chez ce joueur, de l'affichage des messages publiés depuis le dernier appel. */
+void city_message_brutus_afficher(void);
+
+/** Brutus III : exécution des commandes message-lu et message-supprimer (1 si trouvé). */
+int city_message_brutus_marquer_lu(int sequence);
+int city_message_brutus_supprimer(int sequence);
+
+/** Brutus III : change à chaque ajout, lecture ou suppression de message. */
+unsigned int city_message_brutus_version(void);
+
+/** Brutus III : partie chargée (messages à afficher et file d'attente vidés). */
+void city_message_brutus_partie_chargee(void);
+
 #endif // CITY_MESSAGE_H

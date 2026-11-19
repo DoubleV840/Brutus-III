@@ -28,14 +28,16 @@
 #include "map/routing_terrain.h"
 #include "map/sprite.h"
 #include "map/terrain.h"
+#include "multijoueur/commande.h" // Brutus III
 #include "scenario/earthquake.h"
 
+#include <stdlib.h> // Brutus III
 #include <string.h>
 
 #define MAX_UNDO_BUILDINGS 50
 #define MAX_UNDO_TYPE_CHANGES 50
 
-static struct {
+typedef struct {
     int available;
     int ready;
     int timeout_ticks;
@@ -50,20 +52,176 @@ static struct {
             building_type original_type;
         } items[MAX_UNDO_TYPE_CHANGES];
     } type_changes;
-} data;
+    int joueur; // Brutus III : joueur qui a fait la construction
+} undo_state;
 
-int game_can_undo(void)
+// Brutus III : deux contextes d'annulation. Celui de la simulation (commandes, ticks) ne
+// change que par les commandes, donc pareil chez tous les joueurs ; celui de l'aperçu sert
+// au glisser du joueur local (building_construction_start/update) et n'a aucun effet sur la
+// partie. « data » est le contexte chargé, « autre_contexte » celui qui est mis de côté.
+// Les copies de secours des grilles (map_*_backup) et les habitants à rendre sont gardés à
+// part pour la simulation et remis dans les modules quand la simulation reprend.
+static undo_state data;
+static undo_state autre_contexte;
+static int contexte_simulation_charge;
+
+#define MAX_SECOURS 12
+
+static struct {
+    int nb;
+    void *module[MAX_SECOURS];
+    size_t taille[MAX_SECOURS];
+    void *copie[MAX_SECOURS];
+    int modules_simulation; // 1 : les modules contiennent les copies de secours de la simulation
+    int en_simulation;
+} secours = { .modules_simulation = 1 };
+
+// Met dans « data » le contexte de la simulation (1) ou celui de l'aperçu (0).
+static void charger_contexte(int simulation)
+{
+    static undo_state echange;
+    if (contexte_simulation_charge == simulation) {
+        return;
+    }
+    echange = data;
+    data = autre_contexte;
+    autre_contexte = echange;
+    contexte_simulation_charge = simulation;
+}
+
+static void assurer_contexte(void);
+
+static void ajouter_secours(void *module, size_t taille)
+{
+    if (module && taille && secours.nb < MAX_SECOURS) {
+        secours.module[secours.nb] = module;
+        secours.taille[secours.nb] = taille;
+        secours.copie[secours.nb] = calloc(1, taille);
+        secours.nb++;
+    }
+}
+
+static void preparer_secours(void)
+{
+    if (secours.nb) {
+        return;
+    }
+    size_t taille;
+    void *(*modules[])(int, size_t *) = {
+        map_image_brutus_secours, map_terrain_brutus_secours, map_aqueduct_brutus_secours,
+        map_property_brutus_secours, map_sprite_brutus_secours, map_building_brutus_secours
+    };
+    for (unsigned int m = 0; m < sizeof(modules) / sizeof(modules[0]); m++) {
+        void *p;
+        for (int i = 0; (p = modules[m](i, &taille)) != 0; i++) {
+            ajouter_secours(p, taille);
+        }
+    }
+    int *ages = city_population_brutus_annulation(&taille);
+    ajouter_secours(ages, taille);
+}
+
+// Avant que l'aperçu (interface) n'écrive dans les copies de secours des modules : celles
+// de la simulation sont mises de côté.
+static void liberer_modules_pour_apercu(void)
+{
+    if (secours.en_simulation || !secours.modules_simulation) {
+        return;
+    }
+    preparer_secours();
+    for (int i = 0; i < secours.nb; i++) {
+        if (secours.copie[i]) {
+            memcpy(secours.copie[i], secours.module[i], secours.taille[i]);
+        }
+    }
+    secours.modules_simulation = 0;
+}
+
+static void assurer_contexte(void)
+{
+    charger_contexte(secours.en_simulation > 0);
+}
+
+void game_undo_brutus_entrer_simulation(void)
+{
+    if (secours.en_simulation++ > 0) {
+        return;
+    }
+    if (!secours.modules_simulation) {
+        preparer_secours();
+        for (int i = 0; i < secours.nb; i++) {
+            if (secours.copie[i]) {
+                memcpy(secours.module[i], secours.copie[i], secours.taille[i]);
+            }
+        }
+        secours.modules_simulation = 1;
+    }
+    charger_contexte(1);
+}
+
+void game_undo_brutus_sortir_simulation(void)
+{
+    if (secours.en_simulation <= 0) {
+        secours.en_simulation = 0;
+        return;
+    }
+    if (--secours.en_simulation > 0) {
+        return;
+    }
+    // Les modules et « data » gardent le contexte de la simulation tant que l'aperçu n'en a pas
+    // besoin (charger_contexte, liberer_modules_pour_apercu).
+}
+
+static const undo_state *etat_simulation(void)
+{
+    return contexte_simulation_charge ? &data : &autre_contexte;
+}
+
+int game_undo_brutus_appartient(int joueur)
+{
+    return etat_simulation()->joueur == joueur;
+}
+
+void game_undo_brutus_partie_chargee(void)
+{
+    // Les copies de secours lues dans la sauvegarde (aqueducs, sprites) sont dans les modules.
+    memset(&data, 0, sizeof(data));
+    memset(&autre_contexte, 0, sizeof(autre_contexte));
+    secours.modules_simulation = 1;
+}
+
+static int contexte_peut_annuler(void)
 {
     return data.ready && data.available;
 }
 
+int game_can_undo(void)
+{
+    // Brutus III : l'interface (bouton, raccourci) regarde la dernière construction de la
+    // simulation, et seulement si elle vient du joueur local.
+    if (!secours.en_simulation) {
+        const undo_state *sim = etat_simulation();
+        return sim->ready && sim->available && sim->joueur == brutus_joueur_local();
+    }
+    assurer_contexte();
+    return contexte_peut_annuler();
+}
+
 void game_undo_disable(void)
 {
+    if (!secours.en_simulation) {
+        // Brutus III : appelé par l'interface (retour au menu, fin de mission) : partie quittée,
+        // les deux contextes sont fermés.
+        autre_contexte.available = 0;
+    } else {
+        assurer_contexte(); // Brutus III
+    }
     data.available = 0;
 }
 
 void game_undo_add_building(building *b)
 {
+    assurer_contexte(); // Brutus III
     if (b->id <= 0) {
         return;
     }
@@ -91,6 +249,7 @@ void game_undo_add_building(building *b)
 
 void game_undo_adjust_building(building *b)
 {
+    assurer_contexte(); // Brutus III
     for (int i = 0; i < MAX_UNDO_BUILDINGS; i++) {
         if (data.buildings[i].id == b->id) {
             // found! update the building now
@@ -101,7 +260,8 @@ void game_undo_adjust_building(building *b)
 
 int game_undo_contains_building(int building_id)
 {
-    if (building_id <= 0 || !game_can_undo()) {
+    assurer_contexte(); // Brutus III
+    if (building_id <= 0 || !contexte_peut_annuler()) { // Brutus III : contexte courant
         return 0;
     }
     if (data.num_buildings <= 0) {
@@ -125,6 +285,7 @@ static void clear_buildings(void)
 
 void game_undo_record_building_type(building *b)
 {
+    assurer_contexte(); // Brutus III
     if (!b || b->id <= 0 || data.type_changes.num >= MAX_UNDO_TYPE_CHANGES) {
         return;
     }
@@ -141,6 +302,7 @@ void game_undo_record_building_type(building *b)
 
 void game_undo_restore_building_types(void)
 {
+    assurer_contexte(); // Brutus III
     for (int i = 0; i < data.type_changes.num; i++) {
         building *b = building_get(data.type_changes.items[i].building_id);
         if (b && b->id > 0) {
@@ -152,6 +314,10 @@ void game_undo_restore_building_types(void)
 
 int game_undo_start_build(building_type type)
 {
+    assurer_contexte(); // Brutus III
+    liberer_modules_pour_apercu(); // Brutus III : hors simulation, c'est l'aperçu
+    data.joueur = secours.en_simulation ?
+        (brutus_commande_joueur_en_cours() >= 0 ? brutus_commande_joueur_en_cours() : 0) : brutus_joueur_local();
     data.ready = 0;
     data.available = 1;
     data.timeout_ticks = 0;
@@ -181,6 +347,7 @@ int game_undo_start_build(building_type type)
 
 void game_undo_restore_building_state(void)
 {
+    assurer_contexte(); // Brutus III
     for (int i = 0; i < data.num_buildings; i++) {
         if (data.buildings[i].id) {
             building *b = building_get(data.buildings[i].id);
@@ -220,6 +387,7 @@ void game_undo_restore_map(int include_properties)
 
 void game_undo_finish_build(int cost)
 {
+    assurer_contexte(); // Brutus III
     data.ready = 1;
     data.timeout_ticks = 500;
     data.building_cost = cost;
@@ -249,7 +417,8 @@ static void add_building_to_terrain(building *b)
 
 void game_undo_perform(void)
 {
-    if (!game_can_undo()) {
+    assurer_contexte(); // Brutus III
+    if (!contexte_peut_annuler()) { // Brutus III
         return;
     }
     data.available = 0;
@@ -346,7 +515,8 @@ void game_undo_perform(void)
 
 void game_undo_reduce_time_available(void)
 {
-    if (!game_can_undo()) {
+    assurer_contexte(); // Brutus III
+    if (!contexte_peut_annuler()) { // Brutus III
         return;
     }
     if (data.timeout_ticks <= 0 || scenario_earthquake_is_in_progress()) {

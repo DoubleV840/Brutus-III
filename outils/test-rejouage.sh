@@ -103,6 +103,44 @@ else
   exit 1
 fi
 
+# Test « interface ouverte » (M6a) : même journal, en multijoueur (ticks imposés de l'extérieur,
+# image par image), avec une interface scriptée : chaque conseiller, fiches de bâtiments, liste des
+# messages, glissers (routes, démolition, aqueducs, murs, maisons…), fantôme de démolition. Les
+# empreintes doivent être celles du rejouage 1 : l'écran ne change ni les ticks ni la partie.
+echo "== Interface ouverte en multijoueur (conseillers, fiches, messages, glissers)"
+debut=$(date +%s)
+lancer "$SORTIE/rejouage-interface.log" --rejouer "$DEPART" "$SORTIE/journal.txt" \
+  --empreintes "$SORTIE/empreintes-interface.txt" --ticks "$TICKS" --tous-les "$TOUS_LES" --interface-test
+echo "   durée : $(( $(date +%s) - debut )) s ; $(grep '^# interface' "$SORTIE/empreintes-interface.txt" | sed 's/^# //')"
+verifier_fin "$SORTIE/empreintes-interface.txt"
+node "$RACINE/outils/verifier-fin-rejouage.mjs" --comparer "$SORTIE/empreintes-1.txt" \
+  "$SORTIE/empreintes-interface.txt" "interface ouverte"
+
+# Annulation propre à chaque joueur (M6a) : le joueur 0 ne peut pas annuler la construction du
+# joueur 1 (commande refusée, sans effet) ; le joueur 1 le peut.
+echo "== Annulation par joueur"
+premiere=$(grep -m1 ' construire ' "$SORTIE/journal.txt" | cut -d' ' -f3-)
+printf '# brutus-journal 1\n10 1 %s\n' "$premiere" > "$SORTIE/journal-annul-a.txt"
+printf '# brutus-journal 1\n10 1 %s\n20 0 annuler\n' "$premiere" > "$SORTIE/journal-annul-b.txt"
+printf '# brutus-journal 1\n10 1 %s\n20 1 annuler\n' "$premiere" > "$SORTIE/journal-annul-c.txt"
+for v in a b c; do
+  lancer "$SORTIE/annul-$v.log" --rejouer "$DEPART" "$SORTIE/journal-annul-$v.txt" \
+    --empreintes "$SORTIE/empreintes-annul-$v.txt" --ticks 40 --tous-les 10 > /dev/null
+done
+if ! grep -q '^# bilan annuler appliquees 1 refusees 1' "$SORTIE/empreintes-annul-b.txt"; then
+  echo "ÉCHEC : l'annulation du joueur 0 sur la construction du joueur 1 n'a pas été refusée."
+  exit 1
+fi
+if ! cmp -s <(grep -v '^#' "$SORTIE/empreintes-annul-a.txt") <(grep -v '^#' "$SORTIE/empreintes-annul-b.txt"); then
+  echo "ÉCHEC : l'annulation refusée a changé la partie."
+  exit 1
+fi
+if cmp -s <(grep -v '^#' "$SORTIE/empreintes-annul-a.txt") <(grep -v '^#' "$SORTIE/empreintes-annul-c.txt"); then
+  echo "ÉCHEC : l'annulation du joueur 1 n'a rien changé."
+  exit 1
+fi
+echo "OK : chacun n'annule que sa propre construction."
+
 # Test de rechargement : moitié du parcours (multiple de TOUS_LES pour que les empreintes tombent
 # aux mêmes ticks), sauvegarde, rechargement dans un autre lancement, suite du journal.
 MOITIE=$(( TICKS / 2 / TOUS_LES * TOUS_LES ))

@@ -837,6 +837,8 @@ set(MULTIJOUEUR_FILES
     ${PROJECT_SOURCE_DIR}/src/multijoueur/commande.c
     ${PROJECT_SOURCE_DIR}/src/multijoueur/empreinte.c
     ${PROJECT_SOURCE_DIR}/src/multijoueur/rejouage.c
+    ${PROJECT_SOURCE_DIR}/src/multijoueur/simulation.c
+    ${PROJECT_SOURCE_DIR}/src/multijoueur/rejouage_interface.c
 )
 
 set(SOURCE_FILES

@@ -511,3 +511,11 @@ void city_population_reset_undo(void)
 {
     memset(data.undo_people_at_age, 0, sizeof(data.undo_people_at_age));
 }
+
+// Brutus III : habitants retirés par la dernière démolition, gardés avec le contexte
+// d'annulation (game/undo.c : celui de la simulation est à part de celui de l'aperçu).
+int *city_population_brutus_annulation(size_t *taille)
+{
+    *taille = sizeof(data.undo_people_at_age);
+    return data.undo_people_at_age;
+}

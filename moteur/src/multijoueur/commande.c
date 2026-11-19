@@ -9,6 +9,7 @@
 #include "building/rotation.h"
 #include "building/storage.h"
 #include "city/buildings.h"
+#include "city/message.h"
 #include "city/emperor.h"
 #include "city/festival.h"
 #include "city/finance.h"
@@ -31,6 +32,7 @@
 #include "map/bridge.h"
 #include "map/building.h"
 #include "map/grid.h"
+#include "multijoueur/simulation.h"
 #include "scenario/allowed_building.h"
 #include "scenario/request.h"
 
@@ -52,7 +54,11 @@ static struct {
     uint32_t repere;
     FILE *journal;
     int joueur_local;
-} etat = { .repere = 1 };
+    int multijoueur;
+    int joueur_en_cours; // -1 hors commande
+    int ignorer_interface;
+    unsigned int interface_ignorees;
+} etat = { .repere = 1, .joueur_en_cours = -1 };
 
 static const struct {
     const char *nom;
@@ -88,7 +94,41 @@ static const struct {
     [BRUTUS_CMD_LEGION_SERVICE] = { "legion-service", 1 },
     [BRUTUS_CMD_REPARER_CONFIRME] = { "reparer-confirme", 4 },
     [BRUTUS_CMD_PARI_COURSE] = { "pari-course", 2 },
+    [BRUTUS_CMD_MESSAGE_LU] = { "message-lu", 1 },
+    [BRUTUS_CMD_MESSAGE_SUPPRIMER] = { "message-supprimer", 1 },
 };
+
+void brutus_multijoueur_definir(int actif)
+{
+    etat.multijoueur = actif != 0;
+}
+
+int brutus_multijoueur_actif(void)
+{
+    return etat.multijoueur;
+}
+
+void brutus_joueur_local_definir(int joueur)
+{
+    if (joueur >= 0 && joueur < BRUTUS_JOUEURS_MAX) {
+        etat.joueur_local = joueur;
+    }
+}
+
+int brutus_joueur_local(void)
+{
+    return etat.joueur_local;
+}
+
+int brutus_commande_joueur_en_cours(void)
+{
+    return etat.joueur_en_cours;
+}
+
+int brutus_interface_pour_moi(void)
+{
+    return etat.joueur_en_cours < 0 || etat.joueur_en_cours == etat.joueur_local;
+}
 
 uint32_t brutus_tick_absolu(void)
 {
@@ -108,6 +148,8 @@ void brutus_debut_tick(void)
 void brutus_partie_chargee(void)
 {
     brutus_commandes_vider();
+    game_undo_brutus_partie_chargee();
+    city_message_brutus_partie_chargee();
     etat.repere++;
     random_brutus_reinitialiser_compteur();
 }
@@ -144,13 +186,32 @@ int brutus_commande_ajouter(const brutus_commande *cmd)
     return 1;
 }
 
+int brutus_commandes_en_attente(void)
+{
+    return etat.taille;
+}
+
 int brutus_commandes_file_pleine(void)
 {
     return etat.taille >= FILE_MAX;
 }
 
+void brutus_commandes_interface_ignorer(int ignorer)
+{
+    etat.ignorer_interface = ignorer != 0;
+}
+
+unsigned int brutus_commandes_interface_ignorees(void)
+{
+    return etat.interface_ignorees;
+}
+
 void brutus_commande_envoyer(brutus_commande_type type, int nb_params, const int32_t *params)
 {
+    if (etat.ignorer_interface) {
+        etat.interface_ignorees++;
+        return;
+    }
     brutus_commande cmd;
     memset(&cmd, 0, sizeof(cmd));
     cmd.type = type;
@@ -396,8 +457,16 @@ static int executer(const brutus_commande *c)
         case BRUTUS_CMD_PARI_COURSE:
             return city_race_bet_brutus_parier(p[0], p[1]);
         case BRUTUS_CMD_ANNULER:
+            // Chaque joueur n'annule que sa propre dernière construction (game/undo.c).
+            if (!game_undo_brutus_appartient(c->joueur)) {
+                return 0;
+            }
             game_undo_perform();
             break;
+        case BRUTUS_CMD_MESSAGE_LU:
+            return city_message_brutus_marquer_lu(p[0]);
+        case BRUTUS_CMD_MESSAGE_SUPPRIMER:
+            return city_message_brutus_supprimer(p[0]);
         case BRUTUS_CMD_ROTATION_VUE:
             if (p[0] == 0) {
                 game_orientation_rotate_left();
@@ -644,6 +713,8 @@ int brutus_commandes_appliquer(uint32_t tick)
     }
     etat.taille = restantes;
 
+    // Toujours sans l'aperçu du joueur local et avec l'annulation de la simulation.
+    brutus_simulation_debut();
     for (int i = 0; i < nb_pretes; i++) {
         brutus_commande *c = &pretes[i];
         // Chaque commande repart du même état d'aléatoire et de caches, quel que soit le
@@ -654,7 +725,12 @@ int brutus_commandes_appliquer(uint32_t tick)
         if (etat.journal) {
             brutus_commande_ecrire(etat.journal, c);
         }
-        if (!executer(c)) {
+        // Joueur de la commande (-1 si hors plage) : seules ses fenêtres et ses messages
+        // s'affichent chez lui (brutus_interface_pour_moi).
+        etat.joueur_en_cours = (c->joueur >= 0 && c->joueur < BRUTUS_JOUEURS_MAX) ? c->joueur : BRUTUS_JOUEURS_MAX;
+        int resultat = executer(c);
+        etat.joueur_en_cours = -1;
+        if (!resultat) {
             etat.total_refusees++;
             etat.refusees_par_type[c->type]++;
         }
@@ -663,6 +739,7 @@ int brutus_commandes_appliquer(uint32_t tick)
     }
     random_brutus_reinitialiser_compteur();
     etat.repere++;
+    brutus_simulation_fin();
     return nb_pretes;
 }
 

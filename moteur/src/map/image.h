@@ -1,6 +1,8 @@
 #ifndef MAP_IMAGE_H
 #define MAP_IMAGE_H
 
+#include <stddef.h> // Brutus III
+
 #include "core/buffer.h"
 
 unsigned int map_image_at(int grid_offset);
@@ -38,5 +40,8 @@ void map_beach_image_clear(void);
 void map_image_save_state_legacy(buffer *buf);
 
 void map_image_load_state_legacy(buffer *buf);
+
+/** Brutus III : copie de secours n° index (0, 1…) et sa taille ; 0 au-delà. */
+void *map_image_brutus_secours(int index, size_t *taille);
 
 #endif // MAP_IMAGE_H
