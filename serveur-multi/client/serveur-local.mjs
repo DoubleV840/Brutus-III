@@ -31,7 +31,23 @@ export async function demarrerRelais(vars = {}) {
       logLevel: "warn",
     },
   });
-  const http = await worker.url;
+  // Si workerd ne peut pas ouvrir son port (bac à sable : « listen EPERM »), wrangler ne
+  // lève pas d'erreur et attend indéfiniment : on abandonne avec un message clair.
+  let minuteur;
+  const delai = new Promise((_, rejeter) => {
+    minuteur = setTimeout(() => rejeter(new Error(
+      "Le relais local n'a pas démarré en 30 s. Port local refusé ? Voir " +
+      path.join(racine, ".wrangler", "logs") + " (chercher « listen EPERM »).")), 30000);
+  });
+  let http;
+  try {
+    http = await Promise.race([worker.url, delai]);
+  } catch (e) {
+    worker.dispose().catch(() => {});
+    throw e;
+  } finally {
+    clearTimeout(minuteur);
+  }
   const base = new URL(http);
   base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
   return { base: base.href, http, arreter: () => worker.dispose() };

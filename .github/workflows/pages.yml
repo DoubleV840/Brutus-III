@@ -103,6 +103,8 @@ jobs:
 
   # Relais multijoueur (serveur-multi/) : tests sur le runtime local de wrangler,
   # sans compte Cloudflare. Rien n'est déployé ici (déploiement du Worker : M13).
+  # Volontairement absent des « needs » de deploy : le site (solo) ne dépend pas du relais,
+  # un test du relais rouge ne doit pas bloquer sa publication.
   relais:
     name: Test du relais multijoueur
     runs-on: ubuntu-latest
@@ -126,7 +128,7 @@ jobs:
 
   deploy:
     name: Déployer sur GitHub Pages
-    needs: [build, test, relais]
+    needs: [build, test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

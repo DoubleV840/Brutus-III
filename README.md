@@ -70,7 +70,7 @@ npm run dev         # relais local sur ws://127.0.0.1:8787 (Ctrl+C pour arrêter
 npm run demo -- ws://127.0.0.1:8787   # la démo contre le relais lancé par npm run dev
 ```
 
-`npm test` et `npm run demo` démarrent eux-mêmes un relais local sur un port libre de 127.0.0.1, puis l'arrêtent.
+`npm test` et `npm run demo` démarrent eux-mêmes un relais local sur un port libre de 127.0.0.1, puis l'arrêtent. S'il est impossible d'ouvrir un port local (bac à sable), ils s'arrêtent au bout de 30 s avec un message : seul `npm run test:sans-port` (réassemblage des sauvegardes) tourne alors. Le job CI `relais` lance `npm test`, mais le déploiement du site ne dépend pas de lui.
 
 ## Publication
 

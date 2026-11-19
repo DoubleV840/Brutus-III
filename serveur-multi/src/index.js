@@ -29,11 +29,14 @@ export const TYPE = {
   PING: 0x11,
 };
 const TYPES_CONNUS = new Set(Object.values(TYPE));
-const TYPES_HOTE = new Set([TYPE.SAUVEGARDE]);
 
 // Destinataires (octet 2 de l'en-tête). 0 à 3 : un joueur précis.
 export const DEST_TOUS = 0xff; // tout le salon, émetteur compris
 export const DEST_AUTRES = 0xfe; // tout le salon sauf l'émetteur
+
+// Types qui doivent aller à tout le salon, émetteur compris : sinon le flux diffère d'un
+// joueur à l'autre et la partie se désynchronise sans aucune erreur.
+const TYPES_POUR_TOUS = new Set([TYPE.TOUR, TYPE.VITESSE, TYPE.EMPREINTE]);
 
 // Codes de fermeture WebSocket (4000-4999 : réservés aux applications).
 export const FERMETURE = {
@@ -43,6 +46,7 @@ export const FERMETURE = {
   "jeton-invalide": 4003,
   "requete-invalide": 4004,
   "remplace": 4005,
+  "expulse": 4006,
   "message-trop-gros": 4009,
 };
 
@@ -53,9 +57,11 @@ const MESSAGES = {
   "jeton-invalide": "Jeton de reconnexion inconnu pour ce salon.",
   "requete-invalide": "Requête invalide.",
   "remplace": "Ce joueur s'est reconnecté depuis une autre connexion.",
+  "expulse": "L'hôte t'a retiré du salon.",
   "message-trop-gros": "Message trop gros (64 Kio au plus).",
   "message-invalide": "Message invalide (en-tête trop court, type ou destinataire inconnu).",
-  "reserve-a-l-hote": "Seul l'hôte (joueur 0) peut envoyer ce message.",
+  "destinataire-interdit": "Destinataire interdit pour ce type de message.",
+  "reserve-a-l-hote": "Seul l'hôte (joueur 0) peut faire cette demande.",
 };
 
 // ---------------------------------------------------------------------------
@@ -127,7 +133,7 @@ function versSalon(env, code, requete, infos) {
 export function origineAcceptee(origine) {
   // Pas d'en-tête Origin : client hors navigateur (démo Node, tests). Un tel client peut
   // de toute façon mettre l'origine qu'il veut ; la vérification protège les joueurs contre
-  // une page d'un autre site ouverte dans leur navigateur.
+  // une page d'un autre site ouverte dans leur navigateur, pas contre l'abus (voir M13).
   if (origine === null) return true;
   if (origine === "https://brutus.ivwi.fr") return true;
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(origine);
@@ -162,7 +168,7 @@ function nouveauJeton() {
 
 function joueursMax(env) {
   const n = Number(env.JOUEURS_MAX);
-  return Number.isInteger(n) && n >= 2 && n <= 4 ? n : 4;
+  return Number.isInteger(n) && n >= 2 && n <= 4 ? n : 2;
 }
 
 function delaiFermetureMs(env) {
@@ -191,9 +197,19 @@ function refuser(code, message) {
 // ---------------------------------------------------------------------------
 //
 // Stockage (clé « salon ») : { code, joueursMax, creeLe, jetons: [jeton du joueur 0, …] }.
-// Le numéro d'un joueur est sa place dans `jetons` (ordre d'arrivée, 0 = hôte).
+// Le numéro d'un joueur est sa place dans `jetons` (ordre d'arrivée, 0 = hôte). Une place
+// libérée par l'hôte (expulsion) vaut null et sera reprise par le prochain arrivant.
 // Chaque WebSocket porte { joueur, actif } (serializeAttachment) : l'état survit à
 // l'hibernation, rien d'utile n'est gardé seulement en mémoire.
+//
+// Concurrence : toutes les décisions (numéro attribué, connexion remplacée, connexion
+// acceptée) sont prises SANS « await » entre elles ; les écritures du stockage ne sont
+// attendues qu'à la fin. Deux arrivées simultanées ne peuvent donc pas se croiser.
+//
+// Alarme : tant que le salon existe, une alarme est posée (à chaque arrivée et à chaque
+// départ, échéance = maintenant + délai). À l'échéance, s'il reste quelqu'un elle est
+// reposée ; sinon le salon est effacé. Même si un départ n'a pas été vu (éviction du
+// runtime), le salon finit donc par être fermé.
 
 export class Salon extends DurableObject {
   constructor(ctx, env) {
@@ -221,7 +237,6 @@ export class Salon extends DurableObject {
         creeLe: Date.now(),
         jetons: [nouveauJeton()],
       };
-      await this.ctx.storage.put("salon", this.salon);
       return this.accepter(0, false);
     }
 
@@ -244,20 +259,26 @@ export class Salon extends DurableObject {
         }
         return this.accepter(joueur, true);
       }
-      if (this.salon.jetons.length >= this.salon.joueursMax) {
-        return refuser("salon-plein");
+      // Première place libérée, sinon une nouvelle place.
+      let joueur = this.salon.jetons.indexOf(null);
+      if (joueur < 0) {
+        if (this.salon.jetons.length >= this.salon.joueursMax) {
+          return refuser("salon-plein");
+        }
+        joueur = this.salon.jetons.length;
       }
-      this.salon.jetons.push(nouveauJeton());
-      await this.ctx.storage.put("salon", this.salon);
-      return this.accepter(this.salon.jetons.length - 1, false);
+      this.salon.jetons[joueur] = nouveauJeton();
+      return this.accepter(joueur, false);
     }
 
     return new Response("inconnu", { status: 404 });
   }
 
-  /** Accepte la connexion du joueur, lui envoie « bienvenue » et prévient les autres. */
+  /**
+   * Accepte la connexion du joueur, lui envoie « bienvenue » et prévient les autres.
+   * Tout est fait sans attente ; le stockage et l'alarme ne sont attendus qu'à la fin.
+   */
   async accepter(joueur, reconnexion) {
-    await this.ctx.storage.deleteAlarm();
     const [client, serveur] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(serveur, ["j" + joueur]);
     serveur.serializeAttachment({ joueur, actif: true });
@@ -272,15 +293,20 @@ export class Salon extends DurableObject {
       reconnexion,
       joueurs: this.etatJoueurs(),
     }));
-    const annonce = JSON.stringify({
-      type: reconnexion ? "joueur-revenu" : "joueur-arrive",
-      joueur,
-      joueurs: this.etatJoueurs(),
-    });
-    for (const ws of this.actives()) {
-      if (ws !== serveur) envoyer(ws, annonce);
-    }
+    this.annoncer({ type: reconnexion ? "joueur-revenu" : "joueur-arrive", joueur }, serveur);
+
+    const ecritures = [this.ctx.storage.setAlarm(Date.now() + delaiFermetureMs(this.env))];
+    if (!reconnexion) ecritures.push(this.ctx.storage.put("salon", this.salon));
+    await Promise.all(ecritures);
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** Envoie un message de session à toutes les connexions actives sauf `sauf`. */
+  annoncer(message, sauf, restantes = this.actives()) {
+    const texte = JSON.stringify({ ...message, joueurs: this.etatJoueurs(restantes) });
+    for (const ws of restantes) {
+      if (ws !== sauf) envoyer(ws, texte);
+    }
   }
 
   /** Connexions actives (hors connexions retirées par le serveur). */
@@ -295,16 +321,21 @@ export class Salon extends DurableObject {
     return this.actives().filter((ws) => ws.deserializeAttachment().joueur === joueur);
   }
 
-  etatJoueurs() {
-    const connectes = new Set(this.actives().map((ws) => ws.deserializeAttachment().joueur));
-    return this.salon.jetons.map((_, joueur) => ({ joueur, connecte: connectes.has(joueur) }));
+  /** État des places attribuées (les places libérées n'apparaissent pas). */
+  etatJoueurs(actives = this.actives()) {
+    const connectes = new Set(actives.map((ws) => ws.deserializeAttachment().joueur));
+    const etat = [];
+    this.salon.jetons.forEach((jeton, joueur) => {
+      if (jeton !== null) etat.push({ joueur, connecte: connectes.has(joueur) });
+    });
+    return etat;
   }
 
-  // Aucun « await » dans ce chemin : les messages sont traités un par un, dans l'ordre
-  // d'arrivée au salon, et chaque destinataire les reçoit dans ce même ordre.
+  // Aucun « await » avant la fin de ce chemin : les messages sont traités un par un, dans
+  // l'ordre d'arrivée au salon, et chaque destinataire les reçoit dans ce même ordre.
   async webSocketMessage(ws, message) {
     const a = ws.deserializeAttachment();
-    if (!a || !a.actif) return;
+    if (!a || !a.actif || !this.salon) return;
 
     const taille = typeof message === "string" ? new TextEncoder().encode(message).byteLength : message.byteLength;
     if (taille > TAILLE_MAX_MESSAGE) {
@@ -316,9 +347,7 @@ export class Salon extends DurableObject {
       return;
     }
     if (typeof message === "string") {
-      // Aucun message texte n'est attendu du client en version 1 (sauf « ping », servi
-      // automatiquement sans passer par ici).
-      envoyer(ws, erreurJson("message-invalide"));
+      await this.messageTexte(ws, a.joueur, message);
       return;
     }
 
@@ -327,13 +356,17 @@ export class Salon extends DurableObject {
       envoyer(ws, erreurJson("message-invalide"));
       return;
     }
+    const type = octets[0];
     const dest = octets[2];
-    if (dest !== DEST_TOUS && dest !== DEST_AUTRES && dest >= this.salonJoueursMax()) {
+    if (dest !== DEST_TOUS && dest !== DEST_AUTRES && dest >= this.salon.joueursMax) {
       envoyer(ws, erreurJson("message-invalide"));
       return;
     }
-    if (TYPES_HOTE.has(octets[0]) && a.joueur !== 0) {
-      envoyer(ws, erreurJson("reserve-a-l-hote"));
+    // TOUR, VITESSE, EMPREINTE : à tous, émetteur compris. SAUVEGARDE : l'hôte l'envoie à
+    // qui il veut ; un invité seulement à l'hôte (cas d'un hôte qui a rechargé sa page).
+    if ((TYPES_POUR_TOUS.has(type) && dest !== DEST_TOUS)
+      || (type === TYPE.SAUVEGARDE && a.joueur !== 0 && dest !== 0)) {
+      envoyer(ws, erreurJson("destinataire-interdit"));
       return;
     }
 
@@ -347,9 +380,36 @@ export class Salon extends DurableObject {
     }
   }
 
-  salonJoueursMax() {
-    // Après une hibernation, this.salon est relu dans le constructeur.
-    return this.salon ? this.salon.joueursMax : 4;
+  /** Trames texte du client : seule la demande d'expulsion de l'hôte existe (et « ping »). */
+  async messageTexte(ws, joueur, texte) {
+    let m = null;
+    try {
+      m = JSON.parse(texte);
+    } catch {
+      // m reste null
+    }
+    if (!m || m.type !== "expulser") {
+      envoyer(ws, erreurJson("message-invalide"));
+      return;
+    }
+    if (joueur !== 0) {
+      envoyer(ws, erreurJson("reserve-a-l-hote"));
+      return;
+    }
+    const cible = m.joueur;
+    if (!Number.isInteger(cible) || cible < 1 || cible >= this.salon.jetons.length || this.salon.jetons[cible] === null) {
+      envoyer(ws, erreurJson("message-invalide", "Expulsion : numéro de joueur invalide."));
+      return;
+    }
+    // La place est libérée et le jeton annulé, puis la connexion fermée, puis tous sont prévenus.
+    this.salon.jetons[cible] = null;
+    for (const autre of this.sockets(cible)) {
+      desactiver(autre, cible);
+      envoyer(autre, erreurJson("expulse"));
+      fermer(autre, FERMETURE.expulse, "expulse");
+    }
+    this.annoncer({ type: "joueur-expulse", joueur: cible }, null);
+    await this.ctx.storage.put("salon", this.salon);
   }
 
   async webSocketClose(ws) {
@@ -363,7 +423,7 @@ export class Salon extends DurableObject {
   async depart(ws) {
     const a = ws.deserializeAttachment();
     fermer(ws, 1000, "au revoir");
-    // Connexion déjà retirée par le serveur (remplacée, message trop gros) : déjà traitée.
+    // Connexion déjà retirée par le serveur (remplacée, expulsée, message trop gros) : déjà traitée.
     if (!a || !a.actif) return;
     desactiver(ws, a.joueur);
     await this.annoncerDepart(a.joueur, ws);
@@ -374,26 +434,24 @@ export class Salon extends DurableObject {
     if (!this.salon) return;
     const restantes = this.actives().filter((autre) => autre !== ws);
     if (!restantes.some((autre) => autre.deserializeAttachment().joueur === joueurParti)) {
-      const annonce = JSON.stringify({
-        type: "joueur-parti",
-        joueur: joueurParti,
-        joueurs: this.salon.jetons.map((_, joueur) => ({
-          joueur,
-          connecte: restantes.some((autre) => autre.deserializeAttachment().joueur === joueur),
-        })),
-      });
-      for (const autre of restantes) envoyer(autre, annonce);
+      this.annoncer({ type: "joueur-parti", joueur: joueurParti }, null, restantes);
     }
     if (restantes.length === 0) {
       await this.ctx.storage.setAlarm(Date.now() + delaiFermetureMs(this.env));
     }
   }
 
-  /** Salon vide depuis le délai de fermeture : il est supprimé, son code devient inconnu. */
+  /** Échéance : salon vide → effacé (son code devient inconnu) ; sinon l'alarme est reposée. */
   async alarm() {
-    if (this.actives().length > 0) return;
-    await this.ctx.storage.deleteAll();
+    if (!this.salon) return;
+    if (this.actives().length > 0) {
+      await this.ctx.storage.setAlarm(Date.now() + delaiFermetureMs(this.env));
+      return;
+    }
+    // Le salon est oublié AVANT l'attente : un retour pendant l'effacement reçoit
+    // « salon-inconnu » au lieu de rejoindre un salon fantôme.
     this.salon = null;
+    await this.ctx.storage.deleteAll();
   }
 }
 

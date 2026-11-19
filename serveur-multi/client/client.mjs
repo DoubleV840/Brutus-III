@@ -44,8 +44,21 @@ export function decoder(buffer) {
   };
 }
 
+// Taille maximale d'une sauvegarde acceptée à la réception (règle du protocole, côté client).
+export const SAUVEGARDE_MAX = 8 * 1024 * 1024;
+export const MORCEAU_CONSEILLE = 60000;
+
+/** Identifiant de transfert : u32 tiré au hasard, jamais 0. */
+export function nouvelIdentifiant() {
+  const v = new Uint32Array(1);
+  do crypto.getRandomValues(v); while (v[0] === 0);
+  return v[0];
+}
+
 /** Découpe une sauvegarde en messages SAUVEGARDE (voir docs/protocole.md). */
-export function morceauxSauvegarde(sauvegarde, tick, identifiant, dest = DEST_AUTRES, taille = 60000) {
+export function morceauxSauvegarde(sauvegarde, tick, identifiant = nouvelIdentifiant(), dest = DEST_AUTRES, taille = MORCEAU_CONSEILLE) {
+  if (sauvegarde.length > SAUVEGARDE_MAX) throw new Error("sauvegarde trop grosse");
+  if (taille < 1 || taille > MORCEAU_MAX) throw new Error("taille de morceau invalide");
   const messages = [];
   for (let pos = 0; pos === 0 || pos < sauvegarde.length; pos += taille) {
     const part = sauvegarde.subarray(pos, pos + taille);
@@ -60,25 +73,66 @@ export function morceauxSauvegarde(sauvegarde, tick, identifiant, dest = DEST_AU
   return messages;
 }
 
-/** Recolle les morceaux d'une sauvegarde. Retourne la sauvegarde complète ou null. */
+/**
+ * Recolle les morceaux d'une sauvegarde (règles : docs/protocole.md, « SAUVEGARDE »).
+ * `ajouter()` retourne la sauvegarde complète, ou null (incomplète, ou morceau rejeté :
+ * la raison est alors dans `erreur`). Les morceaux arrivent dans l'ordre : chacun doit
+ * commencer exactement où le précédent s'est arrêté, sinon le transfert est abandonné.
+ */
 export class Reception {
-  constructor() {
-    this.id = null;
+  constructor(max = SAUVEGARDE_MAX) {
+    this.max = max;
+    this.erreur = null;
+    this.raz();
   }
+
+  raz() {
+    this.id = null;
+    this.tampon = null;
+    this.total = 0;
+    this.recus = 0;
+  }
+
+  rejeter(raison) {
+    this.raz();
+    this.erreur = raison;
+    return null;
+  }
+
   ajouter(donnees) {
+    this.erreur = null;
+    if (donnees.length < ENTETE_MORCEAU) return this.rejeter("morceau trop court");
     const v = new DataView(donnees.buffer, donnees.byteOffset, donnees.byteLength);
     const id = v.getUint32(0, true);
     const total = v.getUint32(4, true);
     const pos = v.getUint32(8, true);
-    if (id !== this.id) {
-      this.id = id;
-      this.tampon = new Uint8Array(total);
-      this.recus = 0;
-    }
     const part = donnees.subarray(ENTETE_MORCEAU);
+
+    if (pos === 0) {
+      // Début d'un transfert : il remplace celui en cours, quel qu'il soit.
+      if (id === 0) return this.rejeter("identifiant nul");
+      if (total > this.max) return this.rejeter("sauvegarde trop grosse");
+      this.raz();
+      this.id = id;
+      this.total = total;
+      this.tampon = new Uint8Array(total);
+    } else if (id !== this.id) {
+      // Suite d'un transfert dont on n'a pas vu le début (arrivée en cours d'envoi, ou
+      // transfert remplacé) : ignorée, sans toucher au transfert en cours.
+      this.erreur = "début du transfert manquant";
+      return null;
+    } else if (total !== this.total || pos !== this.recus) {
+      return this.rejeter("morceau hors séquence (doublon ou trou)");
+    }
+    if (part.length === 0 && total !== 0) return this.rejeter("morceau vide");
+    if (pos + part.length > total) return this.rejeter("morceau hors bornes");
+
     this.tampon.set(part, pos);
     this.recus += part.length;
-    return this.recus >= total ? this.tampon : null;
+    if (this.recus < total) return null;
+    const complete = this.tampon;
+    this.raz();
+    return complete;
   }
 }
 
@@ -87,16 +141,17 @@ export class Reception {
  * Les messages reçus (JSON ou binaires décodés) sont mis en file ; `attendre()` les consomme.
  */
 export class ClientRelais {
+  // version: null → paramètre absent (pour les tests).
   static creer(base, { joueurs, version = VERSION_PROTOCOLE, origine } = {}) {
     const url = new URL("/creer", base);
-    url.searchParams.set("version", String(version));
+    if (version !== null) url.searchParams.set("version", String(version));
     if (joueurs !== undefined) url.searchParams.set("joueurs", String(joueurs));
     return new ClientRelais(url, origine);
   }
 
   static rejoindre(base, code, { jeton, version = VERSION_PROTOCOLE, origine } = {}) {
     const url = new URL("/rejoindre/" + encodeURIComponent(code), base);
-    url.searchParams.set("version", String(version));
+    if (version !== null) url.searchParams.set("version", String(version));
     if (jeton) url.searchParams.set("jeton", jeton);
     return new ClientRelais(url, origine);
   }
@@ -108,7 +163,13 @@ export class ClientRelais {
     this.ws = origine ? new WebSocket(url, { headers: { Origin: origine } }) : new WebSocket(url);
     this.ws.binaryType = "arraybuffer";
     this.ws.addEventListener("message", (e) => {
-      this.pousser(typeof e.data === "string" ? JSON.parse(e.data) : { type: "binaire", ...decoder(e.data) });
+      if (typeof e.data !== "string") {
+        this.pousser({ type: "binaire", ...decoder(e.data) });
+      } else if (e.data === "pong") {
+        this.pousser({ type: "pong" }); // réponse du runtime au texte « ping », pas du JSON
+      } else {
+        this.pousser(JSON.parse(e.data));
+      }
     });
     this.ferme = new Promise((resoudre) => {
       this.ws.addEventListener("close", (e) => {
@@ -169,6 +230,11 @@ export class ClientRelais {
 
   envoyerBrut(octets) {
     this.ws.send(octets);
+  }
+
+  /** Hôte seulement : libère la place d'un joueur (son jeton ne marche plus). */
+  expulser(joueur) {
+    this.ws.send(JSON.stringify({ type: "expulser", joueur }));
   }
 
   fermer() {

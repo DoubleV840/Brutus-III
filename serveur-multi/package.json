@@ -5,7 +5,8 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "test": "node --test --test-timeout=60000 test/relais.test.mjs",
+    "test": "node --test --test-timeout=180000 test/reception.test.mjs test/relais.test.mjs",
+    "test:sans-port": "node --test test/reception.test.mjs",
     "dev": "wrangler dev --ip 127.0.0.1 --port 8787",
     "demo": "node demo/demo.mjs"
   },

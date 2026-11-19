@@ -31,7 +31,7 @@ await hote.attendreType("joueur-arrive");
 console.log(`Hôte   : le joueur ${bi.joueur} est arrivé, j'envoie ma sauvegarde`);
 
 const sauvegarde = new Uint8Array(100 * 1024).map((_, i) => i & 0xff);
-for (const m of morceauxSauvegarde(sauvegarde, 0, 1)) hote.envoyerBrut(m);
+for (const m of morceauxSauvegarde(sauvegarde, 0)) hote.envoyerBrut(m);
 const reception = new Reception();
 let recue = null;
 while (!recue) recue = reception.ajouter((await invite.attendreType("binaire")).donnees);
