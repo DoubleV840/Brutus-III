@@ -57,6 +57,21 @@ bash outils/test-rejouage-wasm.sh   # wasm sous Node (cible séparée) + compara
 
 Méthode, audit et résultats : `docs/determinisme.md`. Les sorties vont dans `build-rejouage/` (ignoré par git).
 
+## Multijoueur : relais local (serveur-multi/)
+
+Le relais est un Cloudflare Worker + un Durable Object par salon. Il ne fait que transmettre les messages des joueurs, sans logique de jeu. Protocole : `docs/protocole.md`. Pas encore branché dans le jeu (mission M6b), et pas encore déployé (M13) : tout tourne en local, sans compte Cloudflare.
+
+```bash
+cd serveur-multi
+npm ci              # installe wrangler (version exacte, package-lock.json)
+npm test            # tests automatiques, sur le vrai runtime local (workerd)
+npm run demo        # démo : deux joueurs créent / rejoignent un salon et échangent
+npm run dev         # relais local sur ws://127.0.0.1:8787 (Ctrl+C pour arrêter)
+npm run demo -- ws://127.0.0.1:8787   # la démo contre le relais lancé par npm run dev
+```
+
+`npm test` et `npm run demo` démarrent eux-mêmes un relais local sur un port libre de 127.0.0.1, puis l'arrêtent.
+
 ## Publication
 
 La CI `.github/workflows/pages.yml` publie la version web sur GitHub Pages (https://brutus.ivwi.fr) à chaque push sur `main` (ou à la main : onglet Actions → Pages → « Run workflow ») :

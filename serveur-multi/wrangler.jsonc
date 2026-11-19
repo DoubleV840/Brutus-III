@@ -1,0 +1,19 @@
+// Brutus III : relais multijoueur. Voir docs/protocole.md.
+// Local uniquement pour l'instant (npm run dev). Déploiement : mission M13, sur le compte du fondateur.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "brutus-relais",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "durable_objects": {
+    "bindings": [{ "name": "SALONS", "class_name": "Salon" }]
+  },
+  // Durable Object adossé à SQLite : seul type disponible sur l'offre gratuite.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Salon"] }],
+  "vars": {
+    // Nombre maximal de joueurs par salon (le créateur choisit 2 à JOUEURS_MAX, 2 par défaut).
+    "JOUEURS_MAX": "4",
+    // Délai avant fermeture d'un salon vide, en secondes.
+    "DELAI_FERMETURE_S": "600"
+  }
+}

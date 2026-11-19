@@ -101,9 +101,32 @@ jobs:
         env:
           BRUTUS_PAGE: ${{ github.workspace }}/build-pages/index.html
 
+  # Relais multijoueur (serveur-multi/) : tests sur le runtime local de wrangler,
+  # sans compte Cloudflare. Rien n'est déployé ici (déploiement du Worker : M13).
+  relais:
+    name: Test du relais multijoueur
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: serveur-multi/package-lock.json
+
+      - name: Installer
+        working-directory: serveur-multi
+        run: npm ci
+
+      - name: Tester
+        working-directory: serveur-multi
+        run: npm test
+
   deploy:
     name: Déployer sur GitHub Pages
-    needs: [build, test]
+    needs: [build, test, relais]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

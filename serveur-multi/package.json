@@ -1,0 +1,15 @@
+{
+  "name": "brutus-iii-serveur-multi",
+  "private": true,
+  "description": "Brutus III : relais WebSocket multijoueur (Cloudflare Worker + Durable Object), sans logique de jeu",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-timeout=60000 test/relais.test.mjs",
+    "dev": "wrangler dev --ip 127.0.0.1 --port 8787",
+    "demo": "node demo/demo.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.165.0"
+  }
+}
