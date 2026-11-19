@@ -18,6 +18,10 @@
 #include "window/building_info.h"
 #include "window/city.h"
 #include "window/message_list.h"
+#include "window/hold_festival.h"
+#include "window/gift_to_emperor.h"
+#include "window/hold_games.h"
+#include "window/donate_to_city.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -142,7 +146,15 @@ void brutus_interface_test_image(long image)
                 ouvrir_fiche_batiment();
                 break;
             case 2:
-                window_message_list_show();
+                // Liste des messages et fenêtres qui choisissaient dans la partie (fête, cadeau,
+                // jeux, don) : leur ouverture ne doit plus rien changer.
+                switch (cycle % 5) {
+                    case 0: window_message_list_show(); break;
+                    case 1: window_hold_festival_show(); break;
+                    case 2: window_gift_to_emperor_show(); break;
+                    case 3: window_hold_games_show(1); break;
+                    default: window_donate_to_city_show(); break;
+                }
                 etat.ouvertures++;
                 break;
             case 3:

@@ -22,6 +22,13 @@
 #include "window/message_dialog.h"
 
 static void button_god(const generic_button *button);
+
+// Brutus III : dieu et taille choisis dans la fenêtre, gardés ici (la partie ne change que par
+// la commande fete). Lus dans la partie à l'ouverture.
+static struct {
+    int dieu;
+    int taille;
+} choix;
 static void button_size(const generic_button *button);
 static void button_help(int param1, int param2);
 static void button_close(int param1, int param2);
@@ -95,9 +102,9 @@ static void draw_background(void)
     graphics_in_dialog();
 
     outer_panel_draw(48, 48, 34, 20);
-    lang_text_draw_centered(58, 25 + city_festival_selected_god(), 48, 60, 544, FONT_LARGE_BLACK);
+    lang_text_draw_centered(58, 25 + choix.dieu, 48, 60, 544, FONT_LARGE_BLACK);
     for (int god = 0; god < MAX_GODS; god++) {
-        if (god == city_festival_selected_god()) {
+        if (god == choix.dieu) {
             button_border_draw(100 * god + 75, 91, 91, 101, 1);
             image_draw(image_group(GROUP_PANEL_WINDOWS) + god + 21, 100 * god + 80, 96, COLOR_MASK_NONE, SCALE_NONE);
         } else {
@@ -107,7 +114,7 @@ static void draw_background(void)
     draw_buttons();
 
     if (!city_finance_out_of_money()) {
-        lang_text_draw_centered(58, 30 + city_festival_selected_size(), 28, 322, 544, FONT_NORMAL_BLACK);
+        lang_text_draw_centered(58, 30 + choix.taille, 28, 322, 544, FONT_NORMAL_BLACK);
     } else {
         lang_text_draw_centered(CUSTOM_TRANSLATION, TR_OUT_OF_MONEY, 28, 322, 544, FONT_NORMAL_BLACK);
     }
@@ -152,7 +159,7 @@ static void handle_input(const mouse *m, const hotkeys *h)
 static void button_god(const generic_button *button)
 {
     int god = button->parameter1;
-    city_festival_select_god(god);
+    choix.dieu = god; // Brutus III
     window_invalidate();
 }
 
@@ -160,7 +167,9 @@ static void button_size(const generic_button *button)
 {
     int size = button->parameter1;
     if (!city_finance_out_of_money()) {
-        if (city_festival_select_size(size)) {
+        // Brutus III : même condition que city_festival_select_size, sans écrire dans la partie
+        if (size != FESTIVAL_GRAND || !city_festival_brutus_vin_insuffisant()) {
+            choix.taille = size;
             window_invalidate();
         }
     }
@@ -182,7 +191,7 @@ static void button_hold_festival(int param1, int param2)
         return;
     }
     // Brutus III : passe par la file de commandes (dieu et taille choisis dans la fenêtre)
-    brutus_commande_2(BRUTUS_CMD_FETE, city_festival_selected_god(), city_festival_selected_size());
+    brutus_commande_2(BRUTUS_CMD_FETE, choix.dieu, choix.taille);
     window_advisors_show();
 }
 
@@ -211,6 +220,11 @@ static void get_tooltip(tooltip_context *c)
 
 void window_hold_festival_show(void)
 {
+    choix.dieu = city_festival_selected_god(); // Brutus III
+    choix.taille = city_festival_selected_size();
+    if (choix.taille == FESTIVAL_GRAND && city_festival_brutus_vin_insuffisant()) {
+        choix.taille = FESTIVAL_LARGE;
+    }
     window_type window = {
         WINDOW_HOLD_FESTIVAL,
         draw_background,

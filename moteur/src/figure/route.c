@@ -208,7 +208,15 @@ void figure_route_advance_tile(int path_id)
 
 void figure_route_save_state(buffer *figures, buffer *buf_paths)
 {
-    unsigned int size = paths.size * sizeof(uint32_t);
+    // Brutus III : les emplacements libres en fin de tableau (chemin non trouvé, pas encore
+    // retirés par array_trim) ne sont pas écrits : le chargement les retire de toute façon, et
+    // une partie rechargée doit donner la même sauvegarde (et la même empreinte) que la partie
+    // continue. Le tableau lui-même n'est pas modifié.
+    unsigned int nombre = paths.size;
+    while (nombre > 1 && !path_is_used(array_item(paths, nombre - 1))) {
+        nombre--;
+    }
+    unsigned int size = nombre * sizeof(uint32_t);
     uint8_t *buf_data = malloc(size);
     buffer_init(figures, buf_data, size);
 
@@ -216,15 +224,21 @@ void figure_route_save_state(buffer *figures, buffer *buf_paths)
 
     figure_path_data *path;
     array_foreach(paths, path) {
+        if (array_index >= nombre) {
+            break; // Brutus III
+        }
         paths_memory_size += sizeof(uint32_t) + path->total_directions * sizeof(uint8_t);
     }
 
     size = sizeof(uint32_t) + paths_memory_size;
     buf_data = malloc(size);
     buffer_init(buf_paths, buf_data, size);
-    buffer_write_u32(buf_paths, paths.size);
+    buffer_write_u32(buf_paths, nombre); // Brutus III
 
     array_foreach(paths, path) {
+        if (array_index >= nombre) {
+            break; // Brutus III
+        }
         buffer_write_u32(figures, path->figure_id);
         buffer_write_u32(buf_paths, path->total_directions);
         if (path->total_directions) {

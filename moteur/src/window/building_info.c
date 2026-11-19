@@ -1267,7 +1267,7 @@ static void button_mothball(int param1, int param2)
 static void button_monument_construction(const generic_button *button)
 {
     building *b = building_get(context.building_id);
-    building_monument_toggle_construction_halted(b);
+    brutus_commande_2(BRUTUS_CMD_MONUMENT_ARRET, b->x, b->y); // Brutus III
     window_invalidate();
 }
 
@@ -1358,7 +1358,8 @@ void window_building_info_depot_select_resource(void)
 void window_building_info_depot_toggle_condition_type(void)
 {
     building *b = building_get(context.building_id);
-    b->data.depot.current_order.condition.condition_type = (b->data.depot.current_order.condition.condition_type + 1) % 4;
+    brutus_commande_4(BRUTUS_CMD_DEPOT_ORDRE, b->x, b->y, 3,
+        (b->data.depot.current_order.condition.condition_type + 1) % 4); // Brutus III
     window_invalidate();
 }
 
@@ -1367,7 +1368,8 @@ void window_building_info_depot_toggle_condition_threshold(void)
     building *b = building_get(context.building_id);
     int step = config_get(CONFIG_GP_STORAGE_INCREMENT_4) ? 4 : 8;
     int step_max = config_get(CONFIG_GP_STORAGE_INCREMENT_4) ? 36 : 40;
-    b->data.depot.current_order.condition.threshold = (b->data.depot.current_order.condition.threshold + step) % step_max;
+    brutus_commande_4(BRUTUS_CMD_DEPOT_ORDRE, b->x, b->y, 4,
+        (b->data.depot.current_order.condition.threshold + step) % step_max); // Brutus III
     window_invalidate();
 }
 
@@ -1377,7 +1379,7 @@ void window_building_info_depot_toggle_condition_threshold_reverse(void)
     int step = config_get(CONFIG_GP_STORAGE_INCREMENT_4) ? 4 : 8;
     int new_threshold = (b->data.depot.current_order.condition.threshold - step);
     new_threshold = new_threshold < 0 ? 32 : new_threshold;
-    b->data.depot.current_order.condition.threshold = new_threshold;
+    brutus_commande_4(BRUTUS_CMD_DEPOT_ORDRE, b->x, b->y, 4, new_threshold); // Brutus III
     window_invalidate();
 }
 

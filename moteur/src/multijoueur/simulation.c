@@ -106,3 +106,16 @@ void brutus_simulation_image(void)
     // Puis les ticks selon l'horloge et l'écran, comme dans le jeu d'origine.
     brutus_avancer_ticks(game_speed_get_elapsed_ticks());
 }
+
+int brutus_resynchroniser(const char *sauvegarde)
+{
+    // Le glisser en cours du joueur local est abandonné : la carte change sous lui.
+    if (building_construction_in_progress()) {
+        building_construction_cancel();
+    }
+    if (game_file_load_saved_game(sauvegarde) != 1) {
+        return 0;
+    }
+    etat.ticks_externes = 0;
+    return 1;
+}

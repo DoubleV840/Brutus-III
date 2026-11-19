@@ -2,9 +2,20 @@
 #include "multijoueur/commande.h"
 
 #include "building/building.h"
+#include "game/cheats.h"
+#include "city/trade_policy.h"
+#include "city/military.h"
+#include "city/games.h"
+#include "building/roadblock.h"
+#include "building/monument.h"
+#include "building/industry.h"
+#include "building/dock.h"
+#include "building/barracks.h"
 #include "building/construction.h"
 #include "building/construction_clear.h"
 #include "building/distribution.h"
+#include "building/figure.h"
+#include "building/maintenance.h"
 #include "building/menu.h"
 #include "building/rotation.h"
 #include "building/storage.h"
@@ -16,6 +27,7 @@
 #include "city/gods.h"
 #include "city/labor.h"
 #include "city/race_bet.h"
+#include "city/request.h"
 #include "city/ratings.h"
 #include "city/victory.h"
 #include "city/resource.h"
@@ -34,12 +46,16 @@
 #include "map/grid.h"
 #include "multijoueur/simulation.h"
 #include "scenario/allowed_building.h"
+#include "scenario/earthquake.h"
 #include "scenario/request.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 #define FILE_MAX 4096
+
+// Coût d'un module de grand temple (MODULE_COST de window/building/culture.c)
+#define BRUTUS_COUT_MODULE 1000
 
 static struct {
     brutus_commande file[FILE_MAX];
@@ -96,6 +112,22 @@ static const struct {
     [BRUTUS_CMD_PARI_COURSE] = { "pari-course", 2 },
     [BRUTUS_CMD_MESSAGE_LU] = { "message-lu", 1 },
     [BRUTUS_CMD_MESSAGE_SUPPRIMER] = { "message-supprimer", 1 },
+    [BRUTUS_CMD_DEPOT_ORDRE] = { "depot-ordre", 4 },
+    [BRUTUS_CMD_MONUMENT_ARRET] = { "monument-arret", 2 },
+    [BRUTUS_CMD_MONUMENT_MODULE] = { "monument-module", 3 },
+    [BRUTUS_CMD_MONNAIE_CONVERSION] = { "monnaie-conversion", 3 },
+    [BRUTUS_CMD_PRODUCTION_RESERVE] = { "production-reserve", 2 },
+    [BRUTUS_CMD_DOCK_ROUTE] = { "dock-route", 4 },
+    [BRUTUS_CMD_COMMERCE_POLITIQUE] = { "commerce-politique", 2 },
+    [BRUTUS_CMD_BARRAGE_PERMISSION] = { "barrage-permission", 3 },
+    [BRUTUS_CMD_CASERNE_PRIORITE] = { "caserne-priorite", 3 },
+    [BRUTUS_CMD_CASERNE_LIVRAISON] = { "caserne-livraison", 2 },
+    [BRUTUS_CMD_JEUX] = { "jeux", 1 },
+    [BRUTUS_CMD_DON_VILLE] = { "don-ville", 1 },
+    [BRUTUS_CMD_LEGIONS_BATAILLE] = { "legions-bataille", 1 },
+    [BRUTUS_CMD_LEGIONS_SERVICE_ANNULER] = { "legions-service-annuler", 0 },
+    [BRUTUS_CMD_VICTOIRE_CONTINUER] = { "victoire-continuer", 1 },
+    [BRUTUS_CMD_TRICHE] = { "triche", 5 },
 };
 
 void brutus_multijoueur_definir(int actif)
@@ -150,6 +182,11 @@ void brutus_partie_chargee(void)
     brutus_commandes_vider();
     game_undo_brutus_partie_chargee();
     city_message_brutus_partie_chargee();
+    building_figure_brutus_partie_chargee();
+    building_maintenance_brutus_partie_chargee();
+    game_cheat_brutus_partie_chargee();
+    city_labor_brutus_partie_chargee();
+    scenario_earthquake_brutus_partie_chargee();
     etat.repere++;
     random_brutus_reinitialiser_compteur();
 }
@@ -433,6 +470,97 @@ static int demande_envoyable(int id)
         (r->state == REQUEST_STATE_NORMAL || r->state == REQUEST_STATE_OVERDUE);
 }
 
+// --- M6a : commandes restantes (docs/commandes.md) ---
+
+static int stockage_par_id(int id)
+{
+    if (id == 0) {
+        return 1; // aucun
+    }
+    if (id < 0 || id >= building_count()) {
+        return 0;
+    }
+    const building *s = building_get(id);
+    return s->state == BUILDING_STATE_IN_USE && s->storage_id > 0;
+}
+
+static int executer_depot_ordre(const int32_t *p)
+{
+    building *b = batiment_en(p[0], p[1]);
+    if (!b || b->type != BUILDING_DEPOT) {
+        return 0;
+    }
+    order *o = &b->data.depot.current_order;
+    switch (p[2]) {
+        case 0: // ressource : comme set_order_resource + calculate_available_storages de l'interface
+            if (!ressource_valide(p[3]) || !resource_is_storable(p[3])) {
+                return 0;
+            }
+            o->resource_type = p[3];
+            building_depot_brutus_normaliser_ordre(b);
+            return 1;
+        case 1:
+        case 2:
+            if (!stockage_par_id(p[3]) || p[3] == b->id) {
+                return 0;
+            }
+            if (p[2] == 1) {
+                o->src_storage_id = p[3];
+                if (p[3] && o->dst_storage_id == (unsigned int) p[3]) {
+                    o->dst_storage_id = 0;
+                }
+            } else {
+                o->dst_storage_id = p[3];
+                if (p[3] && o->src_storage_id == (unsigned int) p[3]) {
+                    o->src_storage_id = 0;
+                }
+            }
+            return 1;
+        case 3:
+            if (p[3] < 0 || p[3] > 3) {
+                return 0;
+            }
+            o->condition.condition_type = p[3];
+            return 1;
+        case 4:
+            if (p[3] < 0 || p[3] > 40) {
+                return 0;
+            }
+            o->condition.threshold = p[3];
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static int executer_monnaie(const int32_t *p)
+{
+    building *b = batiment_en(p[0], p[1]);
+    if (!b || b->type != BUILDING_CITY_MINT || (p[2] != RESOURCE_DENARII && p[2] != RESOURCE_GOLD)) {
+        return 0;
+    }
+    if (b->output_resource_id == p[2]) {
+        return 1; // déjà
+    }
+    // Comme city_mint_conversion_changed (window/building/industry.c)
+    b->output_resource_id = p[2];
+    b->data.industry.progress = 0;
+    b->data.industry.age_months = 0;
+    b->data.industry.average_production_per_month = 0;
+    b->data.industry.production_current_month = 0;
+    return 1;
+}
+
+static int executer_jeux(int id)
+{
+    if (!city_games_brutus_possible(id)) {
+        return 0;
+    }
+    city_games_brutus_choisir(id);
+    city_games_schedule(id);
+    return 1;
+}
+
 // Retourne 1 si la commande a été exécutée, 0 si elle a été refusée (paramètres invalides).
 static int executer(const brutus_commande *c)
 {
@@ -463,6 +591,101 @@ static int executer(const brutus_commande *c)
             }
             game_undo_perform();
             break;
+        case BRUTUS_CMD_DEPOT_ORDRE:
+            return executer_depot_ordre(p);
+        case BRUTUS_CMD_MONUMENT_ARRET:
+            if (!(b = batiment_en(p[0], p[1])) || !building_monument_is_monument(b)) {
+                return 0;
+            }
+            building_monument_toggle_construction_halted(b);
+            break;
+        case BRUTUS_CMD_MONUMENT_MODULE:
+            // Comme add_module (window/building/culture.c) : coût puis module, si le moteur l'accepte
+            if (!(b = batiment_en(p[0], p[1])) || p[2] <= 0 || city_finance_out_of_money()) {
+                return 0;
+            }
+            if (!building_monument_add_module(b, p[2])) {
+                return 0;
+            }
+            city_finance_process_construction(BRUTUS_COUT_MODULE);
+            break;
+        case BRUTUS_CMD_MONNAIE_CONVERSION:
+            return executer_monnaie(p);
+        case BRUTUS_CMD_PRODUCTION_RESERVE:
+            if (!(b = batiment_en(p[0], p[1])) || !building_is_primary_product_producer(b->type)) {
+                return 0;
+            }
+            building_stockpiling_toggle(b);
+            break;
+        case BRUTUS_CMD_DOCK_ROUTE:
+            if (!(b = batiment_en(p[0], p[1])) || b->type != BUILDING_DOCK || p[2] < 0 || p[2] >= 50) {
+                return 0;
+            }
+            building_dock_set_can_trade_with_route(p[2], b->id, p[3] != 0);
+            break;
+        case BRUTUS_CMD_COMMERCE_POLITIQUE:
+            // Comme l'interface (window/advisor/trade.c) : politique puis coût
+            if ((p[0] != LAND_TRADE_POLICY && p[0] != SEA_TRADE_POLICY) || p[1] <= NO_POLICY || p[1] > TRADE_POLICY_3) {
+                return 0;
+            }
+            city_trade_policy_set(p[0], p[1]);
+            city_finance_process_sundry(TRADE_POLICY_COST);
+            break;
+        case BRUTUS_CMD_BARRAGE_PERMISSION:
+            if (!(b = batiment_en(p[0], p[1])) || !building_type_is_roadblock(b->type) || p[2] < -2 || p[2] >= 32) {
+                return 0;
+            }
+            if (p[2] == -1) {
+                building_roadblock_accept_none(b);
+            } else if (p[2] == -2) {
+                building_roadblock_accept_all(b);
+            } else {
+                building_roadblock_set_permission(p[2], b);
+            }
+            break;
+        case BRUTUS_CMD_CASERNE_PRIORITE:
+            if (!(b = batiment_en(p[0], p[1])) || b->type != BUILDING_BARRACKS || p[2] < 0 || p[2] > 1) {
+                return 0;
+            }
+            building_barracks_set_priority(b, p[2]);
+            break;
+        case BRUTUS_CMD_CASERNE_LIVRAISON:
+            if (!(b = batiment_en(p[0], p[1])) || b->type != BUILDING_BARRACKS) {
+                return 0;
+            }
+            building_barracks_toggle_delivery(b);
+            break;
+        case BRUTUS_CMD_JEUX:
+            return executer_jeux(p[0]);
+        case BRUTUS_CMD_DON_VILLE:
+            if (p[0] <= 0) {
+                return 0;
+            }
+            city_emperor_set_donation_amount(p[0]); // borné par l'épargne (pari en cours déduit)
+            city_emperor_donate_savings_to_city();
+            break;
+        case BRUTUS_CMD_LEGIONS_BATAILLE:
+            // Bataille lointaine demandée par César (sinon l'interface ne propose rien)
+            if (!city_request_has_troop_request()) {
+                return 0;
+            }
+            formation_legions_dispatch_to_distant_battle();
+            if (p[0]) {
+                city_military_clear_empire_service_legions();
+            }
+            break;
+        case BRUTUS_CMD_LEGIONS_SERVICE_ANNULER:
+            city_military_clear_empire_service_legions();
+            break;
+        case BRUTUS_CMD_VICTOIRE_CONTINUER:
+            if (!city_victory_has_won() || p[0] <= 0 || p[0] > 10) {
+                return 0;
+            }
+            city_victory_continue_governing(p[0]);
+            city_victory_reset();
+            break;
+        case BRUTUS_CMD_TRICHE:
+            return game_cheat_brutus_executer(p[0], p + 1);
         case BRUTUS_CMD_MESSAGE_LU:
             return city_message_brutus_marquer_lu(p[0]);
         case BRUTUS_CMD_MESSAGE_SUPPRIMER:

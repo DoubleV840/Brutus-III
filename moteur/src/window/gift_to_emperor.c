@@ -29,9 +29,19 @@ static generic_button buttons[] = {
 
 static unsigned int focus_button_id;
 
+// Brutus III : taille du cadeau choisie dans la fenêtre, gardée ici (la partie ne change que
+// par la commande don-cesar). Même ajustement que city_emperor_init_selected_gift, sans écrire.
+static int choix_cadeau;
+
 static void init(void)
 {
-    city_emperor_init_selected_gift();
+    choix_cadeau = city_emperor_selected_gift_size();
+    if (choix_cadeau == GIFT_LAVISH && !city_emperor_can_send_gift(GIFT_LAVISH)) {
+        choix_cadeau = GIFT_GENEROUS;
+    }
+    if (choix_cadeau == GIFT_GENEROUS && !city_emperor_can_send_gift(GIFT_GENEROUS)) {
+        choix_cadeau = GIFT_MODEST;
+    }
 }
 
 static void draw_background(void)
@@ -54,7 +64,7 @@ static void draw_background(void)
 static void draw_foreground(void)
 {
     graphics_in_dialog();
-    int current_gift = city_emperor_selected_gift_size();
+    int current_gift = choix_cadeau;
     inner_panel_draw(112, 208, 28, 5);
 
     if (city_emperor_can_send_gift(GIFT_MODEST)) {
@@ -91,7 +101,7 @@ static void draw_foreground(void)
     }
     // can give at least one type
     if (city_emperor_can_send_gift(GIFT_MODEST)) {
-        lang_text_draw_centered(52, 66 + city_emperor_selected_gift_size(), 118, 341, 260, FONT_NORMAL_BLACK);
+        lang_text_draw_centered(52, 66 + choix_cadeau, 118, 341, 260, FONT_NORMAL_BLACK);
         button_border_draw(118, 336, 260, 20, focus_button_id == 4);
     }
     button_border_draw(400, 336, 160, 20, focus_button_id == 5);
@@ -112,7 +122,9 @@ static void handle_input(const mouse *m, const hotkeys *h)
 static void button_set_gift(const generic_button *button)
 {
     int gift_id = button->parameter1;
-    if (city_emperor_set_gift_size(gift_id - 1)) {
+    // Brutus III : même condition que city_emperor_set_gift_size, sans écrire dans la partie
+    if (gift_id >= 1 && gift_id <= GIFT_MAX && city_emperor_brutus_cadeau_abordable(gift_id - 1)) {
+        choix_cadeau = gift_id - 1;
         window_invalidate();
     }
 }
@@ -120,7 +132,7 @@ static void button_set_gift(const generic_button *button)
 static void button_send_gift(const generic_button *button)
 {
     if (city_emperor_can_send_gift(GIFT_MODEST)) {
-        brutus_commande_1(BRUTUS_CMD_DON_CESAR, city_emperor_selected_gift_size()); // Brutus III
+        brutus_commande_1(BRUTUS_CMD_DON_CESAR, choix_cadeau); // Brutus III
         window_advisors_show();
     }
 }

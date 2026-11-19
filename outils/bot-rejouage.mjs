@@ -122,12 +122,14 @@ const B = {
   MEDECIN: 46, BAINS: 48, BARBIER: 49, ECOLE: 51, PREFECTURE: 55, TOUR: 59, TEMPLE_CERES: 60,
   MARCHE: 70, GRENIER: 71, ENTREPOT: 72, INGENIEURS: 81, FORUM: 86, RESERVOIR: 90, FONTAINE: 91,
   PUITS: 92, BLE: 100, LEGUMES: 101, BOIS: 108, ARGILE: 109, POTERIE: 114,
+  CASERNE: 95, BARRAGE: 115, DEPOT: 186, // M6a
 };
 const TAILLE = {
   [B.THEATRE]: 2, [B.ACTEURS]: 3, [B.MEDECIN]: 1, [B.BAINS]: 2, [B.BARBIER]: 1, [B.ECOLE]: 2,
   [B.PREFECTURE]: 1, [B.TEMPLE_CERES]: 2, [B.MARCHE]: 2, [B.GRENIER]: 3, [B.ENTREPOT]: 3,
   [B.INGENIEURS]: 1, [B.FORUM]: 2, [B.RESERVOIR]: 3, [B.FONTAINE]: 1, [B.PUITS]: 1, [B.BLE]: 3,
   [B.LEGUMES]: 3, [B.BOIS]: 2, [B.ARGILE]: 2, [B.POTERIE]: 2,
+  [B.CASERNE]: 3, [B.BARRAGE]: 1, [B.DEPOT]: 2,
 };
 
 const commandes = [];
@@ -141,6 +143,7 @@ const construire = (t, type, x0, y0, x1 = x0, y1 = y0) =>
   ajouter(t, 'construire', type, x0, y0, x1, y1, 0, 0, 1, orientation);
 
 const stockages = []; // [x, y, est_entrepot]
+const parType = {}; // M6a : [x, y] des bâtiments posés, par type (dépôts, casernes, barrages, champs…)
 const batiments = []; // [x, y] des bâtiments posés (cibles de mise en sommeil, démolition)
 const lignesRoutes = [];
 
@@ -156,6 +159,7 @@ function poserBatiment(t, type, rayon) {
     construire(t, type, x, y);
     marquer(x, y, x + taille - 1, y + taille - 1);
     batiments.push([x, y]);
+    (parType[type] = parType[type] || []).push([x, y]);
     if (type === B.ENTREPOT || type === B.GRENIER) stockages.push([x, y, type === B.ENTREPOT]);
     return true;
   }
@@ -201,7 +205,7 @@ const services = [B.PUITS, B.PUITS, B.FONTAINE, B.PREFECTURE, B.INGENIEURS, B.MA
 const actions = [
   [22, 'maisons'], [20, 'service'], [6, 'route'], [6, 'demolition'], [6, 'impots'], [3, 'salaires'],
   [6, 'priorite'], [12, 'stockage'], [2, 'sommeil'], [1, 'fete'], [1, 'aqueduc'], [1, 'mur'],
-  [2, 'distribution'], [1, 'annuler'], [1, 'legion'], [4, 'divers'],
+  [2, 'distribution'], [1, 'annuler'], [1, 'legion'], [4, 'divers'], [6, 'm6a'],
 ];
 const totalPoids = actions.reduce((s, [p]) => s + p, 0);
 function tirerAction() {
@@ -231,6 +235,41 @@ while (t < TICKS - 50) {
     continue;
   }
   switch (tirerAction()) {
+    case 'm6a': {
+      // M6a : commandes migrées (dépôts, monuments, monnaie, commerce, docks, barrages, caserne,
+      // jeux, dons, messages, triches). Beaucoup sont refusées (pas de cible) : c'est voulu.
+      const cible = (type) => (parType[type] && parType[type].length ? choisir(parType[type]) : choisir(batiments.length ? batiments : [[CX, CY]]));
+      const r = entier(0, 19);
+      if (r === 0) poserBatiment(t, choisir([B.DEPOT, B.CASERNE, B.BARRAGE]), rayon);
+      else if (r <= 3) {
+        const [x, y] = cible(B.DEPOT);
+        const champ = entier(0, 4);
+        const valeur = champ === 0 ? entier(1, 20) : champ <= 2 ? (alea() < 0.3 ? 0 : entier(1, 150))
+          : champ === 3 ? entier(0, 3) : 8 * entier(0, 4);
+        ajouter(t, 'depot-ordre', x, y, champ, valeur);
+      } else if (r === 4) { const [x, y] = cible(B.CASERNE); ajouter(t, 'caserne-priorite', x, y, entier(0, 1)); }
+      else if (r === 5) { const [x, y] = cible(B.CASERNE); ajouter(t, 'caserne-livraison', x, y); }
+      else if (r === 6) { const [x, y] = cible(B.BARRAGE); ajouter(t, 'barrage-permission', x, y, entier(-2, 4)); }
+      else if (r === 7) { const [x, y] = cible(choisir([B.BLE, B.ARGILE, B.BOIS])); ajouter(t, 'production-reserve', x, y); }
+      else if (r === 8) ajouter(t, 'commerce-politique', entier(0, 1), entier(1, 3));
+      else if (r === 9) ajouter(t, 'jeux', entier(1, 4));
+      else if (r === 10) ajouter(t, 'don-ville', 10 * entier(1, 20));
+      else if (r === 11) ajouter(t, alea() < 0.5 ? 'message-lu' : 'message-supprimer', entier(1, 60));
+      else if (r === 12) ajouter(t, 'legions-service-annuler');
+      else if (r === 13) ajouter(t, 'legions-bataille', entier(0, 1));
+      else if (r === 14) ajouter(t, 'victoire-continuer', choisir([2, 5]));
+      else if (r === 15) { const [x, y] = choisir(batiments.length ? batiments : [[CX, CY]]); ajouter(t, 'monument-arret', x, y); }
+      else if (r === 16) { const [x, y] = choisir(batiments.length ? batiments : [[CX, CY]]); ajouter(t, 'monument-module', x, y, entier(1, 2)); }
+      else if (r === 17) { const [x, y] = choisir(batiments.length ? batiments : [[CX, CY]]); ajouter(t, 'monnaie-conversion', x, y, choisir([1, 8])); }
+      else if (r === 18) { const [x, y] = choisir(batiments.length ? batiments : [[CX, CY]]); ajouter(t, 'dock-route', x, y, entier(1, 5), entier(0, 1)); }
+      else {
+        // Triches sans danger pour la suite du test : argent, marchés pleins, légions sans
+        // consommation, invasions coupées (numéros de game/cheats.c)
+        const triche = choisir([[0, 200 * entier(1, 5)], [21, 0], [16, 0], [17, 0]]);
+        ajouter(t, 'triche', triche[0], triche[1], 0, 0, 0);
+      }
+      break;
+    }
     case 'maisons': {
       // Le plus souvent le long d'une route du quadrillage (les maisons ont besoin d'une route).
       const l = entier(2, 6);

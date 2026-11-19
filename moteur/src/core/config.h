@@ -206,4 +206,7 @@ int config_must_configure_user_directory(void);
  */
 void config_save(void);
 
+/** Brutus III : nom de l'option dans le fichier .ini, ou 0. */
+const char *config_brutus_nom(config_key key);
+
 #endif // CORE_CONFIG_H

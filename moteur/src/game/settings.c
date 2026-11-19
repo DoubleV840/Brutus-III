@@ -3,6 +3,7 @@
 #include "city/constants.h"
 #include "core/buffer.h"
 #include "core/calc.h"
+#include "multijoueur/entete.h" // Brutus III
 #include "core/config.h"
 #include "core/dir.h"
 #include "core/file.h"
@@ -179,7 +180,8 @@ void settings_save(void)
     buffer_skip(buf, 4); //int is_custom_scenario;
     buffer_write_u8(buf, data.sound_settings[SOUND_TYPE_CITY].enabled);
     buffer_write_u8(buf, data.warnings);
-    buffer_write_u8(buf, data.monthly_autosave);
+    // Brutus III : réglage local, pas celui d'un en-tête de partie chargé
+    buffer_write_u8(buf, brutus_entete_reglage_local(BRUTUS_REGLAGE_SAUVEGARDE_MENSUELLE, data.monthly_autosave));
     buffer_skip(buf, 1); //unsigned char autoclear_enabled;
     buffer_write_i32(buf, data.sound_settings[SOUND_TYPE_EFFECTS].volume);
     buffer_write_i32(buf, data.sound_settings[SOUND_TYPE_MUSIC].volume);
@@ -193,8 +195,8 @@ void settings_save(void)
         buffer_write_i32(buf, data.personal_savings[i]);
     }
     buffer_write_i32(buf, data.victory_video);
-    buffer_write_i32(buf, data.difficulty);
-    buffer_write_i32(buf, data.gods_enabled);
+    buffer_write_i32(buf, brutus_entete_reglage_local(BRUTUS_REGLAGE_DIFFICULTE, data.difficulty)); // Brutus III
+    buffer_write_i32(buf, brutus_entete_reglage_local(BRUTUS_REGLAGE_DIEUX, data.gods_enabled)); // Brutus III
 
     // Find existing file to overwrite
     const char *settings_file = dir_append_location("c3.inf", PATH_LOCATION_CONFIG);
@@ -348,6 +350,9 @@ int setting_monthly_autosave(void)
 
 void setting_toggle_monthly_autosave(void)
 {
+    if (!brutus_entete_reglage_change(BRUTUS_REGLAGE_SAUVEGARDE_MENSUELLE, data.monthly_autosave ? 0 : 1)) {
+        return; // Brutus III : réglage de la partie verrouillé (multijoueur)
+    }
     data.monthly_autosave = data.monthly_autosave ? 0 : 1;
 }
 
@@ -358,6 +363,9 @@ int setting_gods_enabled(void)
 
 void setting_toggle_gods_enabled(void)
 {
+    if (!brutus_entete_reglage_change(BRUTUS_REGLAGE_DIEUX, data.gods_enabled ? 0 : 1)) {
+        return; // Brutus III : réglage de la partie verrouillé (multijoueur)
+    }
     data.gods_enabled = data.gods_enabled ? 0 : 1;
 }
 
@@ -368,6 +376,11 @@ set_difficulty setting_difficulty(void)
 
 void setting_increase_difficulty(void)
 {
+    // Brutus III : réglage de la partie (verrouillé en multijoueur)
+    if (!brutus_entete_reglage_change(BRUTUS_REGLAGE_DIFFICULTE,
+        data.difficulty >= DIFFICULTY_VERY_HARD ? DIFFICULTY_VERY_HARD : data.difficulty + 1)) {
+        return;
+    }
     if (data.difficulty >= DIFFICULTY_VERY_HARD) {
         data.difficulty = DIFFICULTY_VERY_HARD;
     } else {
@@ -377,6 +390,11 @@ void setting_increase_difficulty(void)
 
 void setting_decrease_difficulty(void)
 {
+    // Brutus III : réglage de la partie (verrouillé en multijoueur)
+    if (!brutus_entete_reglage_change(BRUTUS_REGLAGE_DIFFICULTE,
+        data.difficulty <= DIFFICULTY_VERY_EASY ? DIFFICULTY_VERY_EASY : data.difficulty - 1)) {
+        return;
+    }
     if (data.difficulty <= DIFFICULTY_VERY_EASY) {
         data.difficulty = DIFFICULTY_VERY_EASY;
     } else {
@@ -424,5 +442,23 @@ void setting_clear_personal_savings(void)
 {
     for (int i = 0; i < MAX_PERSONAL_SAVINGS; i++) {
         data.personal_savings[i] = 0;
+    }
+}
+
+// Brutus III : réglages de la partie fixés par un en-tête (multijoueur/entete.c), sans accroche
+void setting_brutus_definir(int reglage, int valeur)
+{
+    switch (reglage) {
+        case BRUTUS_REGLAGE_DIFFICULTE:
+            data.difficulty = calc_bound(valeur, DIFFICULTY_VERY_EASY, DIFFICULTY_VERY_HARD);
+            break;
+        case BRUTUS_REGLAGE_DIEUX:
+            data.gods_enabled = valeur != 0;
+            break;
+        case BRUTUS_REGLAGE_SAUVEGARDE_MENSUELLE:
+            data.monthly_autosave = valeur != 0;
+            break;
+        default:
+            break;
     }
 }

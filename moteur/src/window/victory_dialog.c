@@ -13,6 +13,7 @@
 #include "scenario/property.h"
 #include "sound/music.h"
 #include "window/city.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #define MAX_RANK 10
 
@@ -105,9 +106,8 @@ static void button_accept(const generic_button *button)
 static void button_continue_governing(const generic_button *button)
 {
     int months = button->parameter1;
-    city_victory_continue_governing(months);
+    brutus_commande_1(BRUTUS_CMD_VICTOIRE_CONTINUER, months); // Brutus III (+ city_victory_reset)
     window_city_show();
-    city_victory_reset();
     sound_music_update(1);
 }
 

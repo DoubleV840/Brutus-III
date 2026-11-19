@@ -24,6 +24,7 @@
 #include "translation/translation.h"
 #include "widget/dropdown_button.h"
 #include "window/building_info.h"
+#include "multijoueur/commande.h" // Brutus III
 
 static void order_set_source(const generic_button *button);
 static void order_set_destination(const generic_button *button);
@@ -248,10 +249,10 @@ static void calculate_available_storages(int building_id)
     data.depot_building_id = building_id;
 
     building *b = building_get(data.depot_building_id);
-    if (!b->data.depot.current_order.resource_type) {
-        b->data.depot.current_order.resource_type = RESOURCE_MIN_FOOD;
-    }
-    data.target_resource_id = b->data.depot.current_order.resource_type;
+    // Brutus III : l'ouverture de la fenêtre ne change plus l'ordre (ressource par défaut, source
+    // ou destination invalides) : c'est la commande depot-ordre qui le remet en état.
+    data.target_resource_id = b->data.depot.current_order.resource_type ?
+        b->data.depot.current_order.resource_type : RESOURCE_MIN_FOOD;
 
     data.available_storages = 0;
     data.secondary_storages = 0;
@@ -288,12 +289,8 @@ static void calculate_available_storages(int building_id)
             has_valid_dst = dst_state != BUILDING_STORAGE_STATE_NOT_ACCEPTING ? 1 : 0;
         }
     }
-    if (!has_valid_src) {
-        b->data.depot.current_order.src_storage_id = 0;
-    }
-    if (!has_valid_dst) {
-        b->data.depot.current_order.dst_storage_id = 0;
-    }
+    (void) has_valid_src; // Brutus III : plus d'écriture ici (voir plus haut)
+    (void) has_valid_dst;
 
 }
 
@@ -803,10 +800,7 @@ static void set_order_source(const generic_button *button)
         return;
     }
     building *b = building_get(depot_building_id);
-    b->data.depot.current_order.src_storage_id = building_id;
-    if (b->data.depot.current_order.dst_storage_id == building_id) {
-        b->data.depot.current_order.dst_storage_id = 0;
-    }
+    brutus_commande_4(BRUTUS_CMD_DEPOT_ORDRE, b->x, b->y, 1, building_id); // Brutus III
     window_building_info_depot_return_to_main_window();
 }
 
@@ -818,10 +812,7 @@ static void set_order_destination(const generic_button *button)
         return;
     }
     building *b = building_get(depot_building_id);
-    b->data.depot.current_order.dst_storage_id = building_id;
-    if (b->data.depot.current_order.src_storage_id == building_id) {
-        b->data.depot.current_order.src_storage_id = 0;
-    }
+    brutus_commande_4(BRUTUS_CMD_DEPOT_ORDRE, b->x, b->y, 2, building_id); // Brutus III
     window_building_info_depot_return_to_main_window();
 }
 
@@ -1019,7 +1010,8 @@ static void set_order_resource(const generic_button *button)
     resource_type resource_id = button->parameter2;
     if (resource_id >= RESOURCE_MIN && resource_id < RESOURCE_MAX && resource_is_storable(resource_id)) {
         building *b = building_get(depot_building_id);
-        b->data.depot.current_order.resource_type = resource_id;
+        brutus_commande_4(BRUTUS_CMD_DEPOT_ORDRE, b->x, b->y, 0, resource_id); // Brutus III
+        data.target_resource_id = resource_id;
         calculate_available_storages(depot_building_id);
         window_building_info_depot_return_to_main_window();
     }
@@ -1076,7 +1068,7 @@ static void order_clear_source(const generic_button *button)
     if (!b || b->type != BUILDING_DEPOT) {
         return;
     }
-    b->data.depot.current_order.src_storage_id = 0;
+    brutus_commande_4(BRUTUS_CMD_DEPOT_ORDRE, b->x, b->y, 1, 0); // Brutus III
     window_request_refresh();
 }
 
@@ -1086,7 +1078,7 @@ static void order_clear_destination(const generic_button *button)
     if (!b || b->type != BUILDING_DEPOT) {
         return;
     }
-    b->data.depot.current_order.dst_storage_id = 0;
+    brutus_commande_4(BRUTUS_CMD_DEPOT_ORDRE, b->x, b->y, 2, 0); // Brutus III
     window_request_refresh();
 }
 

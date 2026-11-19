@@ -25,6 +25,7 @@
 #include "window/advisors.h"
 #include "window/city.h"
 #include "window/message_dialog.h"
+#include "multijoueur/commande.h" // Brutus III
 
 static void button_game(const generic_button *button);
 static void button_help(int param1, int param2);
@@ -54,15 +55,15 @@ static struct {
     unsigned int focus_game_button_id;
     int return_to_city;
     int game_possible;
+    int choix; // Brutus III : jeux choisis dans la fenêtre (la partie ne change que par la commande jeux)
 } data;
 
 static void draw_background(void)
 {
-    int selected_game_id = city_data.games.selected_games_id;
-    if (!selected_game_id) {
-        city_data.games.selected_games_id = 1;
-        selected_game_id = 1;
+    if (!data.choix) {
+        data.choix = 1; // Brutus III : plus d'écriture dans la partie
     }
+    int selected_game_id = data.choix;
     games_type *game = city_games_get_game_type(selected_game_id);
 
     window_advisors_draw_dialog_background();
@@ -162,7 +163,7 @@ static void handle_input(const mouse *m, const hotkeys *h)
 
 static void button_game(const generic_button *button)
 {
-    city_data.games.selected_games_id = button->parameter1;
+    data.choix = button->parameter1; // Brutus III
     window_invalidate();
 }
 
@@ -179,7 +180,7 @@ static void button_close(int param1, int param2)
 static void button_hold_games(int param1, int param2)
 {
     if (data.game_possible) {
-        city_games_schedule(city_data.games.selected_games_id);
+        brutus_commande_1(BRUTUS_CMD_JEUX, data.choix); // Brutus III
         close_window();
     }
 }
@@ -220,6 +221,7 @@ void window_hold_games_show(int return_to_city)
         get_tooltip
     };
     data.return_to_city = return_to_city;
+    data.choix = city_data.games.selected_games_id; // Brutus III
     // Make sure entertainment advisor is selected in case it was opened from outside the advisors window
     window_advisors_set_advisor(ADVISOR_ENTERTAINMENT);
     window_show(&window);

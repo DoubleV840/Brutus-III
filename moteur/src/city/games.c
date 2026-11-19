@@ -1,4 +1,7 @@
 #include "games.h"
+#include "building/building.h" // Brutus III
+#include "city/resource.h" // Brutus III
+#include "building/count.h" // Brutus III
 
 #include "building/granary.h"
 #include "building/warehouse.h"
@@ -208,4 +211,33 @@ static void imperial_games_start(void)
 {
     games_type *game = city_games_get_game_type(city_data.games.selected_games_id);
     city_data.games.imperial_games_bonus_months = game->bonus_duration;
+}
+
+// Brutus III : mêmes conditions que la fenêtre des jeux (window/hold_games.c), pour la commande jeux
+int city_games_brutus_possible(int game_id)
+{
+    games_type *game = city_games_get_game_type(game_id);
+    if (!game || game_id <= 0 || city_data.games.months_to_go > 0 || city_data.games.games_is_active) {
+        return 0;
+    }
+    if (!building_count_active(game->building_id_required) ||
+        city_emperor_personal_savings() < city_games_money_cost(game_id)) {
+        return 0;
+    }
+    for (int resource = RESOURCE_MIN; resource < RESOURCE_MAX; resource++) {
+        int cost = city_games_resource_cost(game_id, resource);
+        if (cost && city_resource_get_amount_including_granaries(resource, cost, 0, 1) < cost) {
+            return 0;
+        }
+    }
+    building *venue = building_first_of_type(game->building_id_required);
+    if (game->water_access_required && venue && !venue->has_water_access) {
+        return 0;
+    }
+    return 1;
+}
+
+void city_games_brutus_choisir(int game_id)
+{
+    city_data.games.selected_games_id = game_id;
 }

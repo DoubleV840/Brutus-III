@@ -40,4 +40,7 @@ void city_festival_schedule(void);
 void city_festival_update(void);
 void city_festival_calculate_costs(void);
 
+/** Brutus III : pas assez de vin pour une grande fête. */
+int city_festival_brutus_vin_insuffisant(void);
+
 #endif // CITY_FESTIVAL_H

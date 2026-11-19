@@ -723,13 +723,13 @@ static void button_priority(const generic_button *button)
 {
     int index = button->parameter1;
     building *barracks = building_get(data.building_id);
-    building_barracks_set_priority(barracks, index);
+    brutus_commande_3(BRUTUS_CMD_CASERNE_PRIORITE, barracks->x, barracks->y, index); // Brutus III
 }
 
 static void button_delivery(const generic_button *button)
 {
     building *barracks = building_get(data.building_id);
-    building_barracks_toggle_delivery(barracks);
+    brutus_commande_2(BRUTUS_CMD_CASERNE_LIVRAISON, barracks->x, barracks->y); // Brutus III
 }
 
 void window_building_draw_watchtower(building_info_context *c)

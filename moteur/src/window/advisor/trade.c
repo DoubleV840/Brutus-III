@@ -26,6 +26,7 @@
 #include "window/option_popup.h"
 #include "window/resource_settings.h"
 #include "window/trade_prices.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #include <string.h>
 
@@ -281,9 +282,8 @@ static void apply_policy(int selected_policy)
     if (selected_policy == NO_POLICY) {
         return;
     }
-    city_trade_policy_set(data.policy_type, selected_policy);
+    brutus_commande_2(BRUTUS_CMD_COMMERCE_POLITIQUE, data.policy_type, selected_policy); // Brutus III (+ coût)
     sound_speech_play_file(policy_options[data.policy_type].wav_file);
-    city_finance_process_sundry(TRADE_POLICY_COST);
 }
 
 static void show_policy(trade_policy_type policy_type)

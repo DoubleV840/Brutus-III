@@ -21,6 +21,7 @@
 #include "translation/translation.h"
 #include "window/building_info.h"
 #include "window/building/figures.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #include <stdlib.h>
 
@@ -542,7 +543,7 @@ static void button_toggle_figure_state(const generic_button *button)
     int index = button->parameter1;
     building *b = building_get(data.building_id);
     if (building_type_is_roadblock(b->type)) {
-        building_roadblock_set_permission(index, b);
+        brutus_commande_3(BRUTUS_CMD_BARRAGE_PERMISSION, b->x, b->y, index); // Brutus III
     }
     window_invalidate();
 }
@@ -550,11 +551,8 @@ static void button_toggle_figure_state(const generic_button *button)
 static void button_roadblock_orders(const generic_button *button)
 {
     building *b = building_get(data.building_id);
-    if (affect_all_button_state() == REJECT_ALL) {
-        building_roadblock_accept_none(b);
-    } else {
-        building_roadblock_accept_all(b);
-    }
+    // Brutus III : -1 aucune, -2 toutes (commande barrage-permission)
+    brutus_commande_3(BRUTUS_CMD_BARRAGE_PERMISSION, b->x, b->y, affect_all_button_state() == REJECT_ALL ? -1 : -2);
     window_invalidate();
 
 }

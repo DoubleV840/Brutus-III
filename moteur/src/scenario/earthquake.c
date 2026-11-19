@@ -204,6 +204,15 @@ static int custom_earthquake_advance_random_tiles(void)
     return 1; // At least one tile processed
 }
 
+// Brutus III : compteur du tremblement de terre personnalisé (était une variable statique de la
+// fonction). Hors sauvegarde : remis à zéro à chaque chargement (hôte qui recharge = invité).
+static int custom_delay = 0; // Delay counter in ticks
+
+void scenario_earthquake_brutus_partie_chargee(void)
+{
+    custom_delay = 0;
+}
+
 void scenario_earthquake_process(void)
 {
     // Check if earthquake is disabled or not set
@@ -214,7 +223,6 @@ void scenario_earthquake_process(void)
     }
     // --- Custom earthquake ---
     if (scenario.earthquake.severity == EARTHQUAKE_CUSTOM) {
-        static int custom_delay = 0; // Delay counter in ticks
         if (data.state == EVENT_NOT_STARTED) { // Start event
             if (game_time_year() == data.game_year && game_time_month() == data.month) {
                 data.state = EVENT_IN_PROGRESS;

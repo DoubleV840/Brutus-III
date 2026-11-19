@@ -24,6 +24,7 @@
 #include "scenario/property.h"
 #include "translation/translation.h"
 #include "window/popup_dialog.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #include <stdio.h>
 
@@ -557,15 +558,9 @@ static void city_mint_conversion_changed(int accepted, int checked)
         return;
     }
     building *city_mint = building_get(data.city_mint_id);
-    if (city_mint->output_resource_id == RESOURCE_DENARII) {
-        city_mint->output_resource_id = RESOURCE_GOLD;
-    } else {
-        city_mint->output_resource_id = RESOURCE_DENARII;
-    }
-    city_mint->data.industry.progress = 0;
-    city_mint->data.industry.age_months = 0;
-    city_mint->data.industry.average_production_per_month = 0;
-    city_mint->data.industry.production_current_month = 0;
+    // Brutus III : conversion par la commande monnaie-conversion (même remise à zéro)
+    brutus_commande_3(BRUTUS_CMD_MONNAIE_CONVERSION, city_mint->x, city_mint->y,
+        city_mint->output_resource_id == RESOURCE_DENARII ? RESOURCE_GOLD : RESOURCE_DENARII);
 }
 
 static void set_city_mint_conversion(const generic_button *button)

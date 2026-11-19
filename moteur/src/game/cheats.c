@@ -34,7 +34,9 @@
 #include "window/editor/attributes.h"
 #include "window/editor/scenario_events.h"
 #include "window/plain_message_dialog.h"
+#include "multijoueur/commande.h" // Brutus III
 
+#include <stdio.h> // Brutus III
 #include <string.h>
 
 static int map_editor_warning_shown;
@@ -166,7 +168,7 @@ void game_cheat_activate(void)
         }
     } else if (data.is_cheating && window_is(WINDOW_MESSAGE_DIALOG)) {
         data.is_cheating = 2;
-        scenario_invasion_start_from_cheat();
+        brutus_commande_1(BRUTUS_CMD_TRICHE, BRUTUS_TRICHE_INVASION); // Brutus III
     } else {
         data.is_cheating = 0;
     }
@@ -183,7 +185,7 @@ int game_cheat_tooltip_enabled(void)
 void game_cheat_money(void)
 {
     if (data.is_cheating) {
-        city_finance_process_cheat();
+        brutus_commande_1(BRUTUS_CMD_TRICHE, BRUTUS_TRICHE_ARGENT); // Brutus III
         window_invalidate();
     }
 }
@@ -191,7 +193,7 @@ void game_cheat_money(void)
 void game_cheat_victory(void)
 {
     if (data.is_cheating) {
-        city_victory_force_win();
+        brutus_commande_1(BRUTUS_CMD_TRICHE, BRUTUS_TRICHE_VICTOIRE); // Brutus III
     }
 }
 
@@ -434,15 +436,77 @@ void game_cheat_reset_markets_filled(void)
     data.filled_markets = 0;
 }
 
+// Brutus III : triches qui ne touchent que l'écran (info-bulles, éditeur d'événements)
+static int brutus_triche_locale(int numero)
+{
+    return numero == 4 || numero == 10 || numero == 11;
+}
+
 void game_cheat_parse_command(uint8_t *command)
 {
     uint8_t command_to_call[MAX_COMMAND_SIZE];
     int next_arg = parse_word(command, command_to_call);
     for (int i = 0; i < NUMBER_OF_COMMANDS; i++) {
         if (strcmp((char *) command_to_call, commands[i]) == 0) {
-            (*execute_command[i])(command + next_arg);
+            if (brutus_triche_locale(i)) {
+                (*execute_command[i])(command + next_arg);
+                continue;
+            }
+            // Brutus III : les autres changent la partie : commande triche (4 entiers au plus)
+            int32_t p[5] = { i, 0, 0, 0, 0 };
+            uint8_t *args = command + next_arg;
+            for (int k = 1; k < 5; k++) {
+                if (!*args) {
+                    break; // fin du texte (parse_integer passe toujours un caractère de plus)
+                }
+                int valeur = 0;
+                int lus = parse_integer(args, &valeur);
+                if (lus <= 0) {
+                    break;
+                }
+                p[k] = valeur;
+                args += lus;
+                if (args[-1] == 0) {
+                    break; // le dernier entier finissait le texte
+                }
+            }
+            brutus_commande_envoyer(BRUTUS_CMD_TRICHE, 5, p);
         }
     }
+}
+
+// Brutus III : exécution de la commande triche (numero 100 argent, 101 victoire, 102 invasion)
+int game_cheat_brutus_executer(int numero, const int32_t *args)
+{
+    switch (numero) {
+        case BRUTUS_TRICHE_ARGENT:
+            city_finance_process_cheat();
+            return 1;
+        case BRUTUS_TRICHE_VICTOIRE:
+            city_victory_force_win();
+            return 1;
+        case BRUTUS_TRICHE_INVASION:
+            scenario_invasion_start_from_cheat();
+            return 1;
+        default:
+            break;
+    }
+    if (numero < 0 || numero >= (int) NUMBER_OF_COMMANDS || brutus_triche_locale(numero)) {
+        return 0;
+    }
+    char texte[64];
+    snprintf(texte, sizeof(texte), "%d %d %d %d", (int) args[0], (int) args[1], (int) args[2], (int) args[3]);
+    (*execute_command[numero])((uint8_t *) texte);
+    return 1;
+}
+
+// Brutus III : effets des triches hors sauvegarde : remis à zéro à chaque chargement
+void game_cheat_brutus_partie_chargee(void)
+{
+    data.extra_legions_unlocked = 0;
+    data.disabled_legions_consumption = 0;
+    data.disabled_invasions = 0;
+    data.filled_markets = 0;
 }
 int game_cheat_extra_legions(void)
 {

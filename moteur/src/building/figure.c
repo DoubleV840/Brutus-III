@@ -50,6 +50,15 @@ static struct {
     int houses_needed_per_beggar;
 } data;
 
+// Brutus III : ces compteurs ne sont pas dans la sauvegarde. Ils repartent de zéro à chaque
+// chargement, pour qu'un programme qui recharge (l'hôte) et un programme neuf (l'invité) aient
+// la même partie.
+void building_figure_brutus_partie_chargee(void)
+{
+    data.beggar_counter = 0;
+    data.houses_needed_per_beggar = 0;
+}
+
 static int worker_percentage(const building *b)
 {
     return calc_percentage(b->num_workers, model_get_building(b->type)->laborers);

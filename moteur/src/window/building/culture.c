@@ -25,6 +25,7 @@
 #include "window/hold_games.h"
 #include "window/option_popup.h"
 #include "window/race_bet.h"
+#include "multijoueur/commande.h" // Brutus III
 
 #define GOD_PANTHEON 5
 #define MODULE_COST 1000
@@ -1320,8 +1321,8 @@ static void add_module(int selection)
     }
     sound_speech_play_file("wavs/oracle.wav");
     building *b = building_get(data.building_id);
-    city_finance_process_construction(MODULE_COST);
-    building_monument_add_module(b, data.module_choices[selection - 1]);
+    // Brutus III : coût et module par la commande monument-module
+    brutus_commande_3(BRUTUS_CMD_MONUMENT_MODULE, b->x, b->y, data.module_choices[selection - 1]);
 }
 
 static void generate_module_image_id(int index)

@@ -35,6 +35,13 @@ static struct {
     int obstruction_message_displayed;
 } data;
 
+// Brutus III : hors sauvegarde : repart de zéro à chaque chargement (hôte qui recharge = invité)
+void building_maintenance_brutus_partie_chargee(void)
+{
+    data.fire_spread_direction = 0;
+    data.obstruction_message_displayed = 0;
+}
+
 void building_maintenance_update_fire_direction(void)
 {
     data.fire_spread_direction = random_byte() & 7;

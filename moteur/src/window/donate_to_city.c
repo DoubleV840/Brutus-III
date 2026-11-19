@@ -14,9 +14,21 @@
 #include "graphics/window.h"
 #include "input/input.h"
 #include "window/advisors.h"
+#include "city/data_private.h" // Brutus III
+#include "multijoueur/commande.h" // Brutus III
 
 static void button_increase_amount(const generic_button *button);
 static void button_donate(const generic_button *button);
+
+// Brutus III : montant choisi dans la fenêtre, gardé ici (la partie ne change que par la
+// commande don-ville). Borné comme city_emperor_set_donation_amount.
+static int montant;
+
+static void fixer_montant(int valeur)
+{
+    int maximum = city_emperor_personal_savings() - city_data.games.bet_amount;
+    montant = valeur < 0 ? 0 : (valeur > maximum ? (maximum > 0 ? maximum : 0) : valeur);
+}
 static void button_cancel(const generic_button *button);
 static void arrow_button_amount(int is_down, int param2);
 
@@ -67,7 +79,7 @@ static void draw_background(void)
     arrow_buttons[0].x_offset = button_start;
     arrow_buttons[1].x_offset = arrow_buttons[0].x_offset + arrow_buttons[0].size;
 
-    text_draw_number(city_emperor_donate_amount(), '@', " ", button_start + 76, 248, FONT_NORMAL_WHITE, 0);
+    text_draw_number(montant, '@', " ", button_start + 76, 248, FONT_NORMAL_WHITE, 0);
 
     lang_text_draw_centered(13, 4, 336, 288, 160, FONT_NORMAL_BLACK);
     lang_text_draw_centered(52, 18, 144, 288, 160, FONT_NORMAL_BLACK);
@@ -121,15 +133,17 @@ static void button_increase_amount(const generic_button *button)
         default: return;
     }
     if (amount_id == 0) {
-        city_emperor_set_donation_amount(amount);
+        fixer_montant(amount); // Brutus III
     }
-    city_emperor_change_donation_amount(amount);
+    fixer_montant(montant + amount);
     window_invalidate();
 }
 
 static void button_donate(const generic_button *button)
 {
-    city_emperor_donate_savings_to_city();
+    if (montant > 0) {
+        brutus_commande_1(BRUTUS_CMD_DON_VILLE, montant); // Brutus III
+    }
     window_advisors_show();
 }
 
@@ -140,7 +154,7 @@ static void button_cancel(const generic_button *button)
 
 static void arrow_button_amount(int is_down, int param2)
 {
-    city_emperor_change_donation_amount(is_down ? -10 : 10);
+    fixer_montant(montant + (is_down ? -10 : 10)); // Brutus III
     window_invalidate();
 }
 
@@ -170,6 +184,7 @@ void window_donate_to_city_show(void)
         handle_input,
         get_tooltip
     };
-    city_emperor_init_donation_amount();
+    // Brutus III : comme city_emperor_init_donation_amount, sans écrire dans la partie
+    fixer_montant(city_emperor_donate_amount());
     window_show(&window);
 }

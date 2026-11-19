@@ -203,8 +203,7 @@ static void confirm_nothing(int accepted, int checked)
 static void confirm_send_troops(int accepted, int checked)
 {
     if (accepted) {
-        formation_legions_dispatch_to_distant_battle();
-        city_military_clear_empire_service_legions();
+        brutus_commande_1(BRUTUS_CMD_LEGIONS_BATAILLE, 1); // Brutus III
         window_empire_show();
     }
 }

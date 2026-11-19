@@ -281,4 +281,7 @@ int building_storage_get_permission(building_storage_permission_states p, buildi
 void building_storage_set_permission(building_storage_permission_states p, building *b, int enable);
 building_storage_permission_states building_storage_get_permission_from_building_type(building_type type);
 
+/** Brutus III : remet en état l'ordre d'un dépôt (commande depot-ordre). */
+void building_depot_brutus_normaliser_ordre(building *b);
+
 #endif // BUILDING_STORAGE_H

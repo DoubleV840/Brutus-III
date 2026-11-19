@@ -434,3 +434,9 @@ void city_emperor_decrement_personal_savings(int amount)
 {
     city_data.emperor.personal_savings -= calc_bound(amount, 0, city_data.emperor.personal_savings - city_data.games.bet_amount);
 }
+
+// Brutus III : condition de city_emperor_set_gift_size, sans écrire (fenêtre du cadeau)
+int city_emperor_brutus_cadeau_abordable(int size)
+{
+    return size >= GIFT_MODEST && size < GIFT_MAX && city_data.emperor.gifts[size].cost <= city_data.emperor.personal_savings;
+}

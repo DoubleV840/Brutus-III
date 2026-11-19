@@ -49,6 +49,22 @@ typedef enum {
     // M6a
     BRUTUS_CMD_MESSAGE_LU,          // numéro de séquence du message
     BRUTUS_CMD_MESSAGE_SUPPRIMER,   // numéro de séquence du message
+    BRUTUS_CMD_DEPOT_ORDRE,         // x y champ(0 ressource, 1 source, 2 destination, 3 condition, 4 seuil) valeur
+    BRUTUS_CMD_MONUMENT_ARRET,      // x y : arrêter / reprendre le chantier
+    BRUTUS_CMD_MONUMENT_MODULE,     // x y module
+    BRUTUS_CMD_MONNAIE_CONVERSION,  // x y ressource produite (deniers ou or)
+    BRUTUS_CMD_PRODUCTION_RESERVE,  // x y : mise en réserve d'un producteur
+    BRUTUS_CMD_DOCK_ROUTE,          // x y route accepter(0/1)
+    BRUTUS_CMD_COMMERCE_POLITIQUE,  // type(0 terre, 1 mer) politique
+    BRUTUS_CMD_BARRAGE_PERMISSION,  // x y permission (>= 0 bascule, -1 aucune, -2 toutes)
+    BRUTUS_CMD_CASERNE_PRIORITE,    // x y priorite
+    BRUTUS_CMD_CASERNE_LIVRAISON,   // x y
+    BRUTUS_CMD_JEUX,                // id des jeux
+    BRUTUS_CMD_DON_VILLE,           // montant
+    BRUTUS_CMD_LEGIONS_BATAILLE,    // annuler_service(0/1) : légions en service impérial vers la bataille lointaine
+    BRUTUS_CMD_LEGIONS_SERVICE_ANNULER, // (aucun) : plus aucune légion en service impérial
+    BRUTUS_CMD_VICTOIRE_CONTINUER,  // mois
+    BRUTUS_CMD_TRICHE,              // numero a b c d (game/cheats.c)
     BRUTUS_CMD_NOMBRE
 } brutus_commande_type;
 

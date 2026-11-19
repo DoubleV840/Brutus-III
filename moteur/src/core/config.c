@@ -3,6 +3,7 @@
 #include "core/dir.h"
 #include "core/file.h"
 #include "core/log.h"
+#include "multijoueur/entete.h" // Brutus III
 
 #include <stdio.h>
 #include <string.h>
@@ -239,7 +240,20 @@ int config_get(config_key key)
 
 void config_set(config_key key, int value)
 {
+    // Brutus III : options qui changent la simulation (en-tête de partie, multijoueur/entete.c)
+    if (!brutus_entete_config_change(key, value)) {
+        return;
+    }
     values[key] = value;
+}
+
+// Brutus III : nom de l'option dans le fichier .ini (en-tête de partie)
+const char *config_brutus_nom(config_key key)
+{
+    if (key < 0 || key >= CONFIG_MAX_ENTRIES) {
+        return 0;
+    }
+    return ini_keys[key];
 }
 
 const char *config_get_string(config_string_key key)
@@ -345,7 +359,8 @@ void config_save(void)
         return;
     }
     for (int i = 0; i < CONFIG_MAX_ENTRIES; i++) {
-        fprintf(fp, "%s=%d\n", ini_keys[i], values[i]);
+        // Brutus III : réglage local, pas celui d'un en-tête de partie chargé
+        fprintf(fp, "%s=%d\n", ini_keys[i], brutus_entete_config_locale(i, values[i]));
     }
     for (int i = 0; i < CONFIG_STRING_MAX_ENTRIES; i++) {
         fprintf(fp, "%s=%s\n", ini_string_keys[i], string_values[i]);

@@ -36,6 +36,13 @@ int brutus_avancer_ticks(int n);
 void brutus_ticks_externes_ajouter(int n);
 int brutus_ticks_externes_en_attente(void);
 
+/**
+ * Resynchronisation (M6b) : l'hôte écrit la sauvegarde (game_file_write_saved_game, avec
+ * l'en-tête de partie), puis TOUS les joueurs, hôte compris, la rechargent par cette fonction.
+ * Ainsi personne ne garde d'état hors sauvegarde (caches, annulation, aperçu). Retourne 1 si OK.
+ */
+int brutus_resynchroniser(const char *sauvegarde);
+
 /** Une image du jeu (game_run) : ticks, commandes et messages à afficher. */
 void brutus_simulation_image(void);
 
