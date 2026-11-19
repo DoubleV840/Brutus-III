@@ -1,6 +1,6 @@
 # Protocole du relais multijoueur (version 1)
 
-Code : `serveur-multi/src/index.js` (Cloudflare Worker + un Durable Object `Salon` par salon).
+Code : `serveur-multi/src/index.js` (Cloudflare Worker + un Durable Object `Salon` par salon) ; constantes et règles pures dans `serveur-multi/src/protocole.js` (le module principal ne doit exporter que `default` et `Salon`, sinon workerd refuse de charger le Worker).
 Client de référence (tests, démo) : `serveur-multi/client/client.mjs`.
 
 Le relais **n'a aucune logique de jeu**. Il gère les salons (code, places, jetons), lit l'en-tête de 8 octets des messages binaires (type, destinataire), y écrit le numéro de l'émetteur, puis transmet. Il ne lit jamais les données, ne réordonne rien et ne valide aucune commande : c'est le moteur qui revalide chaque commande à l'application (`docs/commandes.md`).

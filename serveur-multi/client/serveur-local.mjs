@@ -36,8 +36,9 @@ export async function demarrerRelais(vars = {}) {
   let minuteur;
   const delai = new Promise((_, rejeter) => {
     minuteur = setTimeout(() => rejeter(new Error(
-      "Le relais local n'a pas démarré en 30 s. Port local refusé ? Voir " +
-      path.join(racine, ".wrangler", "logs") + " (chercher « listen EPERM »).")), 30000);
+      "Le relais local n'a pas démarré en 30 s. Voir le dernier journal dans " +
+      path.join(racine, ".wrangler", "logs") + " : « listen EPERM » = port local refusé (bac à sable) ; " +
+      "« not of type ExportedHandler » = export nommé dans src/index.js.")), 30000);
   });
   let http;
   try {
