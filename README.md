@@ -97,6 +97,7 @@ Tests du client réseau, sans navigateur :
 bash outils/test-reseau-memoire.sh court   # ~30 s : deux moteurs wasm dans Node, relais en mémoire, aucun port
 bash outils/test-reseau-memoire.sh         # 225 000 ticks (30 minutes de jeu à 200 %), ~1 min ; rapport : build-reseau/rapport-memoire.txt
 bash outils/test-reseau-30min.sh           # même scénario avec le VRAI relais en local (wrangler dev) et la cadence réelle du jeu, ~10 min ; rapport : build-reseau/rapport-relais.txt
+BRUTUS_VITESSE=200 bash outils/test-reseau-30min.sh 225000 Lugdunum --production   # constantes de production (ping 20 s, coupure 45 s…), 20 min réelles ou plus
 ```
 
 Le premier lance une compilation wasm pour Node (`build-reseau-wasm/`, quelques minutes la première fois). Le dernier ouvre un port local : à lancer dans ton terminal, pas dans un bac à sable. Le scénario (coupures, resynchronisations, panne injectée, rechargement de l'hôte) est décrit dans `docs/determinisme.md`.
