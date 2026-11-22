@@ -1,5 +1,8 @@
 #include "main_menu.h"
 
+#include <stdio.h>
+
+
 #include "assets/assets.h"
 #include "core/calc.h"
 #include "core/config.h"
@@ -49,11 +52,15 @@ static generic_button buttons[] = {
 
 static void draw_version_string(void)
 {
-    uint8_t version_string[100] = "Augustus v";
-    int version_prefix_length = string_length(version_string);
+    // Brutus III : « Brutus III <commit> - Augustus v4.0.0 »
+    char ascii[100];
+    const char *revision = brutus_revision();
+    snprintf(ascii, sizeof(ascii), "Brutus III%s%s - Augustus v%s",
+        revision[0] ? " " : "", revision, system_version());
+    uint8_t version_string[100];
     int text_y = screen_height() - 54;
 
-    string_copy(string_from_ascii(system_version()), version_string + version_prefix_length, 99);
+    string_copy(string_from_ascii(ascii), version_string, 99);
 
     int text_width = text_get_width(version_string, FONT_NORMAL_GREEN);
     int width = calc_value_in_step(text_width + 20, 16);

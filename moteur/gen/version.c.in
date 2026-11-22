@@ -4,8 +4,15 @@
 
 #define AUGUSTUS_VERSION "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@"
 #define AUGUSTUS_VERSION_SUFFIX "@VERSION_REVISION@"
+#define BRUTUS_REVISION "@BRUTUS_REVISION@"
 
 const char *system_version(void)
 {
     return AUGUSTUS_VERSION AUGUSTUS_VERSION_SUFFIX;
+}
+
+// Brutus III : commit du dépôt au moment de la configuration ("" si inconnu)
+const char *brutus_revision(void)
+{
+    return BRUTUS_REVISION;
 }

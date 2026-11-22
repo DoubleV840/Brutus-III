@@ -15,6 +15,9 @@
  */
 const char *system_version(void);
 
+// Brutus III : commit du dépôt (ex. "e80591c du 22/11/2026"), "" si inconnu
+const char *brutus_revision(void);
+
 /**
  * Gets the current processor architecture
  * @return Processor architecture

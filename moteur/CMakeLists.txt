@@ -177,6 +177,27 @@ else()
     set(VERSION_REVISION " unknown development version")
 endif()
 
+# Brutus III : moteur/ est un subtree sans .git propre, la version vient donc
+# du dépôt parent (commit court et sa date), affichée au menu principal.
+set(BRUTUS_REVISION "")
+find_package(Git QUIET)
+if(Git_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} log -1 "--format=%h du %cd" "--date=format:%d/%m/%Y"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        RESULT_VARIABLE BRUTUS_GIT_RESULT
+        OUTPUT_VARIABLE BRUTUS_REVISION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(NOT BRUTUS_GIT_RESULT EQUAL 0)
+        set(BRUTUS_REVISION "")
+    endif()
+endif()
+if(VERSION_REVISION STREQUAL " unknown development version")
+    set(VERSION_REVISION "")
+endif()
+
 if(${TARGET_PLATFORM} STREQUAL "vita")
     string(LENGTH "${PROJECT_VERSION_MAJOR}" NUM_DIGITS)
     if(NUM_DIGITS EQUAL 1)
