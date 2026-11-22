@@ -11,6 +11,7 @@
 #include "multijoueur/simulation.h"
 #include "window/city.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #define SORTIE_MAX 32768
@@ -20,6 +21,8 @@ static struct {
     int pause_partagee;
     int demande_vitesse;
     int demande_pause;
+    int refus_menu;
+    int ville_quittee;
     uint64_t derniere_empreinte;
     int taille_sortie;
     uint8_t sortie[SORTIE_MAX];
@@ -29,6 +32,40 @@ static struct {
 int brutus_reseau_actif(void)
 {
     return etat.actif;
+}
+
+int brutus_reseau_menu_refuse(void)
+{
+    if (!etat.actif) {
+        return 0;
+    }
+    etat.refus_menu++;
+    return 1;
+}
+
+BRUTUS_RESEAU_EXPORT int brutus_reseau_refus_menu(void)
+{
+    int n = etat.refus_menu;
+    etat.refus_menu = 0;
+    return n;
+}
+
+void brutus_reseau_ville_quittee(void)
+{
+    if (etat.actif) {
+        etat.ville_quittee = 1;
+    }
+}
+
+BRUTUS_RESEAU_EXPORT int brutus_reseau_ville_est_quittee(void)
+{
+    return etat.ville_quittee;
+}
+
+// Pour les tests : simule le retour au menu principal pendant une partie à deux.
+BRUTUS_RESEAU_EXPORT void brutus_reseau_test_quitter_ville(void)
+{
+    brutus_reseau_ville_quittee();
 }
 
 BRUTUS_RESEAU_EXPORT uint8_t *brutus_reseau_tampon(void)
@@ -45,6 +82,8 @@ BRUTUS_RESEAU_EXPORT int brutus_reseau_activer(int joueur)
     etat.taille_sortie = 0;
     etat.demande_vitesse = 0;
     etat.demande_pause = 0;
+    etat.refus_menu = 0;
+    etat.ville_quittee = 0;
     brutus_multijoueur_definir(1);
     brutus_joueur_local_definir(joueur);
     return 1;
@@ -55,6 +94,7 @@ BRUTUS_RESEAU_EXPORT void brutus_reseau_desactiver(void)
     etat.actif = 0;
     etat.taille_sortie = 0;
     etat.pause_partagee = 0;
+    etat.ville_quittee = 0;
     brutus_multijoueur_definir(0);
     brutus_joueur_local_definir(0);
     game_state_unpause();
@@ -178,7 +218,12 @@ BRUTUS_RESEAU_EXPORT uint32_t brutus_reseau_tick(void)
 
 BRUTUS_RESEAU_EXPORT uint32_t brutus_reseau_empreinte(void)
 {
-    etat.derniere_empreinte = brutus_empreinte_partie();
+    // M6b : le détail par morceau est écrit à côté (lu par JS, gardé pour diagnostiquer une divergence).
+    FILE *detail = fopen(BRUTUS_RESEAU_DETAIL, "w");
+    etat.derniere_empreinte = brutus_empreinte_partie_detail(detail);
+    if (detail) {
+        fclose(detail);
+    }
     return (uint32_t) (etat.derniere_empreinte & 0xffffffffu);
 }
 
@@ -202,6 +247,7 @@ BRUTUS_RESEAU_EXPORT int brutus_reseau_charger(const char *chemin)
         return 0;
     }
     appliquer_pause_partagee();
+    etat.ville_quittee = 0;
     window_city_show();
     return 1;
 }
@@ -262,6 +308,12 @@ BRUTUS_RESEAU_EXPORT void brutus_reseau_test_vitesse(int delta)
 BRUTUS_RESEAU_EXPORT void brutus_reseau_test_pause(void)
 {
     brutus_reseau_demander_pause();
+}
+
+// Pour les tests : agit comme un menu Charger / Recommencer / Quitter (1 = refusé car partie à deux).
+BRUTUS_RESEAU_EXPORT int brutus_reseau_test_menu(void)
+{
+    return brutus_reseau_menu_refuse();
 }
 
 // Pour le bot de test (pas d'interface sous Node) : numéro d'une commande d'après son nom du journal.

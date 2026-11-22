@@ -254,6 +254,15 @@
         color: rgb(255, 140, 120);
       }
 
+      #multiAvis {
+        margin-top: 6px;
+        color: rgb(255, 200, 120);
+      }
+
+      #multiRevenir {
+        display: none;
+      }
+
       #OSD {
         display: none;
         position: absolute;
@@ -324,14 +333,16 @@
             <input type="text" id="multiCode" maxlength="6" placeholder="Code" autocomplete="off" spellcheck="false">
             <input type="button" data-action="rejoindre" value="Rejoindre">
           </div>
-          <small>Chaque joueur doit avoir les fichiers du jeu dans son navigateur. Celui qui crée la partie la lance ou la charge ; l'autre la reçoit.</small>
+          <small>Chaque joueur doit avoir les fichiers du jeu dans son navigateur. Celui qui crée la partie la lance ou la charge ; l'autre la reçoit. Garde l'onglet visible pendant la partie : un onglet masqué ralentit les deux joueurs.</small>
         </div>
         <div id="multiSalon">
           <div>Code de la partie : <span id="multiCodeAffiche"></span></div>
           <ul id="multiJoueurs"></ul>
+          <input type="button" data-action="revenir" id="multiRevenir" value="Revenir dans la partie">
           <input type="button" data-action="quitter" value="Quitter la partie à deux">
         </div>
         <div id="multiTexte" role="status"></div>
+        <div id="multiAvis" role="alert"></div>
       </div>
     </div>
     <div id="OSD">
@@ -591,6 +602,8 @@
       var multiAccueilElement = document.getElementById('multiAccueil');
       var multiSalonElement = document.getElementById('multiSalon');
       var multiTexteElement = document.getElementById('multiTexte');
+      var multiAvisElement = document.getElementById('multiAvis');
+      var multiRevenirElement = document.getElementById('multiRevenir');
       var multiCodeElement = document.getElementById('multiCode');
       var multiCodeAfficheElement = document.getElementById('multiCodeAffiche');
       var multiJoueursElement = document.getElementById('multiJoueurs');
@@ -609,6 +622,14 @@
         multiCodeAfficheElement.textContent = e.code || '';
         multiTexteElement.textContent = e.texte || '';
         multiTexteElement.className = e.phase === 'erreur' ? 'erreur' : '';
+        multiRevenirElement.style.display = e.phase === 'hors-ville' ? 'inline-block' : 'none';
+        // Divergence répétée ou menu refusé : le message doit se voir, même panneau replié.
+        var avis = (e.alerte ? e.alerte + ' ' : '') + (e.avis || '');
+        multiAvisElement.textContent = avis;
+        if ((avis || e.phase === 'hors-ville') && !multi.ouvert) {
+          multi.ouvert = true;
+          multiPanneauElement.style.display = 'block';
+        }
         while (multiJoueursElement.firstChild) {
           multiJoueursElement.removeChild(multiJoueursElement.firstChild);
         }
@@ -642,9 +663,22 @@
           stockage: BrutusLockstep.stockageSession('brutus-session'),
           base: base,
           surChangement: multiAfficher,
+          pomperSurMessage: true,
           journal: function(m) { console.log('[à deux] ' + m); }
         });
+        // Un onglet masqué ralentit les minuteries : la pompe passe aussi par les messages du relais
+        // (non limités) et par le retour de visibilité ; le titre prévient que la partie à deux souffre.
         multi.minuterie = setInterval(function() { multi.ls.pomper(); }, 20);
+        multi.titre = document.title;
+        multi.visibilite = function() {
+          if (!multi.ls) {
+            return;
+          }
+          var actif = multi.ls.etat().actif;
+          document.title = document.hidden && actif ? '(onglet masqué : partie à deux ralentie) ' + multi.titre : multi.titre;
+          multi.ls.pomper();
+        };
+        document.addEventListener('visibilitychange', multi.visibilite);
         if (multi.ls.reprendre()) {
           multi.ouvert = true;
           multiPanneauElement.style.display = 'block';
@@ -657,6 +691,8 @@
           return;
         }
         clearInterval(multi.minuterie);
+        document.removeEventListener('visibilitychange', multi.visibilite);
+        document.title = multi.titre;
         multi.ls.quitter();
         multi.ls = null;
         multiElement.style.display = 'none';
@@ -675,6 +711,8 @@
           multi.ls.creer(2);
         } else if (action === 'rejoindre') {
           multi.ls.rejoindre(multiCodeElement.value);
+        } else if (action === 'revenir') {
+          multi.ls.revenir();
         } else if (action === 'quitter') {
           multi.ls.quitter();
         } else if (action === 'expulser') {

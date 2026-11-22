@@ -20,6 +20,8 @@
 #include <stdint.h>
 
 #define BRUTUS_RESEAU_TAMPON 65536
+/** Fichier où brutus_reseau_empreinte écrit l'empreinte de chaque morceau de la partie (diagnostic). */
+#define BRUTUS_RESEAU_DETAIL "/tmp/brutus-empreinte-detail.txt"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -33,6 +35,24 @@ int brutus_reseau_actif(void);
 
 /** Boîte de sortie : dépose une commande de l'interface (joueur local). Retourne 1 si acceptée. */
 int brutus_reseau_deposer(int type, int nb_params, const int32_t *params);
+
+/**
+ * Menus qui changeraient la partie sans commande (Charger, Recommencer, Retour au menu principal,
+ * chargement rapide) : en réseau ils sont refusés (retourne 1 et compte le refus, que JS affiche).
+ * Hors réseau : retourne 0, le menu fonctionne comme avant.
+ */
+int brutus_reseau_menu_refuse(void);
+/** Nombre de refus depuis le dernier appel (JS affiche un message). */
+BRUTUS_RESEAU_EXPORT int brutus_reseau_refus_menu(void);
+/**
+ * Appelé quand le moteur affiche le menu principal ou le choix de mission : en réseau, la ville est
+ * quittée (fin de mission, abandon). JS n'avance plus la simulation et le signale à l'autre joueur.
+ * Effacé par brutus_reseau_activer et brutus_reseau_charger.
+ */
+void brutus_reseau_ville_quittee(void);
+BRUTUS_RESEAU_EXPORT int brutus_reseau_ville_est_quittee(void);
+/** Tests : simule le retour au menu principal. */
+BRUTUS_RESEAU_EXPORT void brutus_reseau_test_quitter_ville(void);
 
 /** Interface : demande de vitesse (+1 / -1) ou de pause (bascule), enregistrée pour JS. */
 void brutus_reseau_demander_vitesse(int delta);
@@ -69,5 +89,7 @@ BRUTUS_RESEAU_EXPORT int brutus_reseau_injecter(int type, int nb_params);
 /** Tests : agit comme les touches de vitesse (delta +1 ou -1) et de pause de l'interface. */
 BRUTUS_RESEAU_EXPORT void brutus_reseau_test_vitesse(int delta);
 BRUTUS_RESEAU_EXPORT void brutus_reseau_test_pause(void);
+/** Tests : agit comme un menu Charger / Recommencer / Quitter. Retourne 1 s'il est refusé. */
+BRUTUS_RESEAU_EXPORT int brutus_reseau_test_menu(void);
 
 #endif // MULTIJOUEUR_RESEAU_H

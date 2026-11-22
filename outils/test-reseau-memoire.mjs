@@ -50,7 +50,12 @@ const REEL = RELAIS_URL !== '';
 const VITESSE = Number(opt('--vitesse', '500'));
 // Pour vérifier le mode réel SANS port : un « faux WebSocket » branché sur le relais en mémoire.
 const FAUX_WS = args.includes('--faux-ws');
-const EMPREINTE_GROUPES = Number(opt('--empreinte-groupes', '10')); // une empreinte tous les 50 ticks
+// Constantes de PRODUCTION de web/lockstep.js (au lieu des délais accélérés du test) : empreinte tous les
+// 50 groupes, ping 20 s, coupure silencieuse à 45 s, attente 10 s, cadence réelle du jeu, pompe aussi
+// déclenchée par les messages. Durée réelle : au moins 20 minutes à 200 % pour 225000 ticks.
+const PROD = args.includes('--constantes-production');
+const TEMPS_REEL = REEL || PROD; // le jeu suit l'horloge réelle (pas de « groupes dès qu'ils sont complets »)
+const EMPREINTE_GROUPES = Number(opt('--empreinte-groupes', PROD ? '50' : '10')); // 10 : une empreinte tous les 50 ticks
 
 const LS = require(fileURLToPath(new URL('../web/lockstep.js', import.meta.url)));
 const BrutusModule = require(MODULE);
@@ -488,7 +493,7 @@ function coupureSilencieuse(client) {
     relais.silence(client.s().conn._c);
   }
 }
-const respirer = () => (REEL ? new Promise((r) => setTimeout(r, 2)) : Promise.resolve());
+const respirer = () => (TEMPS_REEL ? new Promise((r) => setTimeout(r, 2)) : Promise.resolve());
 
 function lireJournal(chemin) {
   const cmds = [];
@@ -503,8 +508,19 @@ function lireJournal(chemin) {
 }
 
 function parametresLockstep(nom, extra) {
+  if (PROD) {
+    // Aucune des constantes de temps n'est donnée : ce sont celles de web/lockstep.js (production).
+    return {
+      libre: false,
+      pomperSurMessage: true,
+      empreinteGroupes: EMPREINTE_GROUPES,
+      chemin: '/tmp/brutus-' + nom + '.svx',
+      base: REEL ? RELAIS_URL : 'mem://relais',
+      ...extra,
+    };
+  }
   return {
-    libre: !REEL,
+    libre: !TEMPS_REEL,
     maxGroupesParPompe: 8,
     empreinteGroupes: EMPREINTE_GROUPES,
     pingMs: REEL ? 2000 : 1000,
@@ -688,7 +704,7 @@ async function principal() {
   }
   dire(`Partie à deux démarrée au tick ${hote.tick()} (époque ${hote.s().epoque}).`);
 
-  if (REEL) {
+  if (TEMPS_REEL) {
     // Le jeu tourne à la cadence réelle : on monte la vitesse partagée jusqu'à la vitesse demandée.
     dire(`Vitesse de départ ${hote.moteur.vitesse()} %, cible ${VITESSE} %.`);
     for (let essai = 0; essai < 20 && hote.moteur.vitesse() < VITESSE; essai++) {
@@ -722,7 +738,8 @@ async function principal() {
   // 2. coupure silencieuse de l'invité
   evenement('coupure silencieuse de l\'invité', 0.25, () => {
     coupureSilencieuse(invite);
-    outage = { nom: 'coupure silencieuse invité', fin: performance.now() + 6000 };
+    // Production : la coupure n'est détectée qu'après 45 s sans message (morteMs).
+    outage = { nom: 'coupure silencieuse invité', fin: performance.now() + (PROD ? 50000 : 6000) };
     attenteVue.silencieuse = false;
   });
   // 3. resynchronisation forcée : invité puis hôte
@@ -809,20 +826,20 @@ async function principal() {
 
     // pause partagée
     if (pauseTest) {
-      if (pauseTest.etape === 0 && it - pauseTest.depuis > (REEL ? 300 : 60)) {
+      if (pauseTest.etape === 0 && it - pauseTest.depuis > (TEMPS_REEL ? 300 : 60)) {
         pauseVue = hote.moteur.enPause() && invite.moteur.enPause();
         dire(`  pause : hôte ${hote.moteur.enPause()}, invité ${invite.moteur.enPause()} (ticks ${hote.tick()} / ${invite.tick()})`);
         M_pause(invite); // l'invité reprend
         pauseTest.etape = 1;
         pauseTest.depuis = it;
         pauseTest.tick = hote.tick();
-      } else if (pauseTest.etape === 1 && it - pauseTest.depuis > (REEL ? 300 : 60)) {
+      } else if (pauseTest.etape === 1 && it - pauseTest.depuis > (TEMPS_REEL ? 300 : 60)) {
         faits.pause = { vue: pauseVue, reprise: hote.tick() > pauseTest.tick && !hote.moteur.enPause() && !invite.moteur.enPause() };
         dire(`  reprise : ${faits.pause.reprise}`);
         pauseTest = null;
       }
     }
-    if (attendreFin && attendreFin.verifier === 'vitesse' && it - attendreFin.it > (REEL ? 400 : 80)) {
+    if (attendreFin && attendreFin.verifier === 'vitesse' && it - attendreFin.it > (TEMPS_REEL ? 400 : 80)) {
       faits.vitesse = { hote: hote.moteur.vitesse(), invite: invite.moteur.vitesse(), identiques: hote.moteur.vitesse() === invite.moteur.vitesse() };
       dire(`  vitesses : hôte ${faits.vitesse.hote} %, invité ${faits.vitesse.invite} %`);
       attendreFin = null;
@@ -873,7 +890,7 @@ async function principal() {
     if (finDemandee) {
       break;
     }
-    if (REEL) {
+    if (TEMPS_REEL) {
       await respirer();
     } else if (it % 300 === 0) {
       await new Promise((r) => setImmediate(r)); // laisse respirer la boucle d'événements

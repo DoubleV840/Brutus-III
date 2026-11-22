@@ -22,6 +22,11 @@
 # Défauts : 225000 ticks (= 30 minutes de jeu à 200 %), carte Lugdunum, jeu à 500 % : environ 8 à
 # 10 minutes réelles. Pour jouer à la vitesse « 200 % » (30 minutes réelles) :
 #   BRUTUS_VITESSE=200 bash outils/test-reseau-30min.sh
+# Passe aux CONSTANTES DE PRODUCTION (empreinte tous les 50 groupes, ping 20 s, coupure silencieuse
+# à 45 s, attente 10 s ; au moins 20 minutes réelles à 200 %) :
+#   BRUTUS_VITESSE=200 bash outils/test-reseau-30min.sh 225000 Lugdunum --production
+# Sans la passe « production », le test utilise des délais accélérés (ping 2 s, mort 8 s).
+# Codes de sortie : 0 = OK, 1 = échec, 3 = test non exécuté (jeu absent : ce n'est pas un succès).
 # Premier lancement : ajoute quelques minutes de compilation du moteur wasm.
 # Journal du relais : build-reseau/wrangler.log. Code de sortie 0 = test réussi.
 set -uo pipefail
@@ -29,8 +34,21 @@ set -uo pipefail
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$RACINE"
 
-TICKS="${1:-225000}"
-CARTE="${2:-Lugdunum}"
+PRODUCTION=""
+POSITIONNELS=()
+for ARG in "$@"; do
+  if [ "$ARG" = "--production" ]; then
+    PRODUCTION="--production"
+  else
+    POSITIONNELS+=("$ARG")
+  fi
+done
+TICKS="${POSITIONNELS[0]:-225000}"
+CARTE="${POSITIONNELS[1]:-Lugdunum}"
+RAPPORT="build-reseau/rapport-relais.txt"
+if [ -n "$PRODUCTION" ]; then
+  RAPPORT="build-reseau/rapport-relais-production.txt"
+fi
 PORT=8787
 LOG="$RACINE/build-reseau/wrangler.log"
 mkdir -p "$RACINE/build-reseau"
@@ -79,13 +97,15 @@ fi
 echo "   relais prêt sur ws://127.0.0.1:$PORT"
 
 export BRUTUS_RELAIS="ws://127.0.0.1:$PORT"
-bash "$RACINE/outils/test-reseau-memoire.sh" "$TICKS" "$CARTE"
+bash "$RACINE/outils/test-reseau-memoire.sh" "$TICKS" "$CARTE" $PRODUCTION
 CODE=$?
 
 echo
 if [ "$CODE" -eq 0 ]; then
-  echo "Test terminé : rapport dans build-reseau/rapport-relais.txt (RÉSULTAT : OK ci-dessus)."
+  echo "Test terminé : rapport dans $RAPPORT (RÉSULTAT : OK ci-dessus)."
+elif [ "$CODE" -eq 3 ]; then
+  echo "Test NON EXÉCUTÉ (code 3) : fichiers du jeu absents (jeu-original/app/jeu1). Ce n'est PAS un succès." >&2
 else
-  echo "Test en ÉCHEC (code $CODE) : voir build-reseau/rapport-relais.txt et build-reseau/rapport-relais-journal.txt."
+  echo "Test en ÉCHEC (code $CODE) : voir $RAPPORT et ${RAPPORT%.txt}-journal.txt."
 fi
 exit "$CODE"

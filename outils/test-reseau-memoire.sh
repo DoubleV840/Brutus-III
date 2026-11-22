@@ -3,10 +3,14 @@
 # reliées par un relais en mémoire qui reprend le protocole (docs/protocole.md), avec coupures
 # simulées. Aucune connexion réseau, aucun port.
 #
-#   bash outils/test-reseau-memoire.sh [ticks] [carte]
+#   bash outils/test-reseau-memoire.sh [ticks] [carte] [--production]
 #
 # Défauts : 225000 ticks (= 30 minutes de jeu à 200 %, 8 ms par tick), carte Lugdunum.
 # Option « court » à la place des ticks : un essai de 6000 ticks (quelques secondes).
+# --production : constantes de PRODUCTION de web/lockstep.js (empreinte tous les 50 groupes, ping 20 s,
+# coupure silencieuse à 45 s, attente 10 s) et cadence réelle du jeu (BRUTUS_VITESSE, 500 % par défaut),
+# au lieu des constantes accélérées. Rapport : build-reseau/rapport-memoire-production.txt.
+# Sorties : 0 = OK, 1 = échec, 3 = test sauté (jeu absent).
 #
 # 1. compile la variante wasm pour Node (build-reseau-wasm/, option CMake BRUTUS_RESEAU_NODE) ;
 # 2. crée la sauvegarde de départ avec le moteur natif (build-natif) si besoin ;
@@ -21,11 +25,20 @@ set -euo pipefail
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$RACINE"
 
-TICKS="${1:-225000}"
+PRODUCTION=""
+POSITIONNELS=()
+for ARG in "$@"; do
+  if [ "$ARG" = "--production" ]; then
+    PRODUCTION="--constantes-production"
+  else
+    POSITIONNELS+=("$ARG")
+  fi
+done
+TICKS="${POSITIONNELS[0]:-225000}"
 if [ "$TICKS" = "court" ]; then
   TICKS=6000
 fi
-CARTE="${2:-Lugdunum}"
+CARTE="${POSITIONNELS[1]:-Lugdunum}"
 JEU="$RACINE/jeu-original/app/jeu1"
 BUILD="$RACINE/build-reseau-wasm"
 SORTIE="$RACINE/build-reseau"
@@ -33,15 +46,20 @@ export EM_CACHE="$RACINE/.emcache"
 RELAIS="${BRUTUS_RELAIS:-}"
 VITESSE="${BRUTUS_VITESSE:-500}"
 RAPPORT_FICHIER="$SORTIE/rapport-memoire.txt"
-EXTRA=""
+EXTRA="$PRODUCTION"
 if [ -n "$RELAIS" ]; then
   RAPPORT_FICHIER="$SORTIE/rapport-relais.txt"
-  EXTRA="--relais $RELAIS --vitesse $VITESSE"
+  EXTRA="$EXTRA --relais $RELAIS --vitesse $VITESSE"
+fi
+if [ -n "$PRODUCTION" ]; then
+  RAPPORT_FICHIER="${RAPPORT_FICHIER%.txt}-production.txt"
 fi
 
+# Code 3 = test SAUTÉ (jeu absent) : ce n'est ni un succès ni un échec du moteur, mais un script qui
+# attend un vrai résultat (outils/test-reseau-30min.sh) ne doit pas le prendre pour un succès.
 if [ ! -f "$JEU/c3.eng" ] && [ ! -f "$JEU/C3.eng" ]; then
-  echo "Test réseau sans port sauté : fichiers du jeu absents ($JEU)."
-  exit 0
+  echo "Test réseau SAUTÉ : fichiers du jeu absents ($JEU). Code de sortie 3."
+  exit 3
 fi
 mkdir -p "$SORTIE"
 

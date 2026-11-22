@@ -46,6 +46,10 @@
     maxGroupesParPompe: 200,
     demandeSauvegardeMs: 5000,
     reessaiResyncMs: 1000,
+    divergencesMax: 3, // divergences réparées par resynchronisation tolérées dans la fenêtre ci-dessous
+    fenetreDivergencesMs: 600000,
+    recuperationMs: 60000, // hôte qui attend sa partie auprès d'un invité : au-delà, il abandonne
+    pomperSurMessage: false, // page : traiter aussi à chaque message reçu (les minuteries d'un onglet masqué sont ralenties)
     libre: false, // tests : pas de cadencement, les groupes se jouent dès qu'ils sont complets
     chemin: "/tmp/brutus-reseau.svx",
     joueurs: 2,
@@ -367,6 +371,27 @@
       jeuEnCours: function () {
         return appel("brutus_reseau_jeu_en_cours", [], []) === 1;
       },
+      // Détail par morceau de la dernière empreinte (texte), pour diagnostiquer une divergence.
+      detailEmpreinte: function () {
+        try {
+          var f = M.FS.readFile("/tmp/brutus-empreinte-detail.txt");
+          var t = "";
+          for (var i = 0; i < f.length; i++) {
+            t += String.fromCharCode(f[i]);
+          }
+          return t;
+        } catch (e) {
+          return "";
+        }
+      },
+      // Brutus III (M6b) : vrai si le joueur a quitté la ville (menu principal, choix de mission).
+      villeQuittee: function () {
+        return appel("brutus_reseau_ville_est_quittee", [], []) === 1;
+      },
+      // Nombre de menus refusés (Charger, Recommencer, Quitter) depuis le dernier appel.
+      refusMenu: function () {
+        return appel("brutus_reseau_refus_menu", [], []);
+      },
       demandeVitesse: function () {
         return appel("brutus_reseau_demande_vitesse", [], []);
       },
@@ -446,6 +471,10 @@
       fermetures: 0,
       toursIgnores: 0,
       sauvegardesRejetees: 0,
+      menusRefuses: 0,
+      vitessesCorrigees: 0,
+      envoisRates: 0,
+      recuperationsAbandonnees: 0,
     };
 
     var s = {
@@ -486,7 +515,21 @@
       derniereDemande: 0,
       resyncJusqua: 0,
       derniereNotif: "",
+      vitesseCommune: null, // vitesse et pause partagées effectivement appliquées
+      rangVitesse: 0, // compteur croissant : ordre d'envoi des VITESSE d'un même joueur
+      divergencesRecentes: [], // dates des divergences réparées (fenêtre glissante)
+      alerte: "", // divergences à répétition : la partie continue, mais le joueur est prévenu
+      details: {}, // tick -> détail par morceau de notre empreinte (diagnostic)
+      detailDivergence: "", // dernier détail journalisé lors d'une divergence (tests)
+      debutRecuperation: 0,
+      rechargeEssayee: false, // une sauvegarde refusée par le moteur est redemandée une fois
+      avis: "",
+      avisJusqua: 0,
     };
+
+    function villeQuittee() {
+      return !!(moteur.villeQuittee && moteur.villeQuittee());
+    }
 
     // ------------------------------------------------------------ état visible par la page
 
@@ -555,6 +598,9 @@
       } else if (!s.actif) {
         phase = "salon";
         texte = s.joueur === 0 ? "En attente d'un autre joueur. Code de la partie : " + s.code : "Connecté. En attente de la partie de l'hôte…";
+      } else if (villeQuittee()) {
+        phase = "hors-ville";
+        texte = "Vous avez quitté la ville : la partie à deux est en pause pour vous deux. Revenez dans la partie ou quittez-la.";
       } else if (att.length) {
         phase = "attente";
         var n = [];
@@ -578,6 +624,8 @@
         pause: s.actif ? moteur.enPause() : false,
         tick: s.actif ? moteur.tick() : 0,
         epoque: s.epoque,
+        alerte: s.alerte,
+        avis: t < s.avisJusqua ? s.avis : "",
       };
     }
 
@@ -586,7 +634,7 @@
         return;
       }
       var e = etat();
-      var cle = JSON.stringify([e.phase, e.texte, e.code, e.joueur, e.salon, e.pause]);
+      var cle = JSON.stringify([e.phase, e.texte, e.code, e.joueur, e.salon, e.pause, e.alerte, e.avis]);
       if (cle !== s.derniereNotif) {
         s.derniereNotif = cle;
         o.surChangement(e);
@@ -604,6 +652,19 @@
         return false;
       }
       return s.conn.envoyer(encoder(type, tick, donnees, dest, s.epoque));
+    }
+
+    // Envoie une suite de messages ; faux si l'un est refusé (les suivants ne partent pas).
+    function envoyerTous(msgs) {
+      if (!s.conn || !s.connecte) {
+        return false;
+      }
+      for (var i = 0; i < msgs.length; i++) {
+        if (!s.conn.envoyer(msgs[i])) {
+          return false;
+        }
+      }
+      return true;
     }
 
     function fermerConnexion() {
@@ -643,6 +704,9 @@
             traiterBinaire(m);
           }
           notifier();
+          if (o.pomperSurMessage) {
+            pomper(); // onglet masqué : le navigateur ralentit les minuteries, mais livre les messages
+          }
         },
         ferme: function (code) {
           if (g !== s.gen) {
@@ -660,6 +724,7 @@
     }
 
     function surFermeture(code) {
+      s.gen++; // onerror puis onclose arrivent pour la même coupure : la seconde est ignorée (un seul essai compté)
       stats.fermetures++;
       var etaitConnecte = s.connecte;
       s.conn = null;
@@ -805,6 +870,7 @@
         // Page rechargée : l'état est perdu, un invité le renvoie.
         s.attendSauvegardeInvite = true;
         s.derniereDemande = 0;
+        s.debutRecuperation = horloge.maintenant();
       }
     }
 
@@ -891,6 +957,10 @@
         stats.toursIgnores++;
         return;
       }
+      if (s.attendus.indexOf(m.joueur) < 0) {
+        stats.toursIgnores++; // joueur hors liste : jamais appliqué, jamais gardé
+        return;
+      }
       var cle = k + ":" + m.joueur;
       if (!s.tours[cle]) {
         s.tours[cle] = m.donnees.slice();
@@ -903,7 +973,7 @@
       }
       var pct = m.donnees[0] | (m.donnees[1] << 8);
       var pause = m.donnees[2] === 1;
-      s.vitesses.push({ tick: m.tick, joueur: m.joueur, rang: s.vitesses.length, pct: pct, pause: pause });
+      s.vitesses.push({ tick: m.tick, joueur: m.joueur, rang: s.rangVitesse++, pct: pct, pause: pause });
       s.projete = { pct: pct, pause: pause };
     }
 
@@ -922,6 +992,49 @@
       comparer(m.tick);
     }
 
+    // Texte compact du détail par morceau : « morceau/champ=empreinte » (voir docs/determinisme.md).
+    function resumeDetail(texte) {
+      var lignes = texte.split("\n");
+      var r = [];
+      for (var i = 0; i < lignes.length; i++) {
+        var p = lignes[i].split(" ");
+        if (p[0] === "morceau" && p.length >= 6) {
+          r.push(p[1] + "/" + p[3] + "=" + p[5]);
+        }
+      }
+      return r.join(" ");
+    }
+
+    // Une divergence réparée par la resynchronisation n'est pas un succès : la cause est un défaut du
+    // moteur. On la compte, on journalise le détail par morceau (le nôtre, celui de l'hôte) et, si elles
+    // se répètent, on prévient le joueur à l'écran.
+    function signalerDivergence(tick, joueur, theirs, mienne) {
+      var t = horloge.maintenant();
+      stats.divergences++;
+      journal("divergence au tick " + tick + " : joueur " + (joueur + 1) + " " + theirs + " contre hôte " + mienne);
+      var detail = s.details[tick] ? resumeDetail(s.details[tick]) : "";
+      s.detailDivergence = detail;
+      if (detail) {
+        journal("détail hôte au tick " + tick + " (morceau/champ=empreinte) : " + detail);
+      }
+      s.divergencesRecentes.push(t);
+      var gardees = [];
+      for (var i = 0; i < s.divergencesRecentes.length; i++) {
+        if (t - s.divergencesRecentes[i] <= o.fenetreDivergencesMs) {
+          gardees.push(s.divergencesRecentes[i]);
+        }
+      }
+      s.divergencesRecentes = gardees;
+      if (gardees.length >= o.divergencesMax) {
+        s.alerte = "Les deux parties divergent à répétition (" + gardees.length + " fois en " + Math.round(o.fenetreDivergencesMs / 60000) + " min). " +
+          "C'est un défaut du jeu : ouvrez la console du navigateur (journal « divergence ») et gardez-la pour le correctif.";
+        journal("ALERTE : " + s.alerte);
+      }
+      if (o.surDivergence) {
+        o.surDivergence(tick, joueur, theirs, mienne, detail);
+      }
+    }
+
     function comparer(tick) {
       // Seul l'hôte compare ; il resynchronise tout le monde si un invité diffère de lui.
       if (s.joueur !== 0 || s.monEmpreinte[tick] === undefined || !s.empreintes[tick]) {
@@ -937,11 +1050,7 @@
         var h = autres[j];
         autres[j] = null; // comparée une fois
         if (h !== mienne) {
-          stats.divergences++;
-          journal("divergence au tick " + tick + " : joueur " + (Number(j) + 1) + " " + h + " contre hôte " + mienne);
-          if (o.surDivergence) {
-            o.surDivergence(tick, Number(j), h, mienne);
-          }
+          signalerDivergence(tick, Number(j), h, mienne);
           demanderResync("divergence");
           return;
         }
@@ -956,15 +1065,16 @@
         }
         return;
       }
-      if (m.joueur === 0 && s.actif && moteur.jeuEnCours()) {
-        // L'hôte a rechargé sa page : on lui envoie notre état (à lui seul).
+      if (m.joueur === 0 && s.actif && !villeQuittee()) {
+        // L'hôte a rechargé sa page (ou quitté la ville) : on lui envoie notre état (à lui seul).
         if (!moteur.sauvegarder(o.chemin)) {
           return;
         }
         var charge = fabriquerCharge(s.epoque, s.attendus, moteur.vitesse(), moteur.enPause(), moteur.lireFichier(o.chemin));
         var msgs = morceauxSauvegarde(charge, moteur.tick(), s.epoque, 0);
-        for (var i = 0; i < msgs.length; i++) {
-          s.conn.envoyer(msgs[i]);
+        if (!envoyerTous(msgs)) {
+          journal("sauvegarde non envoyée à l'hôte : connexion perdue (il la redemandera)");
+          return;
         }
         journal("sauvegarde envoyée à l'hôte (" + charge.length + " octets)");
       }
@@ -1022,8 +1132,14 @@
       s.vitesses = [];
       s.empreintes = {};
       s.monEmpreinte = {};
+      s.details = {};
+      s.rangVitesse = 0;
+      // Commandes du moteur de l'époque précédente : abandonnées (elles visaient un état qui n'existe plus).
+      moteur.sortie();
+      reserve = new Uint8Array(0);
       s.actif = true;
       s.projete = { pct: info.vitesse, pause: info.pause };
+      s.vitesseCommune = { pct: info.vitesse, pause: info.pause };
       moteur.vitesseAppliquer(info.vitesse, info.pause);
       var t = horloge.maintenant();
       s.echeance = t;
@@ -1033,17 +1149,33 @@
 
     // Charge la sauvegarde reçue (ou la nôtre, pour l'hôte) puis démarre le lockstep de cette époque.
     function appliquerSauvegarde(info, ecrire) {
+      if (s.actif && s.joueur !== 0) {
+        // Resynchronisation chez un invité : on journalise nos détails pour les comparer à ceux de l'hôte.
+        var dt = Object.keys(s.details).map(Number).sort(function (a, b) { return a - b; }).slice(-2);
+        for (var d = 0; d < dt.length; d++) {
+          journal("détail invité au tick " + dt[d] + " (morceau/champ=empreinte) : " + resumeDetail(s.details[dt[d]]));
+        }
+      }
       moteur.activer(s.joueur);
       if (ecrire) {
         moteur.ecrireFichier(o.chemin, info.sauvegarde);
       }
       if (!moteur.charger(o.chemin)) {
-        s.erreur = "Impossible de charger la partie reçue.";
         stats.sauvegardesRejetees++;
         journal("chargement de la sauvegarde refusé par le moteur");
         arreterJeu();
+        if (s.joueur !== 0 && !s.rechargeEssayee && s.connecte) {
+          // Invité : l'hôte attend ; on redemande la sauvegarde une seule fois (avec l'époque de l'hôte).
+          s.rechargeEssayee = true;
+          s.epoque = info.epoque;
+          envoyerBin(TYPE.SAUVEGARDE_DEMANDE, 0, new Uint8Array(0), 0);
+          journal("sauvegarde redemandée à l'hôte");
+        } else {
+          s.erreur = "Impossible de charger la partie reçue.";
+        }
         return false;
       }
+      s.rechargeEssayee = false;
       stats.chargements++;
       demarrerPartie(info);
       journal("partie chargée : époque " + info.epoque + ", tick " + s.T0 + ", attendus " + info.attendus.join(","));
@@ -1069,7 +1201,9 @@
       if (s.joueur !== 0 || !s.connecte || s.attendSauvegardeInvite) {
         return false;
       }
-      if (!moteur.jeuEnCours()) {
+      // En partie : on ne se fie pas à jeuEnCours (qui exclut la fenêtre d'options, les boîtes de
+      // sauvegarde…), seulement à « la ville a-t-elle été quittée ». Avant la partie : la ville doit être affichée.
+      if (s.actif ? villeQuittee() : !moteur.jeuEnCours()) {
         return false;
       }
       if (!moteur.sauvegarder(o.chemin)) {
@@ -1083,8 +1217,11 @@
       var pause = s.actif ? moteur.enPause() : false;
       var charge = fabriquerCharge(epoque, attendus, vitesse, pause, octets);
       var msgs = morceauxSauvegarde(charge, moteur.tick(), epoque, DEST_AUTRES);
-      for (var i = 0; i < msgs.length; i++) {
-        s.conn.envoyer(msgs[i]);
+      if (!envoyerTous(msgs)) {
+        // Socket mort : on ne recharge pas seul (les autres n'ont rien reçu) ; nouvel essai plus tard.
+        stats.envoisRates++;
+        journal("resynchronisation (" + motif + ") : envoi impossible, nouvel essai");
+        return false;
       }
       stats.resyncsHote++;
       journal("resynchronisation (" + motif + ") : époque " + epoque + ", " + charge.length + " octets");
@@ -1120,7 +1257,7 @@
     }
 
     function lireDemandes() {
-      if (!s.actif || !s.connecte) {
+      if (!s.actif || !s.connecte || villeQuittee()) {
         return;
       }
       var dv = moteur.demandeVitesse();
@@ -1175,9 +1312,22 @@
         return a.tick - b.tick || a.joueur - b.joueur || a.rang - b.rang;
       });
       for (var j = 0; j < prets.length; j++) {
+        s.vitesseCommune = { pct: prets[j].pct, pause: prets[j].pause };
         moteur.vitesseAppliquer(prets[j].pct, prets[j].pause);
       }
       s.vitesses = reste;
+    }
+
+    // La vitesse et la pause communes sont celles des VITESSE appliquées. Si le moteur en a une autre
+    // (un réglage local qui aurait échappé aux gardes du moteur), on la corrige et on le dit : le rythme
+    // ne doit pas dépendre d'un réglage local.
+    function verifierVitesse() {
+      var v = s.vitesseCommune;
+      if (v && moteur.vitesse() !== v.pct) {
+        stats.vitessesCorrigees++;
+        journal("vitesse locale " + moteur.vitesse() + " % remise à la vitesse commune " + v.pct + " %");
+        moteur.vitesseAppliquer(v.pct, v.pause);
+      }
     }
 
     // Joue le groupe `prochain` s'il est complet. Retourne vrai si les ticks ont avancé.
@@ -1213,6 +1363,13 @@
     function envoyerEmpreinte(tick) {
       var e = moteur.empreinte();
       s.monEmpreinte[tick] = hex(e);
+      if (moteur.detailEmpreinte) {
+        s.details[tick] = moteur.detailEmpreinte();
+        var ticks = Object.keys(s.details).map(Number).sort(function (a, b) { return a - b; });
+        while (ticks.length > 4) {
+          delete s.details[ticks.shift()];
+        }
+      }
       stats.empreintesEnvoyees++;
       envoyerBin(TYPE.EMPREINTE, tick, e, DEST_TOUS);
       comparer(tick); // l'invité peut avoir été plus rapide : son empreinte attend déjà
@@ -1235,6 +1392,14 @@
     }
 
     function jouer(t) {
+      if (villeQuittee()) {
+        // Ville quittée (menu principal, fin de mission) : on n'avance plus hors de la ville. L'autre
+        // joueur attend (« en attente de Joueur N ») ; le retour passe par revenir().
+        s.dernierProgres = t;
+        s.echeance = t;
+        return;
+      }
+      verifierVitesse();
       var limite = o.libre ? o.maxGroupesParPompe : 1000;
       var faits = 0;
       while (faits < limite && (o.libre || t >= s.echeance)) {
@@ -1287,7 +1452,23 @@
       }
     }
 
+    // Hôte qui attend sa partie auprès d'un invité depuis trop longtemps (aucun invité connecté, ou les
+    // deux pages rechargées) : on abandonne la partie à deux, avec un message, au lieu de réessayer sans fin.
+    function abandonnerRecuperation() {
+      stats.recuperationsAbandonnees++;
+      journal("récupération de la partie abandonnée après " + Math.round(o.recuperationMs / 1000) + " s");
+      arreterJeu();
+      s.arret = true;
+      fermerConnexion();
+      oublier();
+      s.erreur = "La partie n'a pas pu être récupérée : aucun autre joueur n'a pu la renvoyer. La partie à deux est abandonnée ; vous pouvez en créer une nouvelle.";
+    }
+
     function gererResync(t) {
+      if (s.joueur === 0 && s.attendSauvegardeInvite && t - s.debutRecuperation > o.recuperationMs) {
+        abandonnerRecuperation();
+        return;
+      }
       if (s.joueur === 0 && s.attendSauvegardeInvite && s.connecte && t - s.derniereDemande >= o.demandeSauvegardeMs) {
         // Hôte qui a rechargé sa page : demande à l'invité connecté de plus petit numéro.
         s.derniereDemande = t;
@@ -1315,17 +1496,35 @@
       }
     }
 
+    var enPompe = false;
+
     function pomper() {
-      var t = horloge.maintenant();
-      gererConnexion(t);
-      gererResync(t);
-      if (s.actif) {
-        lireDemandes();
-        envoyerTours();
-        jouer(t);
-        envoyerTours();
+      if (enPompe) {
+        return; // un message livré pendant le traitement : le prochain passage s'en chargera
       }
-      notifier();
+      enPompe = true;
+      try {
+        var t = horloge.maintenant();
+        gererConnexion(t);
+        gererResync(t);
+        if (moteur.refusMenu) {
+          var refus = moteur.refusMenu();
+          if (refus > 0) {
+            stats.menusRefuses += refus;
+            s.avis = "Charger, Recommencer et Quitter la mission sont désactivés pendant une partie à deux.";
+            s.avisJusqua = t + 6000;
+          }
+        }
+        if (s.actif) {
+          lireDemandes();
+          envoyerTours();
+          jouer(t);
+          envoyerTours();
+        }
+        notifier();
+      } finally {
+        enPompe = false;
+      }
     }
 
     // ------------------------------------------------------------ commandes de la page et des tests
@@ -1354,6 +1553,24 @@
       }
     }
 
+    // Après avoir quitté la ville (menu principal, fin de mission) : revenir dans la partie à deux.
+    // Invité : demande la partie à l'hôte, tous rechargent. Hôte : réclame sa partie à un invité (comme
+    // après un rechargement de page), puis la renvoie à tous. Retourne faux si rien à faire.
+    function revenir() {
+      if (!s.actif || !s.connecte || !villeQuittee()) {
+        return false;
+      }
+      if (s.joueur === 0) {
+        s.attendSauvegardeInvite = true;
+        s.derniereDemande = 0;
+        s.debutRecuperation = horloge.maintenant();
+      } else {
+        envoyerBin(TYPE.SAUVEGARDE_DEMANDE, 0, new Uint8Array(0), 0);
+      }
+      journal("retour dans la partie demandé");
+      return true;
+    }
+
     // Tests : coupe la connexion sans prévenir le serveur (comme un réseau qui tombe) ou normalement.
     function couperConnexion() {
       var immediat = true;
@@ -1371,6 +1588,7 @@
       etat: etat,
       stats: stats,
       forcerResync: forcerResync,
+      revenir: revenir,
       couperConnexion: couperConnexion,
       // Tests seulement.
       interne: s,

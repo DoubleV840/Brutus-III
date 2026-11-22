@@ -28,9 +28,14 @@ void brutus_empreinte_marquer(int valeur)
 
 uint64_t brutus_empreinte_partie(void)
 {
+    return brutus_empreinte_partie_detail(0);
+}
+
+uint64_t brutus_empreinte_partie_detail(FILE *detail)
+{
     // M6a : sans l'aperçu du joueur local, avec les copies de secours de la simulation
     brutus_simulation_debut();
-    uint64_t h = game_file_io_brutus_empreinte();
+    uint64_t h = game_file_io_brutus_empreinte_detail(detail, 0);
     brutus_simulation_fin();
     return h;
 }

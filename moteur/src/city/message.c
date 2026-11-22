@@ -13,6 +13,7 @@
 #include "game/time.h"
 #include "graphics/window.h"
 #include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/reseau.h" // Brutus III
 #include "scenario/request.h"
 #include "sound/effect.h"
 #include "window/message_dialog.h"
@@ -292,7 +293,8 @@ void city_message_brutus_afficher(void)
             city_warning_show_custom(lang_get_message(text_id)->title.text, NEW_WARNING_SLOT);
             use_popup = 0;
         }
-        if (is_invasion_message(msg->message_type) && setting_game_speed() > 70) {
+        // Brutus III (M6b) : en partie à deux la vitesse est partagée, le moteur n'y touche pas.
+        if (is_invasion_message(msg->message_type) && setting_game_speed() > 70 && !brutus_reseau_actif()) {
             setting_set_default_game_speed();
         }
         if ((use_popup && window_is(WINDOW_CITY)) || window_is(WINDOW_BUILDING_INFO)) {

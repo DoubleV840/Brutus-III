@@ -19,6 +19,7 @@
 #include "game/system.h"
 #include "game/time.h"
 #include "game/undo.h"
+#include "multijoueur/reseau.h" // Brutus III
 #include "graphics/graphics.h"
 #include "graphics/image.h"
 #include "graphics/lang_text.h"
@@ -878,7 +879,7 @@ int widget_top_menu_get_tooltip_text(tooltip_context *c)
 
 static void replay_map_confirmed(int confirmed, int checked)
 {
-    if (!confirmed) {
+    if (!confirmed || brutus_reseau_menu_refuse()) { // Brutus III (M6b) : pas de « Recommencer » en partie à deux
         window_city_show();
         return;
     }
@@ -937,7 +938,7 @@ static void menu_file_confirm_exit(int accepted, int checked)
 
 static void main_menu_confirmed(int confirmed, int checked)
 {
-    if (!confirmed) {
+    if (!confirmed || brutus_reseau_menu_refuse()) { // Brutus III (M6b) : on quitte la partie à deux par la page
         window_city_show();
         return;
     }

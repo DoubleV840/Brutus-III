@@ -18,6 +18,7 @@
 #include "graphics/screen.h"
 #include "graphics/weather.h"
 #include "graphics/window.h"
+#include "multijoueur/reseau.h"
 #include "sound/music.h"
 #include "window/cck_selection.h"
 #include "window/config.h"
@@ -149,6 +150,7 @@ static void button_click(const generic_button *button)
 
 void window_main_menu_show(int restart_music)
 {
+    brutus_reseau_ville_quittee(); // Brutus III (M6b) : en partie à deux, la ville est quittée (le client JS s'arrête)
     if (restart_music) {
         sound_music_play_intro();
     }
