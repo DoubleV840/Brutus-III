@@ -897,6 +897,127 @@ async function principal() {
     }
   }
 
+  // Cas complémentaires (relecture QA de M6b) : menus refusés, vitesse locale, ville quittée, échecs.
+  const compl = await jouerComplements();
+
+  async function jouerComplements() {
+    const res = {};
+    const ATT = PROD ? 25000 : 10000; // l'attente (« en attente de… ») s'affiche après 10 s en production
+    const enJeu = () => hote.s().actif && invite.s().actif && hote.lock.etat().phase === 'jeu' && invite.lock.etat().phase === 'jeu' && hote.s().epoque === invite.s().epoque;
+    async function attendre(cond, msMax) {
+      const t0 = performance.now();
+      let n = 0;
+      while (performance.now() - t0 < msMax) {
+        pomperTout();
+        if (cond()) {
+          return true;
+        }
+        if (TEMPS_REEL) {
+          await respirer();
+        } else if (++n % 300 === 0) {
+          await new Promise((r) => setImmediate(r));
+        }
+      }
+      return cond();
+    }
+    const appel = (c, nom) => c.M.ccall(nom, 'number', [], []);
+    dire('Cas complémentaires : menus, vitesse locale, ville quittée, échecs de chargement et d\'envoi.');
+    res.pret = await attendre(() => enJeu() && !hote.moteur.enPause(), 60000);
+
+    // 1. Menus Charger / Recommencer / Quitter : refusés en partie à deux, avec un avis à l'écran.
+    {
+      const av = { h: hote.lock.stats.menusRefuses, i: invite.lock.stats.menusRefuses };
+      const refus = appel(hote, 'brutus_reseau_test_menu') === 1 && appel(invite, 'brutus_reseau_test_menu') === 1;
+      const compte = await attendre(() => hote.lock.stats.menusRefuses > av.h && invite.lock.stats.menusRefuses > av.i, 5000);
+      res.menus = { refus, compte, avis: !!(hote.lock.etat().avis && invite.lock.etat().avis) };
+      dire(`  menus : ${JSON.stringify(res.menus)}`);
+    }
+
+    // 2. Vitesse changée hors du client (fenêtre d'options, invasion) : remise à la vitesse commune.
+    {
+      const v = hote.moteur.vitesse();
+      const autre = v > 20 ? v - 10 : v + 10;
+      const av = invite.lock.stats.vitessesCorrigees;
+      invite.moteur.vitesseAppliquer(autre, invite.moteur.enPause());
+      const change = invite.moteur.vitesse() === autre;
+      const revenue = await attendre(() => invite.moteur.vitesse() === v && invite.lock.stats.vitessesCorrigees > av, 5000);
+      res.vitesse = { change, revenue, commune: hote.moteur.vitesse() === invite.moteur.vitesse() };
+      dire(`  vitesse locale : ${JSON.stringify(res.vitesse)}`);
+    }
+
+    // 3. L'invité quitte la ville : il ne joue plus, l'hôte attend, puis « revenir » resynchronise.
+    {
+      await attendre(enJeu, 30000);
+      const ep = hote.s().epoque;
+      appel(invite, 'brutus_reseau_test_quitter_ville');
+      const hors = await attendre(() => invite.lock.etat().phase === 'hors-ville', 3000);
+      const t1 = invite.tick();
+      const attente = await attendre(() => hote.lock.etat().phase === 'attente', ATT);
+      const fige = invite.tick() === t1;
+      const demande = invite.lock.revenir();
+      const retour = await attendre(() => hote.s().epoque !== ep && enJeu(), 60000);
+      res.inviteQuitte = { hors, attente, fige, demande, retour };
+      dire(`  invité hors de la ville : ${JSON.stringify(res.inviteQuitte)}`);
+    }
+
+    // 4. L'hôte quitte la ville : pas de resynchronisation tant qu'il est dehors ; retour par « revenir ».
+    {
+      await attendre(enJeu, 30000);
+      const ep = hote.s().epoque;
+      const ra = hote.lock.stats.resyncsHote;
+      appel(hote, 'brutus_reseau_test_quitter_ville');
+      const hors = await attendre(() => hote.lock.etat().phase === 'hors-ville', 3000);
+      hote.lock.forcerResync();
+      await attendre(() => false, 800);
+      const sansResync = hote.lock.stats.resyncsHote === ra;
+      const attente = await attendre(() => invite.lock.etat().phase === 'attente', ATT);
+      const demande = hote.lock.revenir();
+      const retour = await attendre(() => hote.s().epoque !== ep && enJeu(), 90000);
+      res.hoteQuitte = { hors, sansResync, attente, demande, retour, abandons: hote.lock.stats.recuperationsAbandonnees };
+      dire(`  hôte hors de la ville : ${JSON.stringify(res.hoteQuitte)}`);
+    }
+
+    // 5. Chargement refusé par le moteur de l'invité : la sauvegarde est redemandée une fois.
+    {
+      await attendre(enJeu, 30000);
+      const rej = invite.lock.stats.sauvegardesRejetees;
+      const chg = invite.lock.stats.chargements;
+      const orig = invite.moteur.charger;
+      let echecs = 0;
+      invite.moteur.charger = (chemin) => {
+        if (echecs === 0) {
+          echecs++;
+          return false;
+        }
+        return orig.call(invite.moteur, chemin);
+      };
+      hote.lock.forcerResync();
+      const ok = await attendre(() => echecs === 1 && invite.lock.stats.sauvegardesRejetees > rej && invite.lock.stats.chargements > chg && enJeu(), 90000);
+      invite.moteur.charger = orig;
+      res.chargementRefuse = { echecs, ok, erreurs: !!(hote.s().erreur || invite.s().erreur) };
+      dire(`  chargement refusé chez l'invité : ${JSON.stringify(res.chargementRefuse)}`);
+    }
+
+    // 6. Envoi refusé pendant une resynchronisation (socket qui tombe) : l'hôte ne recharge pas seul.
+    {
+      await attendre(enJeu, 30000);
+      const conn = hote.s().conn;
+      const orig = conn.envoyer;
+      const er = hote.lock.stats.envoisRates;
+      const ra = hote.lock.stats.resyncsHote;
+      const chg = hote.lock.stats.chargements;
+      conn.envoyer = (m) => (typeof m !== 'string' && m.byteLength > 1000 ? false : orig.call(conn, m));
+      hote.lock.forcerResync();
+      const vu = await attendre(() => hote.lock.stats.envoisRates > er, 5000);
+      const seul = hote.lock.stats.resyncsHote === ra && hote.lock.stats.chargements === chg;
+      conn.envoyer = orig;
+      const fini = await attendre(() => hote.lock.stats.resyncsHote > ra && enJeu(), 90000);
+      res.envoiRate = { vu, seul, fini };
+      dire(`  envoi refusé : ${JSON.stringify(res.envoiRate)}`);
+    }
+    return res;
+  }
+
   // Comparaison finale directe : on avance jusqu'à ce que les deux soient au même tick et à la même époque.
   let direct = { comparees: false };
   for (let i = 0; i < 5000; i++) {
@@ -909,7 +1030,7 @@ async function principal() {
       break;
     }
   }
-  return { hote, invite, evenements, faits, attenteVue, tick0, cible, direct, rechargeFaite, it };
+  return { hote, invite, evenements, faits, attenteVue, tick0, cible, direct, rechargeFaite, it, compl };
 }
 
 function M_pause(c) {
@@ -922,13 +1043,17 @@ function M_vitesse(c, delta) {
 // ============================================================ rapport
 
 function rapport(r, erreur) {
-  const { hote, invite, evenements, faits, attenteVue, tick0, direct, rechargeFaite } = r || {};
+  const { hote, invite, evenements, faits, attenteVue, tick0, direct, rechargeFaite, compl } = r || {};
   const duree = (performance.now() - debut) / 1000;
   const reelles = mismatches.filter((m) => !m.attendue);
   const attendues = mismatches.filter((m) => m.attendue);
   const divergencesHote = () => (panne ? (hote.ancien ? hote.ancien.divergences : 0) + hote.lock.stats.divergences - panne.divergencesAvant : 0);
   const complets = [...empreintesVues.values()].filter((e) => Object.keys(e).filter((k) => k !== 'signale').length >= 2).length;
+  const minEmpreintes = Math.max(1, Math.min(100, Math.floor(TICKS / (EMPREINTE_GROUPES * 5) / 2)));
   const L = [];
+  if (PROD) {
+    L.push('MODE PRODUCTION : constantes de web/lockstep.js (ping 20 s, mort 45 s, attente 10 s, empreinte tous les 50 groupes), jeu à l\'horloge réelle.');
+  }
   L.push(REEL ? 'RAPPORT : test réseau avec le vrai relais (deux moteurs wasm dans Node, WebSocket vers ' + RELAIS_URL + ')' : 'RAPPORT : test réseau sans port (deux moteurs wasm dans Node, relais en mémoire)');
   L.push(`Date : ${new Date().toISOString()}`);
   L.push(`Carte : ${CARTE}. Ticks demandés : ${TICKS}. Une empreinte tous les ${EMPREINTE_GROUPES * 5} ticks.`);
@@ -976,6 +1101,14 @@ function rapport(r, erreur) {
     if (panne) {
       L.push(`  Panne injectée au tick ${panne.tick} : ${attendues.length ? 'détectée (écart au tick ' + attendues[0].tick + ')' : 'NON DÉTECTÉE'}, divergences détectées par l'hôte depuis : ${divergencesHote()}.`);
     }
+    if (compl) {
+      L.push('');
+      L.push('Cas complémentaires');
+      for (const [nom, v] of Object.entries(compl)) {
+        L.push(`  ${nom} : ${JSON.stringify(v)}`);
+      }
+      L.push(`  Alerte de divergences à répétition : hôte « ${hote.s().alerte} », invité « ${invite.s().alerte} » ; menus refusés ${sh.menusRefuses}/${si.menusRefuses} ; vitesses corrigées ${sh.vitessesCorrigees}/${si.vitessesCorrigees} ; envois ratés ${sh.envoisRates}/${si.envoisRates}.`);
+    }
     L.push('');
     L.push('Scénario');
     for (const e of evenements) {
@@ -998,7 +1131,15 @@ function rapport(r, erreur) {
     'tous les événements faits': evenements.every((e) => e.fait),
     'panne détectée par le test': attendues.length >= 1,
     'panne détectée une fois par l\'hôte': !!panne && divergencesHote() === 1,
-    'empreintes comparées': complets > 0,
+    [`empreintes comparées (au moins ${minEmpreintes})`]: complets >= minEmpreintes,
+    'aucune divergence avant la panne injectée': !!panne && panne.divergencesAvant === 0,
+    'panne réparée dans une nouvelle époque': !!panne && !!r && hote.s().epoque !== panne.epoque,
+    'menus refusés avec avis (les deux joueurs)': !!(compl && compl.menus && compl.menus.refus && compl.menus.compte && compl.menus.avis),
+    'vitesse locale remise à la vitesse commune': !!(compl && compl.vitesse && compl.vitesse.change && compl.vitesse.revenue && compl.vitesse.commune),
+    'invité hors de la ville : figé, hôte en attente, retour resynchronisé': !!(compl && compl.inviteQuitte && Object.values(compl.inviteQuitte).every(Boolean)),
+    'hôte hors de la ville : pas de resynchronisation, retour sans abandon': !!(compl && compl.hoteQuitte && compl.hoteQuitte.hors && compl.hoteQuitte.sansResync && compl.hoteQuitte.demande && compl.hoteQuitte.retour && compl.hoteQuitte.abandons === 0),
+    'chargement refusé chez l\'invité : sauvegarde redemandée, partie reprise': !!(compl && compl.chargementRefuse && compl.chargementRefuse.ok && !compl.chargementRefuse.erreurs),
+    'envoi refusé : l\'hôte ne recharge pas seul, puis resynchronisation': !!(compl && compl.envoiRate && compl.envoiRate.vu && compl.envoiRate.seul && compl.envoiRate.fini),
     'hôte rechargé': !rechargeFaite || !!rechargeFaite.fini,
     'vitesses identiques': !!(faits.vitesse && faits.vitesse.identiques),
     'pause vue puis reprise': !!(faits.pause && faits.pause.vue && faits.pause.reprise),

@@ -112,6 +112,23 @@ Résultat, 225 000 ticks (30 minutes de jeu à 200 %), carte Lugdunum : 4 495 em
 
 Limites : le test n'exerce que les commandes du bot (joueur 0 de chaque client) sur Lugdunum ; une panne volontaire ne prouve pas l'absence d'état caché, seulement que la détection fonctionne. Avec `BRUTUS_RELAIS`, le même scénario passe par un vrai relais (`outils/test-reseau-30min.sh`) : voir `docs/protocole.md` pour son état.
 
+## Divergences trouvées à la relecture QA (M6b) : causes corrigées
+
+Deux familles de divergence que la resynchronisation aurait cachées (le client recharge l'état de l'hôte à la première empreinte différente, et le symptôme disparaît). Elles sont corrigées **à la cause**, dans le moteur :
+
+- **Menus « Charger », « Recommencer », « Quitter la mission »** : ils changent la ville d'un seul joueur sans commande (`game_file_load_saved_game`, `game_file_start_scenario_by_name`). En partie à deux ils sont refusés (`brutus_reseau_menu_refuse()` : `window/file_dialog.c`, `window/city.c`, `window/pause_menu.c`, `widget/top_menu.c`, commentés « Brutus III (M6b) »). Les deux seuls chemins restants (menu principal, choix de mission) appellent `brutus_reseau_ville_quittee()` : le client passe en phase `hors-ville` et n'avance plus (voir `docs/protocole.md`). Victoire et fin de mission : M11. On n'utilise pas `jeuEnCours` pour cela : il ne couvre que `WINDOW_CITY` à `WINDOW_TRADE_LEDGER` et figerait les deux joueurs dès l'ouverture de la fenêtre d'options.
+- **Vitesse changée en local** : retour à la vitesse par défaut après la première invasion (`city/message.c`) et fenêtre d'options (`window/config.c`). Ignorés en réseau ; de plus le client remet la vitesse locale à la vitesse commune avant chaque groupe (`verifierVitesse`, compteur `vitessesCorrigees`).
+
+**Règle** : en réseau, tout appel direct à `setting_set_game_speed`, `game_file_load_saved_game` ou `game_file_start_scenario_by_name` contourne le client et fait diverger. Toute nouvelle entrée de menu qui en appelle un doit être gardée.
+
+**Détection** : le moteur écrit le détail de la dernière empreinte par morceau dans `/tmp/brutus-empreinte-detail.txt` (`empreinte.c`, lu par `moteur.detailEmpreinte()`). À la première divergence le client le journalise ; à 3 divergences en 10 minutes il affiche une alerte (`etat().alerte`). Le test exige zéro divergence avant la panne injectée, une détection, et une réparation dans une nouvelle époque.
+
+**Cas complémentaires du test** (un critère chacun dans le rapport) : menus refusés, vitesse locale corrigée, invité hors ville, hôte hors ville (récupération de sa partie), chargement refusé chez l'invité (redemande une fois), envoi refusé par le relais (nouvel essai sans recharger seul).
+
+**Non testé** : latence de plusieurs centaines de ms ; route de Rome coupée (pause déclenchée par la simulation) ; deux onglets avec le même jeton ; arrivée d'un joueur pendant une resynchronisation ou au milieu des morceaux de sauvegarde ; onglet masqué dans un vrai navigateur.
+
+**Constantes** : TOUR par groupe de 5 ticks (5 divise 50, un jour de jeu), délai d'entrée D = 2 groupes, empreinte tous les 50 groupes (250 ticks, hôte seul), ping 20 s, mort 45 s, attente 10 s, réessai de sauvegarde 5 s, récupération hôte 60 s. Le test rapide les raccourcit ; `--production` les garde (passe d'au moins 20 minutes réelles).
+
 ## Limites connues
 
 - Navigateur réel : les variantes wasm testées tournent sous Node (même code, mêmes options, mais pas le fichier publié `SINGLE_FILE`). Le test réseau de M6b (deux moteurs wasm, client `web/lockstep.js`, relais en mémoire puis vrai relais en local) n'est pas un test à deux onglets dans un navigateur : voir « Test réseau (M6b) » plus bas.

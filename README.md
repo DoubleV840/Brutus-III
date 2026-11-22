@@ -88,6 +88,7 @@ Puis, dans **deux fenêtres de Chrome placées côte à côte** (un onglet masqu
 2. Fenêtre 2 : **« Jouer à deux »** → saisir le code → **« Rejoindre »**. L'hôte envoie sa partie, les deux la rechargent (« resynchronisation… »), puis le jeu reprend pour les deux.
 3. Vitesse et pause sont partagées. Si l'autre joueur se déconnecte, le jeu se met en pause (« en attente de … ») et reprend à son retour. L'hôte peut recharger sa page : la partie est récupérée auprès de l'invité.
 4. « Quitter la partie à deux » revient au solo.
+5. En partie à deux, **« Charger », « Recommencer » et « Quitter la mission » sont désactivés** (ils changeraient la ville d'un seul joueur : divergence). Si tu quittes quand même la ville par le menu principal, la partie à deux se met en attente : le bouton **« Revenir dans la partie »** te ramène dans la partie en cours (l'hôte la récupère auprès de l'invité). Si l'hôte reste bloqué plus de 60 s à récupérer sa partie, il est ramené en solo avec un message.
 
 Le panneau n'apparaît que si la page est servie depuis `localhost` ou `127.0.0.1` (le site public reste inchangé jusqu'à la mise en ligne du relais, M13). Pas de chat ni de curseur de l'autre joueur (phase 3). **La page n'a pas encore été essayée dans un navigateur** : si quelque chose cloche, noter le message affiché dans le panneau et la console du navigateur.
 
@@ -100,7 +101,7 @@ bash outils/test-reseau-30min.sh           # même scénario avec le VRAI relais
 BRUTUS_VITESSE=200 bash outils/test-reseau-30min.sh 225000 Lugdunum --production   # constantes de production (ping 20 s, coupure 45 s…), 20 min réelles ou plus
 ```
 
-Le premier lance une compilation wasm pour Node (`build-reseau-wasm/`, quelques minutes la première fois). Le dernier ouvre un port local : à lancer dans ton terminal, pas dans un bac à sable. Le scénario (coupures, resynchronisations, panne injectée, rechargement de l'hôte) est décrit dans `docs/determinisme.md`.
+Le premier lance une compilation wasm pour Node (`build-reseau-wasm/`, quelques minutes la première fois). Le dernier ouvre un port local : à lancer dans ton terminal, pas dans un bac à sable. `--production` garde les délais réels du client (une empreinte tous les 50 groupes, ping 20 s, coupure 45 s) ; rapport dans `build-reseau/rapport-relais-production.txt`. **Code de sortie 3 = test non exécuté** (jeu absent) : ce n'est pas un succès. Un test réussi affiche « RÉSULTAT OK » et sort avec 0. Le scénario (coupures, resynchronisations, panne injectée, rechargement de l'hôte) est décrit dans `docs/determinisme.md`.
 
 ## Publication
 
