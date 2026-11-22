@@ -499,7 +499,8 @@
       epoque: 0,
       attendus: [],
       T0: 0,
-      prochain: 0,
+      prochain: 0, // prochain groupe à démarrer
+      restants: 0, // ticks du groupe démarré pas encore joués (0 : à une frontière de groupe)
       envoye: 0,
       tours: {},
       vitesses: [],
@@ -906,6 +907,7 @@
         s.actif = false;
         moteur.desactiver();
       }
+      s.restants = 0;
       s.attendSauvegardeInvite = false;
       s.resyncEnAttente = null;
     }
@@ -1067,6 +1069,7 @@
       }
       if (m.joueur === 0 && s.actif && !villeQuittee()) {
         // L'hôte a rechargé sa page (ou quitté la ville) : on lui envoie notre état (à lui seul).
+        finirGroupe();
         if (!moteur.sauvegarder(o.chemin)) {
           return;
         }
@@ -1127,6 +1130,7 @@
       s.attendus = info.attendus.slice();
       s.T0 = moteur.tick();
       s.prochain = 0;
+      s.restants = 0; // le chargement a vidé la file des commandes du moteur (brutus_partie_chargee)
       s.envoye = D;
       s.tours = {};
       s.vitesses = [];
@@ -1206,6 +1210,7 @@
       if (s.actif ? villeQuittee() : !moteur.jeuEnCours()) {
         return false;
       }
+      finirGroupe();
       if (!moteur.sauvegarder(o.chemin)) {
         journal("sauvegarde impossible");
         return false;
@@ -1331,7 +1336,10 @@
     }
 
     // Joue le groupe `prochain` s'il est complet. Retourne vrai si les ticks ont avancé.
-    function jouerGroupe() {
+    // Démarre le groupe s.prochain s'il est complet : vitesse et pause du groupe, puis commandes de
+    // tous remises au moteur (chacune porte son tick). Ses G ticks se jouent ensuite un par un, à
+    // l'heure (jouerTick) : jouer les 5 d'un coup faisait avancer les personnages par à-coups.
+    function demarrerGroupe() {
       var k = s.prochain;
       if (!groupeComplet(k)) {
         return false;
@@ -1351,13 +1359,28 @@
         }
         delete s.tours[cle];
       }
-      moteur.avancer(G);
       s.prochain++;
-      stats.groupes++;
-      if (s.prochain % o.empreinteGroupes === 0) {
-        envoyerEmpreinte(debutGroupe(s.prochain));
-      }
+      s.restants = G;
       return true;
+    }
+
+    // Un tick du groupe démarré ; l'empreinte part après son dernier tick (frontière de groupe).
+    function jouerTick() {
+      moteur.avancer(1);
+      s.restants--;
+      if (s.restants === 0) {
+        stats.groupes++;
+        if (s.prochain % o.empreinteGroupes === 0) {
+          envoyerEmpreinte(debutGroupe(s.prochain));
+        }
+      }
+    }
+
+    // Joue tout de suite la fin du groupe démarré : une sauvegarde part toujours d'une frontière de groupe.
+    function finirGroupe() {
+      while (s.restants > 0) {
+        jouerTick();
+      }
     }
 
     function envoyerEmpreinte(tick) {
@@ -1400,16 +1423,18 @@
         return;
       }
       verifierVitesse();
-      var limite = o.libre ? o.maxGroupesParPompe : 1000;
+      // Cadence au tick près (comme le solo) : un tick dès que son heure est passée.
+      var limite = (o.libre ? o.maxGroupesParPompe : 1000) * G;
       var faits = 0;
       while (faits < limite && (o.libre || t >= s.echeance)) {
-        if (!jouerGroupe()) {
+        if (!s.restants && !demarrerGroupe()) {
           break;
         }
+        jouerTick();
         faits++;
         s.dernierProgres = t;
         if (!o.libre) {
-          s.echeance += msParTick(moteur.vitesse()) * G;
+          s.echeance += msParTick(moteur.vitesse());
         }
       }
       if (!o.libre) {

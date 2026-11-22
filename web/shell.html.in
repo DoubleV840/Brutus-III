@@ -669,6 +669,16 @@
         // Un onglet masqué ralentit les minuteries : la pompe passe aussi par les messages du relais
         // (non limités) et par le retour de visibilité ; le titre prévient que la partie à deux souffre.
         multi.minuterie = setInterval(function() { multi.ls.pomper(); }, 20);
+        // Onglet visible : une pompe à chaque image, pour que les ticks tombent régulièrement d'une
+        // image à l'autre (personnages sans à-coups). La minuterie reste pour l'onglet masqué.
+        multi.image = function() {
+          if (!multi.ls) {
+            return;
+          }
+          multi.ls.pomper();
+          multi.raf = requestAnimationFrame(multi.image);
+        };
+        multi.raf = requestAnimationFrame(multi.image);
         multi.titre = document.title;
         multi.visibilite = function() {
           if (!multi.ls) {
@@ -691,6 +701,7 @@
           return;
         }
         clearInterval(multi.minuterie);
+        cancelAnimationFrame(multi.raf);
         document.removeEventListener('visibilitychange', multi.visibilite);
         document.title = multi.titre;
         multi.ls.quitter();
