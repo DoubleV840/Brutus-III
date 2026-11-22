@@ -647,7 +647,7 @@
         texte = s.joueur === 0 ? "En attente d'un autre joueur. Code de la partie : " + s.code : "Connecté. En attente de la partie de l'hôte…";
       } else if (villeQuittee()) {
         phase = "hors-ville";
-        texte = "Vous avez quitté la ville : la partie à deux est en pause pour vous deux. Revenez dans la partie ou quittez-la.";
+        texte = "Vous avez quitté la ville : la partie multijoueur est en pause pour vous deux. Revenez dans la partie ou quittez-la.";
       } else if (att.length) {
         phase = "attente";
         var n = [];
@@ -1713,7 +1713,7 @@
       s.arret = true;
       fermerConnexion();
       oublier();
-      s.erreur = "La partie n'a pas pu être récupérée : aucun autre joueur n'a pu la renvoyer. La partie à deux est abandonnée ; vous pouvez en créer une nouvelle.";
+      s.erreur = "La partie n'a pas pu être récupérée : aucun autre joueur n'a pu la renvoyer. La partie multijoueur est abandonnée ; vous pouvez en créer une nouvelle.";
     }
 
     function gererResync(t) {
@@ -1763,7 +1763,7 @@
           var refus = moteur.refusMenu();
           if (refus > 0) {
             stats.menusRefuses += refus;
-            s.avis = "Charger, Recommencer et Quitter la mission sont désactivés pendant une partie à deux.";
+            s.avis = "Charger, Recommencer et Quitter la mission sont désactivés pendant une partie multijoueur.";
             s.avisJusqua = t + 6000;
           }
         }

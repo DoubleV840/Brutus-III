@@ -8,6 +8,7 @@
 #include "graphics/window.h"
 #include "multijoueur/commande.h"
 #include "multijoueur/empreinte.h"
+#include "multijoueur/menu.h"
 #include "multijoueur/simulation.h"
 #include "window/city.h"
 
@@ -255,7 +256,8 @@ BRUTUS_RESEAU_EXPORT int brutus_reseau_charger(const char *chemin)
 BRUTUS_RESEAU_EXPORT int brutus_reseau_jeu_en_cours(void)
 {
     window_id id = window_get_id();
-    return id >= WINDOW_CITY && id <= WINDOW_TRADE_LEDGER;
+    // La fenêtre « Multijoueur » ouverte depuis la ville la laisse en jeu (créer, chat, latences).
+    return (id >= WINDOW_CITY && id <= WINDOW_TRADE_LEDGER) || brutus_menu_au_dessus_de_la_ville();
 }
 
 BRUTUS_RESEAU_EXPORT int brutus_reseau_demande_vitesse(void)
@@ -341,4 +343,54 @@ BRUTUS_RESEAU_EXPORT int brutus_reseau_injecter(int type, int nb_params)
     }
     brutus_commande_envoyer((brutus_commande_type) type, nb_params, p);
     return 1;
+}
+
+// ------------------------------------------------------------------ tests : route de Rome coupée
+
+#include "city/finance.h"
+#include "city/map.h"
+#include "city/message.h"
+#include "city/population.h"
+#include "map/grid.h"
+
+static void ecrire_test_i32(int i, int v)
+{
+    uint8_t *d = etat.tampon + i * 4;
+    d[0] = (uint8_t) (v & 0xff);
+    d[1] = (uint8_t) ((v >> 8) & 0xff);
+    d[2] = (uint8_t) ((v >> 16) & 0xff);
+    d[3] = (uint8_t) ((v >> 24) & 0xff);
+}
+
+// Écrit dans le tampon : entrée x, y, sortie x, y, les bornes de la carte (x min, y min, x max, y max),
+// puis la population et le trésor.
+BRUTUS_RESEAU_EXPORT int brutus_reseau_test_entree(void)
+{
+    const map_tile *entree = city_map_entry_point();
+    const map_tile *sortie = city_map_exit_point();
+    int x_min = 0, y_min = 0, x_max = map_grid_width() - 1, y_max = map_grid_height() - 1;
+    int v[10] = { entree->x, entree->y, sortie->x, sortie->y, x_min, y_min, x_max, y_max,
+        city_population(), city_finance_treasury() };
+    for (int i = 0; i < 10; i++) {
+        ecrire_test_i32(i, v[i]);
+    }
+    return map_grid_is_valid_offset(entree->grid_offset) && map_grid_is_valid_offset(sortie->grid_offset);
+}
+
+// Messages « route de Rome » présents dans la liste : 1 avertissement, 2 obstruée (murs retirés), 4 bloquée
+// (dernier bâtiment détruit).
+BRUTUS_RESEAU_EXPORT int brutus_reseau_test_route_rome(void)
+{
+    int vus = 0;
+    for (int i = 0; i < city_message_count(); i++) {
+        int type = city_message_get(i)->message_type;
+        if (type == MESSAGE_ROAD_TO_ROME_WARNING) {
+            vus |= 1;
+        } else if (type == MESSAGE_ROAD_TO_ROME_OBSTRUCTED) {
+            vus |= 2;
+        } else if (type == MESSAGE_ROAD_TO_ROME_BLOCKED) {
+            vus |= 4;
+        }
+    }
+    return vus;
 }

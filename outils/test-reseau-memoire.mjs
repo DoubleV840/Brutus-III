@@ -101,6 +101,15 @@ class Relais {
     this.bloques = new Map(); // « code:joueur » → instant (ms) jusqu'auquel la reconnexion échoue
     this.stats = { binaires: 0, textes: 0, octets: 0, parType: {}, erreursEnvoyees: {}, remplacements: 0, departs: 0, arrivees: 0, retours: 0, retoursSansDepart: 0, jetes: 0 };
     this.dernierDepart = new Map(); // « code:joueur » → vrai si un joueur-parti a été annoncé depuis le dernier retour
+    this.latence = null; // { min, max } en ms par trajet (client → relais, relais → client) : cas « forte latence »
+  }
+
+  retarder(c, item, sens) {
+    if (this.latence) {
+      const cle = sens === 'mont' ? 'dueMontMs' : 'dueDescMs';
+      item.dueMs = Math.max(c[cle] || 0, performance.now() + entier(this.latence.min, this.latence.max));
+      c[cle] = item.dueMs;
+    }
   }
 
   // Transport injecté dans creerLockstep.
@@ -130,20 +139,24 @@ class Relais {
   monter(c, item) {
     item.due = Math.max(c.dueMont, this.it + entier(0, 2));
     c.dueMont = item.due;
+    this.retarder(c, item, 'mont');
     c.montant.push(item);
   }
 
   descendre(c, item) {
     item.due = Math.max(c.dueDesc, this.it + entier(0, 2));
     c.dueDesc = item.due;
+    this.retarder(c, item, 'desc');
     c.descendant.push(item);
   }
 
   // Un tour de boucle : le relais traite ce que les clients lui ont envoyé, puis livre aux clients.
   tic(it) {
     this.it = it;
+    const maintenant = performance.now();
+    const arrive = (item) => item.due <= it && !(item.dueMs > maintenant);
     for (const c of this.conns) {
-      while (c.montant.length && c.montant[0].due <= it) {
+      while (c.montant.length && arrive(c.montant[0])) {
         const item = c.montant.shift();
         if (c.silence) {
           this.stats.jetes++;
@@ -153,7 +166,7 @@ class Relais {
       }
     }
     for (const c of this.conns) {
-      while (c.descendant.length && c.descendant[0].due <= it) {
+      while (c.descendant.length && arrive(c.descendant[0])) {
         const item = c.descendant.shift();
         if (c.silence) {
           this.stats.jetes++;
@@ -667,7 +680,8 @@ async function principal() {
   dire(`Journaux du bot : ${journaux.map((j) => j.length + ' commandes').join(', ')}.`);
 
   let hote = new Client('hôte', 0, journaux[0]);
-  const invite = new Client('invité', 1, journaux[1]);
+  let invite = new Client('invité', 1, journaux[1]);
+  let premierInvite = null; // l'onglet remplacé (cas des deux onglets)
   await hote.demarrer();
   await invite.demarrer();
   dire(`Deux instances du moteur prêtes (${secondes().trim()} s).`);
@@ -1055,6 +1069,8 @@ async function principal() {
         };
         return () => { c.moteur.sortie = orig; };
       };
+      hote.injecter({ nom: 'triche', params: [100] }); // de quoi payer les puits, même ville à sec
+      await attendre(() => false, 300);
       const conflitsAvant = { h: hote.lock.stats.conflits, i: invite.lock.stats.conflits };
       let essais = 0;
       let conflit = false;
@@ -1077,6 +1093,114 @@ async function principal() {
         signalEnvoye, signal, conflit, essais, hoteJamais, avis };
       dire(`  coop : ${JSON.stringify(res.coop)}`);
     }
+
+    // 8. Route de Rome coupée (M8, petits restes) : l'hôte entoure le point d'entrée de murs. Le moteur
+    // avertit, puis retire des murs (« route obstruée ») ou détruit le dernier bâtiment posé (« route bloquée »),
+    // et met le jeu en pause chez lui : en réseau, seule la pause partagée compte, la partie continue.
+    {
+      await attendre(enJeu, 30000);
+      const t = (c, i) => new DataView(c.M.HEAPU8.buffer, c.pointeurTampon(), 40).getInt32(i * 4, true);
+      const valide = hote.M.ccall('brutus_reseau_test_entree', 'number', [], []) === 1;
+      const [ex, ey, sx, sy, xmin, ymin, xmax, ymax, population, tresor] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => t(hote, i));
+      const R = 3;
+      const separables = valide && Math.max(Math.abs(ex - sx), Math.abs(ey - sy)) > R + 1;
+      const reellesAvant = mismatches.filter((m) => !m.attendue).length;
+      const avant = [hote, invite].map((c) => c.M.ccall('brutus_reseau_test_route_rome', 'number', [], []));
+      let cotes = 0;
+      if (separables) {
+        const borne = (v, a, b) => Math.max(a, Math.min(b, v));
+        const x0 = borne(ex - R, xmin, xmax), x1 = borne(ex + R, xmin, xmax);
+        const y0 = borne(ey - R, ymin, ymax), y1 = borne(ey + R, ymin, ymax);
+        const lignes = [];
+        if (ey - R >= ymin) lignes.push([x0, y0, x1, y0]);
+        if (ey + R <= ymax) lignes.push([x0, y1, x1, y1]);
+        if (ex - R >= xmin) lignes.push([x0, y0, x0, y1]);
+        if (ex + R <= xmax) lignes.push([x1, y0, x1, y1]);
+        cotes = lignes.length;
+        // Commandes de l'hôte, par sa boîte de sortie (comme l'interface) : argent, défrichage, murs.
+        const poser = async (nom, params) => {
+          hote.injecter({ nom, params });
+          await attendre(() => false, 300);
+        };
+        await poser('triche', [100]);
+        await poser('triche', [100]);
+        for (const [a, b, c, d] of lignes) {
+          await poser('construire', [9, a, b, c, d, 0, 0, 0, 0]); // défrichage de la ligne (routes comprises)
+        }
+        for (const [a, b, c, d] of lignes) {
+          await poser('construire', [6, a, b, c, d, 0, 0, 0, 0]); // mur sur la ligne
+        }
+      }
+      const vu = separables && await attendre(() => [hote, invite].every((c) => c.M.ccall('brutus_reseau_test_route_rome', 'number', [], []) & 6), 60000);
+      const apres = [hote, invite].map((c) => c.M.ccall('brutus_reseau_test_route_rome', 'number', [], []));
+      const t1 = hote.tick();
+      const continue_ = await attendre(() => hote.tick() > t1 + 500 && enJeu(), 60000);
+      const pauseLocale = hote.moteur.enPause() || invite.moteur.enPause();
+      res.routeRome = { valide, population, tresor, entree: [ex, ey], sortie: [sx, sy], separables, cotes, avant, apres, vu, memesMessages: apres[0] === apres[1],
+        continue: continue_, pauseLocale, divergences: mismatches.filter((m) => !m.attendue).length - reellesAvant };
+      dire(`  route de Rome coupée : ${JSON.stringify(res.routeRome)}`);
+    }
+
+    // 9. Forte latence : 150 à 350 ms par trajet (300 à 700 ms d'un joueur à l'autre) pendant 15 s.
+    if (!REEL || FAUX_WS) {
+      await attendre(enJeu, 30000);
+      const reellesAvant = mismatches.filter((m) => !m.attendue).length;
+      const t1 = hote.tick();
+      relais.latence = { min: 150, max: 350 };
+      let attenteVueLatence = false;
+      let maxLat = 0;
+      await attendre(() => {
+        if (hote.lock.etat().phase === 'attente' || invite.lock.etat().phase === 'attente') attenteVueLatence = true;
+        maxLat = Math.max(maxLat, hote.s().latences[1] || 0, invite.s().latences[0] || 0);
+        return false;
+      }, 15000);
+      relais.latence = null;
+      const ticks = hote.tick() - t1;
+      const retour = await attendre(enJeu, 30000);
+      res.latence = { ticks, latenceMaxMesuree: maxLat, attente: attenteVueLatence, retour, divergences: mismatches.filter((m) => !m.attendue).length - reellesAvant };
+      dire(`  forte latence : ${JSON.stringify(res.latence)}`);
+    }
+
+    // 10. Arrivée pendant une resynchronisation : l'invité est coupé pendant qu'il reçoit la sauvegarde.
+    if (!REEL || FAUX_WS) {
+      await attendre(enJeu, 30000);
+      const reellesAvant = mismatches.filter((m) => !m.attendue).length;
+      const ep = hote.s().epoque;
+      relais.latence = { min: 30, max: 60 }; // laisse le temps de couper au milieu du transfert
+      hote.lock.forcerResync();
+      const enCours = await attendre(() => invite.lock.etat().phase === 'resync' || Object.keys(invite.s().receptions || {}).length > 0, 5000);
+      coupurePropre(invite, 800);
+      relais.latence = null;
+      const retour = await attendre(() => hote.s().epoque !== ep && enJeu(), 90000);
+      const t1 = hote.tick();
+      const suite = await attendre(() => hote.tick() > t1 + 300 && enJeu(), 30000);
+      res.arriveeResync = { enCours, retour, suite, epoques: [ep, hote.s().epoque], divergences: mismatches.filter((m) => !m.attendue).length - reellesAvant };
+      dire(`  arrivée pendant une resynchronisation : ${JSON.stringify(res.arriveeResync)}`);
+    }
+
+    // 11. Deux onglets avec le même jeton : le 2e onglet de l'invité (même stockage) reprend la session ;
+    // le relais remplace la 1re connexion, qui s'arrête SANS se reconnecter (pas de ping-pong entre onglets).
+    if (!REEL || FAUX_WS) {
+      await attendre(enJeu, 30000);
+      const reellesAvant = mismatches.filter((m) => !m.attendue).length;
+      const remplAvant = relais.stats.remplacements;
+      const ancien = invite;
+      const reconnexionsAvant = ancien.lock.stats.reconnexions;
+      const onglet2 = new Client('invité (2e onglet)', 1, [], ancien.stockage);
+      await onglet2.demarrer();
+      const repris = onglet2.lock.reprendre();
+      premierInvite = ancien;
+      invite = onglet2; // clients() pompe désormais le 2e onglet (et l'ancien à part)
+      const arret = await attendre(() => { ancien.pomper(); return !!ancien.s().arret; }, 10000);
+      const enJeu2 = await attendre(() => { ancien.pomper(); return enJeu(); }, 90000);
+      await attendre(() => { ancien.pomper(); return false; }, 3000);
+      const reconnexionsAncien = ancien.lock.stats.reconnexions - reconnexionsAvant;
+      const t1 = hote.tick();
+      const suite = await attendre(() => { ancien.pomper(); return hote.tick() > t1 + 300 && enJeu(); }, 30000);
+      res.deuxOnglets = { repris, arret, erreur: ancien.s().erreur, remplacements: relais.stats.remplacements - remplAvant, enJeu: enJeu2, suite,
+        ancienActif: !!ancien.s().actif, reconnexionsAncien, divergences: mismatches.filter((m) => !m.attendue).length - reellesAvant };
+      dire(`  deux onglets, même jeton : ${JSON.stringify(res.deuxOnglets)}`);
+    }
     return res;
   }
 
@@ -1092,7 +1216,7 @@ async function principal() {
       break;
     }
   }
-  return { hote, invite, evenements, faits, attenteVue, tick0, cible, direct, rechargeFaite, it, compl };
+  return { hote, invite, evenements, faits, attenteVue, tick0, cible, direct, rechargeFaite, it, compl, premierInvite };
 }
 
 function M_pause(c) {
@@ -1204,6 +1328,10 @@ function rapport(r, erreur) {
     'envoi refusé : l\'hôte ne recharge pas seul, puis resynchronisation': !!(compl && compl.envoiRate && compl.envoiRate.vu && compl.envoiRate.seul && compl.envoiRate.fini),
     'coop : présence et latence reçues, chat et signal vus par les deux': !!(compl && compl.coop && compl.coop.presences && compl.coop.latences.hote !== undefined && compl.coop.latences.invite !== undefined && compl.coop.chat && compl.coop.signal),
     'coop : ordre en conflit signalé au second joueur seulement': !!(compl && compl.coop && compl.coop.conflit && compl.coop.hoteJamais && compl.coop.avis),
+    'route de Rome coupée : message chez les deux, partie continue, sans pause locale': !!(compl && compl.routeRome && compl.routeRome.vu && compl.routeRome.memesMessages && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0),
+    'forte latence (300 à 700 ms) : la partie avance, sans attente ni divergence': !!(compl && compl.latence && compl.latence.ticks > 100 && !compl.latence.attente && compl.latence.retour && compl.latence.divergences === 0) || (REEL && !FAUX_WS),
+    'arrivée pendant une resynchronisation : partie reprise, sans divergence': !!(compl && compl.arriveeResync && compl.arriveeResync.retour && compl.arriveeResync.suite && compl.arriveeResync.divergences === 0) || (REEL && !FAUX_WS),
+    'deux onglets, même jeton : l\'ancien s\'arrête sans se reconnecter, le nouveau joue': !!(compl && compl.deuxOnglets && compl.deuxOnglets.repris && compl.deuxOnglets.arret && compl.deuxOnglets.remplacements >= 1 && compl.deuxOnglets.enJeu && compl.deuxOnglets.suite && !compl.deuxOnglets.ancienActif && compl.deuxOnglets.reconnexionsAncien === 0 && compl.deuxOnglets.divergences === 0) || (REEL && !FAUX_WS),
     'hôte rechargé': !rechargeFaite || !!rechargeFaite.fini,
     'vitesses identiques': !!(faits.vitesse && faits.vitesse.identiques),
     'pause vue puis reprise': !!(faits.pause && faits.pause.vue && faits.pause.reprise),

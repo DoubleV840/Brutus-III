@@ -101,7 +101,8 @@ typedef enum {
     WINDOW_CUSTOM_MESSAGE,
     WINDOW_TEXT_INPUT,
     WINDOW_USER_PATH_SETUP,
-    WINDOW_EDITOR_SELECT_CITY_RESOURCES_FOR_ROUTE
+    WINDOW_EDITOR_SELECT_CITY_RESOURCES_FOR_ROUTE,
+    WINDOW_BRUTUS_MULTIJOUEUR // Brutus III : fenêtre « Multijoueur » (multijoueur/menu.c)
 } window_id;
 
 typedef struct {

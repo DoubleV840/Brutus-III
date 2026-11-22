@@ -19,6 +19,7 @@
 #include "game/system.h"
 #include "game/time.h"
 #include "game/undo.h"
+#include "multijoueur/menu.h"
 #include "multijoueur/reseau.h" // Brutus III
 #include "graphics/graphics.h"
 #include "graphics/image.h"
@@ -89,7 +90,10 @@ static void menu_help_about(int param);
 static void menu_advisors_go_to(int advisor);
 static void ratings_advisors_go_to(int advisor);
 
+static void menu_file_multijoueur(int param); // Brutus III
+
 static menu_item menu_file[] = {
+    {CUSTOM_TRANSLATION, TR_BRUTUS_MULTIJOUEUR, menu_file_multijoueur, 0}, // Brutus III
     {1, 2, menu_file_replay_map, 0},
     {1, 3, menu_file_load_game, 0},
     {1, 4, menu_file_save_game, 0},
@@ -132,7 +136,7 @@ static menu_item menu_advisors[] = {
 };
 
 static menu_bar_item menu[] = {
-    {1, menu_file, 6},
+    {1, menu_file, 7}, // Brutus III : + « Multijoueur »
     {2, menu_options, 7},
     {3, menu_help, 4},
     {4, menu_advisors, 13},
@@ -896,6 +900,14 @@ static void replay_map_confirmed(int confirmed, int checked)
         window_mission_selection_show_again();
     }
     scenario_events_process_all();
+}
+
+// Brutus III : fenêtre « Multijoueur » au-dessus de la ville
+static void menu_file_multijoueur(int param)
+{
+    clear_state();
+    window_go_back();
+    window_brutus_multijoueur_show(1);
 }
 
 static void menu_file_replay_map(int param)

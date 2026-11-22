@@ -2402,7 +2402,8 @@ static translation_string all_strings[] = {
     {TR_CHEAT_FILL_MARKETS, "Filled all markets with food and goods"},
     {TR_PARAMETER_TERRAIN_SHALLOW_WATER, "Shallow water"},
     {TR_PARAMETER_TERRAIN_MARSHLAND, "Marshland"},
-    {TR_PARAMETER_TERRAIN_BEACH, "Beach"}
+    {TR_PARAMETER_TERRAIN_BEACH, "Beach"},
+    {TR_BRUTUS_MULTIJOUEUR, "Multiplayer"} // Brutus III
 };
 
 void translation_english(const translation_string **strings, int *num_strings)

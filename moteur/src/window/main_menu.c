@@ -21,6 +21,7 @@
 #include "graphics/screen.h"
 #include "graphics/weather.h"
 #include "graphics/window.h"
+#include "multijoueur/menu.h"
 #include "multijoueur/reseau.h"
 #include "sound/music.h"
 #include "window/cck_selection.h"
@@ -32,7 +33,7 @@
 #include "window/select_campaign.h"
 #include "window/video.h"
 
-#define MAX_BUTTONS 6
+#define MAX_BUTTONS 7 // Brutus III : + « Multijoueur »
 
 static void button_click(const generic_button *button);
 
@@ -41,13 +42,15 @@ static struct {
     int logo_image_id;
 } data;
 
+// Brutus III : un bouton « Multijoueur » (7) sous « Campagne », les autres resserrés de 4 pixels.
 static generic_button buttons[] = {
-    {192, 130, 256, 25, button_click, 0, 1},
-    {192, 170, 256, 25, button_click, 0, 2},
-    {192, 210, 256, 25, button_click, 0, 3},
-    {192, 250, 256, 25, button_click, 0, 4},
-    {192, 290, 256, 25, button_click, 0, 5},
-    {192, 330, 256, 25, button_click, 0, 6},
+    {192, 126, 256, 25, button_click, 0, 1},
+    {192, 162, 256, 25, button_click, 0, 7},
+    {192, 198, 256, 25, button_click, 0, 2},
+    {192, 234, 256, 25, button_click, 0, 3},
+    {192, 270, 256, 25, button_click, 0, 4},
+    {192, 306, 256, 25, button_click, 0, 5},
+    {192, 342, 256, 25, button_click, 0, 6},
 };
 
 static void draw_version_string(void)
@@ -99,12 +102,13 @@ static void draw_foreground(void)
         }
     }
 
-    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_MAIN_MENU_SELECT_CAMPAIGN, 192, 137, 256, FONT_NORMAL_GREEN);
-    lang_text_draw_centered(30, 2, 192, 177, 256, FONT_NORMAL_GREEN);
-    lang_text_draw_centered(30, 3, 192, 217, 256, FONT_NORMAL_GREEN);
-    lang_text_draw_centered(9, 8, 192, 257, 256, FONT_NORMAL_GREEN);
-    lang_text_draw_centered(2, 0, 192, 297, 256, FONT_NORMAL_GREEN);
-    lang_text_draw_centered(30, 5, 192, 337, 256, FONT_NORMAL_GREEN);
+    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_MAIN_MENU_SELECT_CAMPAIGN, 192, 133, 256, FONT_NORMAL_GREEN);
+    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_BRUTUS_MULTIJOUEUR, 192, 169, 256, FONT_NORMAL_GREEN);
+    lang_text_draw_centered(30, 2, 192, 205, 256, FONT_NORMAL_GREEN);
+    lang_text_draw_centered(30, 3, 192, 241, 256, FONT_NORMAL_GREEN);
+    lang_text_draw_centered(9, 8, 192, 277, 256, FONT_NORMAL_GREEN);
+    lang_text_draw_centered(2, 0, 192, 313, 256, FONT_NORMAL_GREEN);
+    lang_text_draw_centered(30, 5, 192, 349, 256, FONT_NORMAL_GREEN);
 
     graphics_reset_dialog();
 }
@@ -152,12 +156,15 @@ static void button_click(const generic_button *button)
         window_config_show(CONFIG_FIRST_PAGE, 0, 1);
     } else if (type == 6) {
         window_popup_dialog_show(POPUP_DIALOG_QUIT, confirm_exit, 1);
+    } else if (type == 7) {
+        window_brutus_multijoueur_show(0); // Brutus III
     }
 }
 
 void window_main_menu_show(int restart_music)
 {
     brutus_reseau_ville_quittee(); // Brutus III (M6b) : en partie à deux, la ville est quittée (le client JS s'arrête)
+    brutus_menu_retour_menu_principal(); // Brutus III : « créer quand la ville sera prête » abandonné
     if (restart_music) {
         sound_music_play_intro();
     }
