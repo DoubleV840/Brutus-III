@@ -263,6 +263,46 @@
         display: none;
       }
 
+      /* Coop (M7) : chat et signaux. */
+      #multiChat {
+        list-style: none;
+        margin: 6px 0 4px;
+        padding: 4px 6px;
+        max-height: 150px;
+        overflow-y: auto;
+        background-color: rgba(255, 255, 255, 0.06);
+        border-radius: 2px;
+        word-wrap: break-word;
+      }
+
+      #multiChat:empty {
+        display: none;
+      }
+
+      #multiChat li {
+        margin: 2px 0;
+      }
+
+      #multiChat input[type='button'] {
+        padding: 0 6px;
+        margin: 0 0 0 4px;
+        font-size: 9pt;
+      }
+
+      #multi input[type='text']#multiMessage {
+        font: 10pt sans-serif;
+        width: 180px;
+        text-transform: none;
+      }
+
+      .multiPastille {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        margin-right: 4px;
+        border-radius: 2px;
+      }
+
       #OSD {
         display: none;
         position: absolute;
@@ -333,13 +373,21 @@
             <input type="text" id="multiCode" maxlength="6" placeholder="Code" autocomplete="off" spellcheck="false">
             <input type="button" data-action="rejoindre" value="Rejoindre">
           </div>
-          <small>Chaque joueur doit avoir les fichiers du jeu dans son navigateur. Celui qui crée la partie la lance ou la charge ; l'autre la reçoit. Garde l'onglet visible pendant la partie : un onglet masqué ralentit les deux joueurs.</small>
+          <small>Chaque joueur doit avoir les fichiers du jeu dans son navigateur. Celui qui crée la partie lance une carte, un scénario ou une sauvegarde (une partie à deux sauvegardée se reprend ainsi) ; l'autre la reçoit en arrivant. Vous gérez la même ville, avec les mêmes pouvoirs. Garde l'onglet visible pendant la partie : un onglet masqué ralentit les deux joueurs.</small>
         </div>
         <div id="multiSalon">
           <div>Code de la partie : <span id="multiCodeAffiche"></span></div>
           <ul id="multiJoueurs"></ul>
-          <input type="button" data-action="revenir" id="multiRevenir" value="Revenir dans la partie">
-          <input type="button" data-action="quitter" value="Quitter la partie à deux">
+          <ul id="multiChat"></ul>
+          <div>
+            <input type="text" id="multiMessage" maxlength="200" placeholder="Message à l'autre joueur" autocomplete="off">
+            <input type="button" data-action="envoyer" value="Envoyer">
+          </div>
+          <small>Touche G : signaler l'endroit sous la souris. Le cadre de couleur sur la mini-carte montre la vue de l'autre joueur.</small>
+          <div>
+            <input type="button" data-action="revenir" id="multiRevenir" value="Revenir dans la partie">
+            <input type="button" data-action="quitter" value="Quitter la partie à deux">
+          </div>
         </div>
         <div id="multiTexte" role="status"></div>
         <div id="multiAvis" role="alert"></div>
@@ -607,6 +655,11 @@
       var multiCodeElement = document.getElementById('multiCode');
       var multiCodeAfficheElement = document.getElementById('multiCodeAffiche');
       var multiJoueursElement = document.getElementById('multiJoueurs');
+      var multiChatElement = document.getElementById('multiChat');
+      var multiMessageElement = document.getElementById('multiMessage');
+      var multiBoutonElement = document.getElementById('multiBouton');
+      // Couleurs des joueurs, comme dans le moteur (multijoueur/coop.c).
+      var MULTI_COULEURS = ['#3399ff', '#ff6633', '#33dd55', '#bb55ff'];
 
       // Adresse du relais : seulement en local pour l'instant (mise en ligne : mission M13). Ailleurs,
       // le panneau reste caché et la page se comporte comme avant.
@@ -636,8 +689,13 @@
         for (var i = 0; i < e.salon.length; i++) {
           var p = e.salon[i];
           var li = document.createElement('li');
-          li.textContent = 'Joueur ' + (p.joueur + 1) + (p.joueur === e.joueur ? ' (toi)' : '') +
-            (p.joueur === 0 ? ', hôte' : '') + (p.connecte ? '' : ' : déconnecté');
+          var pastille = document.createElement('span');
+          pastille.className = 'multiPastille';
+          pastille.style.backgroundColor = MULTI_COULEURS[p.joueur] || '#fff';
+          li.appendChild(pastille);
+          var latence = e.latences && e.latences[p.joueur] !== undefined ? ' (' + e.latences[p.joueur] + ' ms)' : '';
+          li.appendChild(document.createTextNode('Joueur ' + (p.joueur + 1) + (p.joueur === e.joueur ? ' (toi)' : '') +
+            (p.joueur === 0 ? ', hôte' : '') + (p.connecte ? latence : ' : déconnecté')));
           if (e.hote && p.joueur !== 0) {
             var b = document.createElement('input');
             b.type = 'button';
@@ -648,6 +706,57 @@
             li.appendChild(b);
           }
           multiJoueursElement.appendChild(li);
+        }
+        multiAfficherChat(e);
+      }
+
+      // Chat (M7) : on n'ajoute que les lignes nouvelles, pour garder le défilement.
+      multi.chatVu = 0;
+      multi.chatNonLus = 0;
+      function multiAfficherChat(e) {
+        var lignes = e.chat || [];
+        if (!lignes.length && multiChatElement.firstChild) {
+          multiChatElement.textContent = '';
+          multi.chatVu = 0;
+        }
+        var enBas = multiChatElement.scrollTop + multiChatElement.clientHeight >= multiChatElement.scrollHeight - 4;
+        for (var i = 0; i < lignes.length; i++) {
+          var l = lignes[i];
+          if (l.id <= multi.chatVu) {
+            continue;
+          }
+          multi.chatVu = l.id;
+          var li = document.createElement('li');
+          var nom = document.createElement('b');
+          nom.style.color = MULTI_COULEURS[l.joueur] || '#fff';
+          nom.textContent = (l.joueur === e.joueur ? 'Toi' : 'Joueur ' + (l.joueur + 1)) + ' ';
+          li.appendChild(nom);
+          li.appendChild(document.createTextNode(l.texte));
+          if (l.signal >= 0) {
+            var b = document.createElement('input');
+            b.type = 'button';
+            b.value = 'Voir';
+            b.setAttribute('data-action', 'voir');
+            b.setAttribute('data-case', String(l.signal));
+            li.appendChild(b);
+          }
+          multiChatElement.appendChild(li);
+          if (l.joueur !== e.joueur && !multi.ouvert) {
+            multi.chatNonLus++;
+          }
+        }
+        while (multiChatElement.children.length > 50) {
+          multiChatElement.removeChild(multiChatElement.firstChild);
+        }
+        if (enBas) {
+          multiChatElement.scrollTop = multiChatElement.scrollHeight;
+        }
+        multiBoutonElement.value = multi.chatNonLus ? 'Jouer à deux (' + multi.chatNonLus + ' nouveau' + (multi.chatNonLus > 1 ? 'x' : '') + ')' : 'Jouer à deux';
+      }
+
+      function multiEnvoyerMessage() {
+        if (multi.ls && multi.ls.envoyerChat(multiMessageElement.value)) {
+          multiMessageElement.value = '';
         }
       }
 
@@ -718,6 +827,14 @@
         if (action === 'basculer') {
           multi.ouvert = !multi.ouvert;
           multiPanneauElement.style.display = multi.ouvert ? 'block' : 'none';
+          if (multi.ouvert) {
+            multi.chatNonLus = 0;
+            multiBoutonElement.value = 'Jouer à deux';
+          }
+        } else if (action === 'envoyer') {
+          multiEnvoyerMessage();
+        } else if (action === 'voir') {
+          multi.ls.allerA(Number(bouton.getAttribute('data-case')));
         } else if (action === 'creer') {
           multi.ls.creer(2);
         } else if (action === 'rejoindre') {
@@ -738,10 +855,18 @@
        'pointerdown', 'pointerup', 'touchstart', 'touchend', 'contextmenu'].forEach(function(type) {
         window.addEventListener(type, function(event) {
           if (!multiElement.contains(event.target)) {
+            // Touche G (M7) : signal sur la case sous la souris, pendant une partie à deux.
+            if (type === 'keydown' && multi.ls && (event.key === 'g' || event.key === 'G') &&
+                !event.ctrlKey && !event.metaKey && !event.altKey && !event.repeat && multi.ls.signaler()) {
+              event.stopImmediatePropagation();
+              event.preventDefault();
+            }
             return;
           }
           if (type === 'click') {
             multiAction(event.target);
+          } else if (type === 'keydown' && event.target === multiMessageElement && event.key === 'Enter') {
+            multiEnvoyerMessage();
           }
           event.stopImmediatePropagation();
         }, true);

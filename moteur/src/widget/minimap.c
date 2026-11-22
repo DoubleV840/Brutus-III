@@ -16,6 +16,7 @@
 #include "map/property.h"
 #include "map/random.h"
 #include "map/terrain.h"
+#include "multijoueur/coop.h" // Brutus III (M7)
 
 #include <stdlib.h>
 #include <string.h>
@@ -505,6 +506,30 @@ static void draw_viewport_rectangle(void)
         COLOR_MINIMAP_VIEWPORT);
 }
 
+// Brutus III (M7) : cadre de la vue des autres joueurs et signaux (même calcul que le cadre local).
+static void draw_brutus_coop(void)
+{
+    int x, y, w, h;
+    color_t couleur;
+    for (int j = 0; j < BRUTUS_JOUEURS_MAX; j++) {
+        if (!brutus_coop_vue_minimap(j, &x, &y, &w, &h, &couleur)) {
+            continue;
+        }
+        int x_offset = (int) ((2 * (x - data.minimap.x)) / data.minimap.scale) + data.screen.x - data.minimap.offset_x;
+        int y_offset = (int) ((y - data.minimap.y + 2) / data.minimap.scale) + data.screen.y - data.minimap.offset_y;
+        graphics_draw_rect(x_offset, y_offset, (int) ((w * 2) / data.minimap.scale + 4),
+            (int) (h / data.minimap.scale - 4), couleur);
+    }
+    for (int i = 0; i < BRUTUS_COOP_SIGNAUX; i++) {
+        if (!brutus_coop_signal_minimap(i, &x, &y, &couleur)) {
+            continue;
+        }
+        int x_offset = (int) ((2 * (x - data.minimap.x)) / data.minimap.scale) + data.screen.x - data.minimap.offset_x;
+        int y_offset = (int) ((y - data.minimap.y) / data.minimap.scale) + data.screen.y - data.minimap.offset_y;
+        graphics_fill_rect(x_offset - 2, y_offset - 2, 6, 5, couleur);
+    }
+}
+
 static void prepare_minimap_cache(void)
 {
     if (data.functions->map.width() != data.minimap.width || data.functions->map.height() * 2 != data.minimap.height ||
@@ -558,6 +583,7 @@ void widget_minimap_draw_decorated(int x_offset, int y_offset, int width, int he
     }
     widget_minimap_draw(x_offset, y_offset, width, height);
     draw_viewport_rectangle();
+    draw_brutus_coop(); // Brutus III (M7)
     graphics_reset_clip_rectangle();
 
     graphics_draw_line(x_offset - 1, x_offset - 1 + width, y_offset - 1, y_offset - 1, COLOR_MINIMAP_DARK);

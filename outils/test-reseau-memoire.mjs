@@ -1015,6 +1015,51 @@ async function principal() {
       res.envoiRate = { vu, seul, fini };
       dire(`  envoi refusé : ${JSON.stringify(res.envoiRate)}`);
     }
+
+    // 7. Coop (M7) : vue de l'autre, latence, chat, signal, et deux ordres incompatibles au même tour.
+    {
+      await attendre(enJeu, 30000);
+      const caseLibre = (c, n) => {
+        const g = c.M.ccall('brutus_coop_test_case_libre', 'number', ['number'], [n]);
+        const dv = new DataView(c.M.HEAPU8.buffer, c.pointeurTampon(), 8);
+        return { g, x: dv.getInt32(0, true), y: dv.getInt32(4, true) };
+      };
+      const presences = await attendre(() => hote.lock.stats.presencesRecues > 0 && invite.lock.stats.presencesRecues > 0, 5000);
+      const latences = await attendre(() => hote.s().latences[1] !== undefined && invite.s().latences[0] !== undefined, 15000);
+      const texte = 'Salut ! On pose le forum ici ? é✓';
+      const chatEnvoye = hote.lock.envoyerChat(texte);
+      const chat = await attendre(() => [hote, invite].every((c) => c.s().chat.some((l) => l.joueur === 0 && l.texte === texte)), 5000);
+      const cs = caseLibre(invite, 0);
+      const curseur = invite.moteur.coopCurseur;
+      invite.moteur.coopCurseur = () => cs.g;
+      const signalEnvoye = invite.lock.signaler();
+      invite.moteur.coopCurseur = curseur;
+      const signal = cs.g >= 0 && await attendre(() => [hote, invite].every((c) => c.s().chat.some((l) => l.joueur === 1 && l.signal === cs.g)), 5000);
+      // Conflit : les deux joueurs posent un puits sur la même case, envoyé au même passage. L'hôte passe
+      // en premier ; l'invité doit être prévenu (et l'hôte jamais). Plusieurs essais : les deux ordres
+      // doivent tomber dans le même tour, ce qui dépend du moment de l'envoi.
+      const PUITS = 92;
+      const conflitsAvant = { h: hote.lock.stats.conflits, i: invite.lock.stats.conflits };
+      let essais = 0;
+      let conflit = false;
+      for (let n = 1; n <= 15 && !conflit; n++) {
+        await attendre(enJeu, 30000);
+        const c = caseLibre(hote, n * 3);
+        if (c.g < 0) {
+          break;
+        }
+        essais++;
+        const ordre = { nom: 'construire', params: [PUITS, c.x, c.y, c.x, c.y, 0, 0, 0, 0] };
+        hote.injecter(ordre);
+        invite.injecter(ordre);
+        conflit = await attendre(() => invite.lock.stats.conflits > conflitsAvant.i, 1500);
+      }
+      const hoteJamais = hote.lock.stats.conflits === conflitsAvant.h;
+      const avis = /au même moment/.test(invite.lock.etat().avis);
+      res.coop = { presences, latences: { hote: hote.s().latences[1], invite: invite.s().latences[0] }, chatEnvoye, chat,
+        signalEnvoye, signal, conflit, essais, hoteJamais, avis };
+      dire(`  coop : ${JSON.stringify(res.coop)}`);
+    }
     return res;
   }
 
@@ -1140,6 +1185,8 @@ function rapport(r, erreur) {
     'hôte hors de la ville : pas de resynchronisation, retour sans abandon': !!(compl && compl.hoteQuitte && compl.hoteQuitte.hors && compl.hoteQuitte.sansResync && compl.hoteQuitte.demande && compl.hoteQuitte.retour && compl.hoteQuitte.abandons === 0),
     'chargement refusé chez l\'invité : sauvegarde redemandée, partie reprise': !!(compl && compl.chargementRefuse && compl.chargementRefuse.ok && !compl.chargementRefuse.erreurs),
     'envoi refusé : l\'hôte ne recharge pas seul, puis resynchronisation': !!(compl && compl.envoiRate && compl.envoiRate.vu && compl.envoiRate.seul && compl.envoiRate.fini),
+    'coop : présence et latence reçues, chat et signal vus par les deux': !!(compl && compl.coop && compl.coop.presences && compl.coop.latences.hote !== undefined && compl.coop.latences.invite !== undefined && compl.coop.chat && compl.coop.signal),
+    'coop : ordre en conflit signalé au second joueur seulement': !!(compl && compl.coop && compl.coop.conflit && compl.coop.hoteJamais && compl.coop.avis),
     'hôte rechargé': !rechargeFaite || !!rechargeFaite.fini,
     'vitesses identiques': !!(faits.vitesse && faits.vitesse.identiques),
     'pause vue puis reprise': !!(faits.pause && faits.pause.vue && faits.pause.reprise),

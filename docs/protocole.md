@@ -126,14 +126,27 @@ Un message à un joueur absent (pas encore arrivé ou déconnecté) est perdu sa
 | `0x03` | `EMPREINTE` | **`0xFF` obligatoire** | tick de l'empreinte | `u64` empreinte FNV-1a de l'état (`docs/determinisme.md`) |
 | `0x04` | `SAUVEGARDE_DEMANDE` | un joueur (`0` en général) | 0 | aucune |
 | `0x05` | `SAUVEGARDE` | hôte : `0xFE` ou un joueur ; **invité : `0` seulement** | tick de la sauvegarde | un morceau (voir plus bas) |
-| `0x10` | `CHAT` | libre | 0 | réservé (M7) : texte UTF-8 |
-| `0x11` | `PING` | un joueur | 0 | réservé (M7) : mesure de latence entre joueurs |
+| `0x10` | `CHAT` | libre (le client : `0xFF`) | 0 | texte UTF-8, 400 octets au plus (M7) |
+| `0x11` | `PING` | un joueur | 0 | mesure de latence entre joueurs (M7, voir plus bas) |
+| `0x12` | `PRESENCE` | libre (le client : `0xFE`) | 0 | vue et curseur de l'émetteur, 24 octets (M7) |
+| `0x13` | `SIGNAL` | libre (le client : `0xFF`) | 0 | `i32` case de la carte signalée (M7) |
 
 `TOUR`, `VITESSE` et `EMPREINTE` doivent aller à tout le salon, émetteur compris : un tour envoyé à un seul joueur, ou sans écho à l'émetteur, désynchroniserait la partie sans aucune erreur. Le serveur refuse donc tout autre `dest` (`destinataire-interdit`).
 
 Un invité peut envoyer une `SAUVEGARDE` **à l'hôte seulement** : c'est le cas d'un hôte qui a rechargé sa page. Il revient avec son jeton, demande l'état à un invité (`SAUVEGARDE_DEMANDE` avec `dest` = ce joueur), le reçoit, puis le renvoie à tous et tout le monde recharge (voir M6b, point 5).
 
-Le serveur relaie déjà `CHAT` et `PING` comme les autres types ; leur contenu sera fixé en M7.
+Le serveur relaie `CHAT`, `PING`, `PRESENCE` et `SIGNAL` comme les autres types, sans les lire (`PRESENCE` et `SIGNAL` ont été ajoutés en M7 ; la version du protocole reste 1, un ancien client ignore ces types).
+
+### Messages du mode Coop (M7) : hors lockstep
+
+Ces messages ne touchent jamais la simulation : ni commandes, ni sauvegarde, ni empreinte. Ils sont traités dès leur arrivée, sans attendre de tour, et l'octet d'époque n'y compte pas. Code : `web/lockstep.js` (partie « Coop ») et `moteur/src/multijoueur/coop.c`.
+
+- **`CHAT`** : texte UTF-8 (caractères de contrôle remplacés par des espaces), coupé à 400 octets. Envoyé à tout le salon, émetteur compris : la ligne s'affiche à l'écho, dans le même ordre chez tous. La page l'affiche avec `textContent` (jamais comme du HTML).
+- **`PING`** : 13 octets, `u8 sorte` (0 demande, 1 réponse), `u32 numéro`, `f64 heure d'envoi` (horloge de l'émetteur, en ms). Chaque client en envoie un à chaque autre joueur connecté toutes les 5 s ; le destinataire renvoie les mêmes octets avec `sorte = 1`. La latence affichée est l'aller-retour.
+- **`PRESENCE`** : 6 × `i32` : caméra x et y (coordonnées de vue, comme `city_view_get_camera`), largeur et hauteur de la vue en cases, orientation de la vue, case sous la souris (`grid offset`, `-1` hors de la carte). Envoyée aux autres quand elle change (au plus toutes les 150 ms) et au moins toutes les 2 s, seulement dans la ville. Le moteur la borne avant de dessiner : cadre de couleur sur la mini-carte (si l'orientation est la même, ce qui est le cas sauf pendant une rotation, partagée par la commande `rotation-vue`) et case colorée sous le curseur de l'autre.
+- **`SIGNAL`** : `i32` case de la carte. Envoyé à tous, émetteur compris (touche **G** dans la page : case sous la souris). Chaque client fait clignoter la case et ses voisines 8 s, sur la ville et la mini-carte, et ajoute au chat une ligne avec un bouton « Voir » qui centre la vue dessus.
+
+Couleurs des joueurs (moteur et page) : joueur 1 bleu `#3399ff`, joueur 2 orange `#ff6633`, joueur 3 vert `#33dd55`, joueur 4 violet `#bb55ff`.
 
 ### `TOUR` : commandes d'un tour
 

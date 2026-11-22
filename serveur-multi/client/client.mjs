@@ -10,6 +10,8 @@ export const TYPE = {
   SAUVEGARDE: 0x05,
   CHAT: 0x10,
   PING: 0x11,
+  PRESENCE: 0x12,
+  SIGNAL: 0x13,
 };
 export const DEST_TOUS = 0xff;
 export const DEST_AUTRES = 0xfe;

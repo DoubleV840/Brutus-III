@@ -239,9 +239,13 @@ describe("relais Brutus III", () => {
     invite.envoyer(TYPE.SAUVEGARDE_DEMANDE, 0, undefined, 0);
     invite.envoyer(TYPE.CHAT, 0, new TextEncoder().encode("salut"), DEST_AUTRES);
     invite.envoyer(TYPE.PING, 0, new Uint8Array([9]), 1);
+    // M7 : présence aux autres, signal à tous.
+    invite.envoyer(TYPE.PRESENCE, 0, new Uint8Array(24), DEST_AUTRES);
+    invite.envoyer(TYPE.SIGNAL, 0, new Uint8Array(4), DEST_TOUS);
     const [avantHote, avantInvite] = await barriere(invite, hote, invite);
-    assert.deepEqual(avantHote.map((m) => [m.type, m.joueur]), [[TYPE.SAUVEGARDE_DEMANDE, 1], [TYPE.CHAT, 1]]);
-    assert.deepEqual(avantInvite.map((m) => m.type), [TYPE.PING]);
+    assert.deepEqual(avantHote.map((m) => [m.type, m.joueur]),
+      [[TYPE.SAUVEGARDE_DEMANDE, 1], [TYPE.CHAT, 1], [TYPE.PRESENCE, 1], [TYPE.SIGNAL, 1]]);
+    assert.deepEqual(avantInvite.map((m) => m.type), [TYPE.PING, TYPE.SIGNAL]);
   });
 
   test("TOUR, VITESSE et EMPREINTE : seulement à tout le salon", async () => {

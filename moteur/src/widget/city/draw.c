@@ -40,6 +40,7 @@
 #include "map/figure.h"
 #include "map/grid.h"
 #include "map/image.h"
+#include "multijoueur/coop.h" // Brutus III (M7)
 #include "map/property.h"
 #include "map/sprite.h"
 #include "map/terrain.h"
@@ -1404,6 +1405,7 @@ void city_draw(int selected_figure_id, pixel_coordinate *figure_coord, const map
             city_view_foreach_valid_map_tile(draw_overlay);
         }
     }
+    brutus_coop_dessiner_ville(draw_context.scale); // Brutus III (M7) : curseurs des autres, signaux
     update_clouds();
     update_weather();
 }

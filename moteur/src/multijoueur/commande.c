@@ -1,5 +1,6 @@
 // Brutus III : couche de commandes (phase 2a). Voir commande.h et docs/commandes.md.
 #include "multijoueur/commande.h"
+#include "multijoueur/coop.h" // M7 : conflits
 
 #include "building/building.h"
 #include "game/cheats.h"
@@ -945,6 +946,7 @@ int brutus_commandes_appliquer(uint32_t tick)
 
     // Toujours sans l'aperçu du joueur local et avec l'annulation de la simulation.
     brutus_simulation_debut();
+    int autre_joueur_avant = 0; // M7 : un autre joueur a déjà changé quelque chose dans ce lot
     for (int i = 0; i < nb_pretes; i++) {
         brutus_commande *c = &pretes[i];
         // Chaque commande repart du même état d'aléatoire et de caches, quel que soit le
@@ -958,11 +960,23 @@ int brutus_commandes_appliquer(uint32_t tick)
         // Joueur de la commande (-1 si hors plage) : seules ses fenêtres et ses messages
         // s'affichent chez lui (brutus_interface_pour_moi).
         etat.joueur_en_cours = (c->joueur >= 0 && c->joueur < BRUTUS_JOUEURS_MAX) ? c->joueur : BRUTUS_JOUEURS_MAX;
+        int tresor_avant = city_finance_treasury();
         int resultat = executer(c);
         etat.joueur_en_cours = -1;
         if (!resultat) {
             etat.total_refusees++;
             etat.refusees_par_type[c->type]++;
+        }
+        // M7 (conflits) : l'ordre du joueur local a échoué (refusé, ou construction qui n'a rien
+        // coûté, donc rien posé) alors qu'un autre joueur venait d'agir dans le même tour (l'hôte
+        // passe en premier) : on le lui dit. Seulement l'écran : la partie est la même chez tous.
+        int sans_effet = !resultat || (c->type == BRUTUS_CMD_CONSTRUIRE && c->p[0] != BUILDING_REPAIR_LAND &&
+            city_finance_treasury() == tresor_avant);
+        if (c->joueur == etat.joueur_local && autre_joueur_avant && sans_effet && brutus_multijoueur_actif()) {
+            brutus_coop_signaler_conflit();
+        }
+        if (c->joueur != etat.joueur_local && !sans_effet) {
+            autre_joueur_avant = 1;
         }
         etat.total_appliquees++;
         etat.appliquees_par_type[c->type]++;

@@ -25,6 +25,8 @@ export const TYPE = {
   SAUVEGARDE: 0x05,
   CHAT: 0x10,
   PING: 0x11,
+  PRESENCE: 0x12, // M7 : vue et curseur d'un joueur (jamais dans la simulation)
+  SIGNAL: 0x13, // M7 : signal posé sur la carte
 };
 export const TYPES_CONNUS = new Set(Object.values(TYPE));
 

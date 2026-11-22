@@ -12,12 +12,14 @@
 //  - vitesse et pause partagées (message VITESSE avec tick d'effet) ;
 //  - sauvegarde envoyée par l'hôte à l'arrivée ou au retour d'un joueur, rechargée par tous ;
 //  - empreinte tous les 250 ticks, resynchronisation de tous si elles diffèrent ;
-//  - reconnexion par jeton, ping et détection des coupures silencieuses.
+//  - reconnexion par jeton, ping et détection des coupures silencieuses ;
+//  - Coop (M7), hors lockstep : chat, latence entre joueurs (PING), vue et curseur des autres
+//    (PRESENCE), signaux sur la carte (SIGNAL). Rien de cela n'entre dans la simulation.
 (function (racine) {
   "use strict";
 
   var VERSION_PROTOCOLE = 1;
-  var TYPE = { TOUR: 1, VITESSE: 2, EMPREINTE: 3, SAUVEGARDE_DEMANDE: 4, SAUVEGARDE: 5, CHAT: 16, PING: 17 };
+  var TYPE = { TOUR: 1, VITESSE: 2, EMPREINTE: 3, SAUVEGARDE_DEMANDE: 4, SAUVEGARDE: 5, CHAT: 16, PING: 17, PRESENCE: 18, SIGNAL: 19 };
   var DEST_TOUS = 255;
   var DEST_AUTRES = 254;
   var ENTETE = 8;
@@ -53,6 +55,12 @@
     libre: false, // tests : pas de cadencement, les groupes se jouent dès qu'ils sont complets
     chemin: "/tmp/brutus-reseau.svx",
     joueurs: 2,
+    // M7 (Coop)
+    presenceMs: 150, // au plus une présence par 150 ms quand elle change
+    presenceMaxMs: 2000, // et au moins une toutes les 2 s
+    latenceMs: 5000, // mesure de latence entre joueurs
+    chatMax: 50, // lignes de chat gardées
+    chatOctets: 400, // longueur maximale d'un message
   };
 
   // ---------------------------------------------------------------- messages binaires
@@ -407,6 +415,30 @@
       enPause: function () {
         return appel("brutus_reseau_en_pause", [], []) === 1;
       },
+      // Coop (M7) : données d'écran seulement (multijoueur/coop.h).
+      coopPresence: function () {
+        var n = appel("brutus_coop_ma_presence", [], []);
+        return n > 0 ? M.HEAPU8.slice(tampon(), tampon() + n) : null;
+      },
+      coopPresenceAutre: function (joueur, octets) {
+        M.HEAPU8.set(octets.subarray(0, Math.min(octets.length, 64)), tampon());
+        appel("brutus_coop_presence", ["number", "number"], [joueur, Math.min(octets.length, 64)]);
+      },
+      coopOublier: function (joueur) {
+        appel("brutus_coop_oublier", ["number"], [joueur]);
+      },
+      coopCurseur: function () {
+        return appel("brutus_coop_curseur", [], []);
+      },
+      coopSignal: function (joueur, case_) {
+        return appel("brutus_coop_signal", ["number", "number"], [joueur, case_]) === 1;
+      },
+      coopAller: function (case_) {
+        appel("brutus_coop_aller", ["number"], [case_]);
+      },
+      coopConflits: function () {
+        return appel("brutus_coop_conflits", [], []);
+      },
     };
   }
 
@@ -475,6 +507,11 @@
       vitessesCorrigees: 0,
       envoisRates: 0,
       recuperationsAbandonnees: 0,
+      presencesEnvoyees: 0,
+      presencesRecues: 0,
+      chatsRecus: 0,
+      signauxRecus: 0,
+      conflits: 0,
     };
 
     var s = {
@@ -526,6 +563,15 @@
       rechargeEssayee: false, // une sauvegarde refusée par le moteur est redemandée une fois
       avis: "",
       avisJusqua: 0,
+      // Coop (M7)
+      chat: [], // [{id, joueur, texte, signal}] (signal : case de la carte, ou -1)
+      chatId: 0,
+      latences: {}, // joueur -> ms (aller-retour)
+      pingId: 0,
+      dernierPingJoueurs: 0,
+      dernierePresence: 0,
+      presenceEnvoyee: "",
+      signalesNonLus: 0,
     };
 
     function villeQuittee() {
@@ -627,6 +673,8 @@
         epoque: s.epoque,
         alerte: s.alerte,
         avis: t < s.avisJusqua ? s.avis : "",
+        chat: s.chat.slice(),
+        latences: s.latences,
       };
     }
 
@@ -635,7 +683,7 @@
         return;
       }
       var e = etat();
-      var cle = JSON.stringify([e.phase, e.texte, e.code, e.joueur, e.salon, e.pause, e.alerte, e.avis]);
+      var cle = JSON.stringify([e.phase, e.texte, e.code, e.joueur, e.salon, e.pause, e.alerte, e.avis, s.chatId, e.latences]);
       if (cle !== s.derniereNotif) {
         s.derniereNotif = cle;
         o.surChangement(e);
@@ -833,9 +881,11 @@
         case "joueur-parti":
           s.salon = m.joueurs || s.salon;
           journal("joueur " + (m.joueur + 1) + " parti");
+          oublierJoueur(m.joueur);
           break;
         case "joueur-expulse":
           s.salon = m.joueurs || s.salon;
+          oublierJoueur(m.joueur);
           if (s.joueur === 0) {
             demanderResync("expulsion du joueur " + (m.joueur + 1));
           }
@@ -905,6 +955,9 @@
     function arreterJeu() {
       if (s.actif) {
         s.actif = false;
+        if (moteur.coopOublier) {
+          moteur.coopOublier(-1);
+        }
         moteur.desactiver();
       }
       s.restants = 0;
@@ -935,8 +988,182 @@
         case TYPE.SAUVEGARDE:
           surSauvegarde(m);
           break;
+        case TYPE.CHAT:
+          surChat(m);
+          break;
+        case TYPE.PING:
+          surPing(m);
+          break;
+        case TYPE.PRESENCE:
+          surPresence(m);
+          break;
+        case TYPE.SIGNAL:
+          surSignal(m);
+          break;
         default:
-          break; // CHAT, PING : phase 3
+          break;
+      }
+    }
+
+    // ------------------------------------------------------------ Coop (M7) : hors lockstep
+
+    function oublierJoueur(j) {
+      delete s.latences[j];
+      if (moteur.coopOublier) {
+        moteur.coopOublier(j);
+      }
+    }
+
+    function ajouterChat(joueur, texte, signal) {
+      s.chatId++;
+      s.chat.push({ id: s.chatId, joueur: joueur, texte: texte, signal: signal });
+      while (s.chat.length > o.chatMax) {
+        s.chat.shift();
+      }
+    }
+
+    // Texte : UTF-8, envoyé à tous (émetteur compris : la ligne s'affiche à l'écho, dans le même
+    // ordre chez tous).
+    function surChat(m) {
+      var texte;
+      try {
+        texte = new TextDecoder("utf-8", { fatal: true }).decode(m.donnees.subarray(0, o.chatOctets));
+      } catch (e) {
+        return;
+      }
+      texte = texte.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
+      if (!texte) {
+        return;
+      }
+      stats.chatsRecus++;
+      ajouterChat(m.joueur, texte, -1);
+    }
+
+    // PING : u8 sorte (0 demande, 1 réponse), u32 numéro, f64 heure d'envoi (horloge de l'émetteur).
+    function surPing(m) {
+      var d = m.donnees;
+      if (d.length < 13) {
+        return;
+      }
+      if (d[0] === 0) {
+        var r = d.slice(0, 13);
+        r[0] = 1;
+        envoyerBin(TYPE.PING, 0, r, m.joueur);
+      } else if (d[0] === 1) {
+        var envoi = new DataView(d.buffer, d.byteOffset, d.byteLength).getFloat64(5, true);
+        var ms = horloge.maintenant() - envoi;
+        if (ms >= 0 && ms < 600000) {
+          s.latences[m.joueur] = Math.round(ms);
+        }
+      }
+    }
+
+    function surPresence(m) {
+      if (m.joueur === s.joueur || !moteur.coopPresenceAutre) {
+        return;
+      }
+      stats.presencesRecues++;
+      moteur.coopPresenceAutre(m.joueur, m.donnees);
+    }
+
+    // SIGNAL : i32 case de la carte (grid offset). Envoyé à tous, émetteur compris.
+    function surSignal(m) {
+      if (m.donnees.length < 4) {
+        return;
+      }
+      var g = new DataView(m.donnees.buffer, m.donnees.byteOffset, 4).getInt32(0, true);
+      if (moteur.coopSignal && !moteur.coopSignal(m.joueur, g)) {
+        return;
+      }
+      stats.signauxRecus++;
+      ajouterChat(m.joueur, "a signalé un endroit (touche G).", g);
+    }
+
+    function envoyerPresence(t) {
+      if (!moteur.coopPresence || t - s.dernierePresence < o.presenceMs) {
+        return;
+      }
+      var p = moteur.coopPresence();
+      if (!p) {
+        return;
+      }
+      var cle = Array.prototype.join.call(p, ",");
+      if (cle === s.presenceEnvoyee && t - s.dernierePresence < o.presenceMaxMs) {
+        return;
+      }
+      if (envoyerBin(TYPE.PRESENCE, 0, p, DEST_AUTRES)) {
+        stats.presencesEnvoyees++;
+        s.presenceEnvoyee = cle;
+        s.dernierePresence = t;
+      }
+    }
+
+    function mesurerLatences(t) {
+      if (t - s.dernierPingJoueurs < o.latenceMs) {
+        return;
+      }
+      s.dernierPingJoueurs = t;
+      for (var i = 0; i < s.salon.length; i++) {
+        var j = s.salon[i].joueur;
+        if (j === s.joueur || !s.salon[i].connecte) {
+          continue;
+        }
+        var d = new Uint8Array(13);
+        var v = new DataView(d.buffer);
+        d[0] = 0;
+        v.setUint32(1, ++s.pingId >>> 0, true);
+        v.setFloat64(5, t, true);
+        envoyerBin(TYPE.PING, 0, d, j);
+      }
+    }
+
+    function lireConflits(t) {
+      if (!moteur.coopConflits) {
+        return;
+      }
+      var n = moteur.coopConflits();
+      if (n > 0) {
+        stats.conflits += n;
+        s.avis = "L'autre joueur a agi au même moment : ton ordre n'a pas abouti.";
+        s.avisJusqua = t + 6000;
+      }
+    }
+
+    // Page : envoie une ligne de chat. Faux si pas connecté ou texte vide.
+    function envoyerChat(texte) {
+      texte = String(texte || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim();
+      if (!texte || !s.session) {
+        return false;
+      }
+      var octets = new TextEncoder().encode(texte);
+      if (octets.length > o.chatOctets) {
+        // Coupé sans casser un caractère : on retire des caractères jusqu'à tenir.
+        while (octets.length > o.chatOctets) {
+          texte = texte.slice(0, -1);
+          octets = new TextEncoder().encode(texte);
+        }
+      }
+      return envoyerBin(TYPE.CHAT, 0, octets, DEST_TOUS);
+    }
+
+    // Page (touche G) : signale la case sous la souris. Faux si la souris n'est pas sur la carte.
+    function signaler() {
+      if (!s.actif || !moteur.coopCurseur || villeQuittee()) {
+        return false;
+      }
+      var g = moteur.coopCurseur();
+      if (g < 0) {
+        return false;
+      }
+      var d = new Uint8Array(4);
+      new DataView(d.buffer).setInt32(0, g, true);
+      return envoyerBin(TYPE.SIGNAL, 0, d, DEST_TOUS);
+    }
+
+    // Page : centre la vue sur la case d'un signal du chat.
+    function allerA(g) {
+      if (s.actif && moteur.coopAller && g >= 0) {
+        moteur.coopAller(g);
       }
     }
 
@@ -1545,6 +1772,13 @@
           envoyerTours();
           jouer(t);
           envoyerTours();
+          if (s.connecte && !villeQuittee()) {
+            envoyerPresence(t);
+          }
+          lireConflits(t);
+        }
+        if (s.connecte) {
+          mesurerLatences(t);
         }
         notifier();
       } finally {
@@ -1615,6 +1849,9 @@
       forcerResync: forcerResync,
       revenir: revenir,
       couperConnexion: couperConnexion,
+      envoyerChat: envoyerChat,
+      signaler: signaler,
+      allerA: allerA,
       // Tests seulement.
       interne: s,
       moteur: moteur,
