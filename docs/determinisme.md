@@ -122,6 +122,14 @@ Dans les trois passes : panne injectée détectée une fois et réparée dans un
 
 Limites : le test n'exerce que les commandes du bot (joueur 0 de chaque client) sur Lugdunum ; une panne volontaire ne prouve pas l'absence d'état caché, seulement que la détection fonctionne. Avec `BRUTUS_RELAIS`, le même scénario passe par un vrai relais (`outils/test-reseau-30min.sh`) : voir `docs/protocole.md` pour son état.
 
+## Test réseau (M7 Coop, 22/11/2026)
+
+Les messages du mode Coop (`CHAT`, `PING`, `PRESENCE`, `SIGNAL`) ne passent jamais par la simulation ; le test vérifie qu'ils ne changent rien à la synchronisation, et ajoute un cas « Coop » aux cas complémentaires : présence et latence reçues par les deux, chat et signal vus par les deux, et deux puits posés sur la même case dans le même tour (l'hôte passe, l'invité est prévenu, l'hôte jamais).
+
+- Sans port (`bash outils/test-reseau-memoire.sh court`) : OK.
+- Vrai relais, 30 min (`bash outils/test-reseau-30min.sh`, `wrangler dev` sur 8788) : 225 869 ticks, 4 511 empreintes comparées, **zéro divergence**, empreintes finales identiques ; présence, latence (2 à 6 ms), chat et signal OK. Le cas du conflit avait échoué (0 sur 15 essais) parce que le test injectait les deux ordres « au même passage », ce qui en temps réel ne tombe pas dans le même tour : il vise désormais un tour précis. Refait ensuite avec le vrai relais sur 20 000 ticks : OK, conflit détecté au premier essai.
+- Un premier essai de 30 min avait échoué sans bug : le Mac (sur batterie) s'est mis en veille 15 min, et au réveil le relais local avait effacé le salon. Le script se lance maintenant sous `caffeinate -i`.
+
 ## Divergences trouvées à la relecture QA (M6b) : causes corrigées
 
 Deux familles de divergence que la resynchronisation aurait cachées (le client recharge l'état de l'hôte à la première empreinte différente, et le symptôme disparaît). Elles sont corrigées **à la cause**, dans le moteur :

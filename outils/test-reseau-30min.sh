@@ -49,7 +49,8 @@ RAPPORT="build-reseau/rapport-relais.txt"
 if [ -n "$PRODUCTION" ]; then
   RAPPORT="build-reseau/rapport-relais-production.txt"
 fi
-PORT=8787
+# BRUTUS_PORT : autre port, si un relais tourne déjà sur 8787 (recette à deux fenêtres, par exemple).
+PORT="${BRUTUS_PORT:-8787}"
 LOG="$RACINE/build-reseau/wrangler.log"
 mkdir -p "$RACINE/build-reseau"
 
@@ -64,7 +65,7 @@ if curl -s -o /dev/null "http://127.0.0.1:$PORT/"; then
 fi
 
 echo "== Démarrage du relais (wrangler dev, journal : $LOG)"
-(cd "$RACINE/serveur-multi" && exec npm run dev) > "$LOG" 2>&1 &
+(cd "$RACINE/serveur-multi" && exec npx wrangler dev --ip 127.0.0.1 --port "$PORT") > "$LOG" 2>&1 &
 PID_RELAIS=$!
 
 arreter_relais() {

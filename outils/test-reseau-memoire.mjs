@@ -1035,10 +1035,26 @@ async function principal() {
       const signalEnvoye = invite.lock.signaler();
       invite.moteur.coopCurseur = curseur;
       const signal = cs.g >= 0 && await attendre(() => [hote, invite].every((c) => c.s().chat.some((l) => l.joueur === 1 && l.signal === cs.g)), 5000);
-      // Conflit : les deux joueurs posent un puits sur la même case, envoyé au même passage. L'hôte passe
-      // en premier ; l'invité doit être prévenu (et l'hôte jamais). Plusieurs essais : les deux ordres
-      // doivent tomber dans le même tour, ce qui dépend du moment de l'envoi.
+      // Conflit : les deux joueurs posent un puits sur la même case, dans le MÊME tour K. L'hôte passe en
+      // premier ; l'invité doit être prévenu (et l'hôte jamais). Pour viser K exactement (en temps réel,
+      // deux joueurs ne sont jamais au même groupe au même instant), l'ordre est ajouté au TOUR du
+      // groupe K au moment où le client le fabrique (comme s'il sortait de la boîte du moteur).
       const PUITS = 92;
+      const viserTour = (c, K, octets) => {
+        const orig = c.moteur.sortie;
+        c.moteur.sortie = () => {
+          const neuves = orig.call(c.moteur);
+          if (c.s().envoye !== K) {
+            return neuves;
+          }
+          c.moteur.sortie = orig;
+          const t = new Uint8Array(neuves.length + octets.length);
+          t.set(neuves, 0);
+          t.set(octets, neuves.length);
+          return t;
+        };
+        return () => { c.moteur.sortie = orig; };
+      };
       const conflitsAvant = { h: hote.lock.stats.conflits, i: invite.lock.stats.conflits };
       let essais = 0;
       let conflit = false;
@@ -1049,10 +1065,11 @@ async function principal() {
           break;
         }
         essais++;
-        const ordre = { nom: 'construire', params: [PUITS, c.x, c.y, c.x, c.y, 0, 0, 0, 0] };
-        hote.injecter(ordre);
-        invite.injecter(ordre);
-        conflit = await attendre(() => invite.lock.stats.conflits > conflitsAvant.i, 1500);
+        const { octets } = hote.octetsCommande('construire', [PUITS, c.x, c.y, c.x, c.y, 0, 0, 0, 0]);
+        const K = Math.max(hote.s().envoye, invite.s().envoye) + 2;
+        const remettre = [viserTour(hote, K, octets), viserTour(invite, K, octets)];
+        conflit = await attendre(() => invite.lock.stats.conflits > conflitsAvant.i, 3000);
+        remettre.forEach((f) => f());
       }
       const hoteJamais = hote.lock.stats.conflits === conflitsAvant.h;
       const avis = /au même moment/.test(invite.lock.etat().avis);
