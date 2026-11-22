@@ -34,7 +34,8 @@
 #include "window/editor/attributes.h"
 #include "window/editor/scenario_events.h"
 #include "window/plain_message_dialog.h"
-#include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/commande.h"
+#include "multijoueur/versus.h" // Brutus III
 
 #include <stdio.h> // Brutus III
 #include <string.h>
@@ -488,6 +489,8 @@ int game_cheat_brutus_executer(int numero, const int32_t *args)
         case BRUTUS_TRICHE_INVASION:
             scenario_invasion_start_from_cheat();
             return 1;
+        case BRUTUS_TRICHE_VERSUS:
+            return brutus_versus_activer();
         default:
             break;
     }

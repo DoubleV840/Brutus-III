@@ -1,5 +1,6 @@
 // Brutus III : mode rejouage sans affichage (voir rejouage.h)
 #include "multijoueur/rejouage.h"
+#include "multijoueur/versus.h"
 
 #include "building/building.h"
 #include "city/finance.h"
@@ -475,6 +476,20 @@ static int rejouer(void)
     printf("Brutus III : rejouage terminé : %ld ticks, %u empreintes, %u commandes appliquées, "
         "population %d, trésor %d, %d bâtiments\n", ticks, nb_empreintes, brutus_commandes_total_appliquees(),
         city_population(), city_finance_treasury(), compter_batiments());
+    // M8 : en Versus, le détail de chaque ville (population, trésor, bâtiments à elle)
+    for (int v = 0; brutus_versus_actif() && v < brutus_versus_villes(); v++) {
+        brutus_ville_activer(v);
+        int a_elle = 0;
+        for (int i = 1; i < building_count(); i++) {
+            building *b = building_get(i);
+            if (b->state == BUILDING_STATE_IN_USE && b->brutus_proprietaire == v) {
+                a_elle++;
+            }
+        }
+        printf("Brutus III : ville %d : population %d, trésor %d, %d bâtiments\n", v + 1, city_population(),
+            city_finance_treasury(), a_elle);
+    }
+    brutus_ville_activer(0);
 
     if (options.sauvegarde_finale && !game_file_write_saved_game(options.sauvegarde_finale)) {
         fprintf(stderr, "Brutus III : impossible d'écrire %s\n", options.sauvegarde_finale);

@@ -873,6 +873,7 @@ set(MULTIJOUEUR_FILES
     ${PROJECT_SOURCE_DIR}/src/multijoueur/reseau.c # Brutus III : M6b (pont vers le client réseau JavaScript)
     ${PROJECT_SOURCE_DIR}/src/multijoueur/coop.c # Brutus III : M7 (vue des autres joueurs, signaux)
     ${PROJECT_SOURCE_DIR}/src/multijoueur/menu.c # Brutus III : fenêtre « Multijoueur »
+    ${PROJECT_SOURCE_DIR}/src/multijoueur/versus.c # Brutus III : M8 (deux villes)
 )
 
 set(SOURCE_FILES

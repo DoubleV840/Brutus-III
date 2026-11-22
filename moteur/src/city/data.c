@@ -1097,6 +1097,20 @@ void city_data_load_state(buffer *main, buffer *graph_order,
     load_entry_exit(entry_exit_xy, entry_exit_grid_offset);
 }
 
+// Brutus III (M8) : données d'une ville de plus (Versus), dans le bloc de multijoueur/versus.c
+void city_data_brutus_ecrire(buffer *main)
+{
+    save_main_data(main);
+    buffer_write_i32(main, city_data.population.graph_order);
+}
+
+void city_data_brutus_lire(buffer *main)
+{
+    memset(&city_data, 0, sizeof(city_data));
+    load_main_data(main, SAVE_GAME_CURRENT_VERSION);
+    city_data.population.graph_order = buffer_read_i32(main);
+}
+
 void city_data_load_basic_info(buffer *main, int *population, int *treasury, unsigned int *caravanserai_id, int version)
 {
     int discard_unused_values = version > SAVE_GAME_LAST_UNKNOWN_UNUSED_CITY_DATA;

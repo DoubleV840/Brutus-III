@@ -1,5 +1,6 @@
 // Brutus III : couche de commandes (phase 2a). Voir commande.h et docs/commandes.md.
 #include "multijoueur/commande.h"
+#include "multijoueur/versus.h"
 #include "multijoueur/coop.h" // M7 : conflits
 
 #include "building/building.h"
@@ -960,6 +961,7 @@ int brutus_commandes_appliquer(uint32_t tick)
         // Joueur de la commande (-1 si hors plage) : seules ses fenêtres et ses messages
         // s'affichent chez lui (brutus_interface_pour_moi).
         etat.joueur_en_cours = (c->joueur >= 0 && c->joueur < BRUTUS_JOUEURS_MAX) ? c->joueur : BRUTUS_JOUEURS_MAX;
+        brutus_ville_activer(brutus_versus_ville_du_joueur(c->joueur)); // M8 : Versus, joueur n = ville n
         int tresor_avant = city_finance_treasury();
         int resultat = executer(c);
         etat.joueur_en_cours = -1;
@@ -980,6 +982,7 @@ int brutus_commandes_appliquer(uint32_t tick)
         }
         etat.total_appliquees++;
         etat.appliquees_par_type[c->type]++;
+        brutus_ville_activer(0);
     }
     random_brutus_reinitialiser_compteur();
     etat.repere++;

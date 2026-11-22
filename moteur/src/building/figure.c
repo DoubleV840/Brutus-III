@@ -40,6 +40,7 @@
 #include "map/terrain.h"
 #include "map/water.h"
 #include "scenario/scenario.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 #define BEGGAR_UNEMPLOYMENT_THRESHOLD 6
 #define VALID_MONUMENT_RECHECK_TICKS 60
@@ -2167,6 +2168,9 @@ void building_figure_generate(void)
             b->has_problem = 1;
             continue;
         }
+        if (brutus_versus_actif()) {
+            brutus_ville_activer(b->brutus_proprietaire); // Brutus III (M8) : pour la ville du bâtiment
+        }
         if (b->type == BUILDING_WAREHOUSE_SPACE || (b->type == BUILDING_HIPPODROME && b->prev_part_building_id) ||
             (building_monument_is_unfinished_monument(b) && b->type != BUILDING_TRIUMPHAL_ARCH)) {
             continue;
@@ -2366,4 +2370,5 @@ void building_figure_generate(void)
             }
         }
     }
+    brutus_ville_activer(0); // Brutus III (M8)
 }

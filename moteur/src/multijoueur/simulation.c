@@ -1,5 +1,6 @@
 // Brutus III : rythme des ticks et frontière simulation / interface (voir simulation.h)
 #include "multijoueur/simulation.h"
+#include "multijoueur/versus.h"
 
 #include "building/construction.h"
 #include "city/message.h"
@@ -27,6 +28,7 @@ void brutus_simulation_debut(void)
     // avec le contexte d'annulation de l'aperçu, avant de basculer sur celui de la simulation.
     building_construction_brutus_suspendre_apercu();
     game_undo_brutus_entrer_simulation();
+    brutus_versus_entrer_simulation(); // M8 : la simulation part de la ville 0
 }
 
 void brutus_simulation_fin(void)
@@ -40,6 +42,7 @@ void brutus_simulation_fin(void)
     }
     game_undo_brutus_sortir_simulation();
     building_construction_brutus_reprendre_apercu();
+    brutus_versus_sortir_simulation(); // M8 : l'interface revient à la ville vue
 }
 
 int brutus_simulation_en_cours(void)

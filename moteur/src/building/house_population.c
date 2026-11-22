@@ -9,6 +9,7 @@
 #include "city/population.h"
 #include "core/calc.h"
 #include "figuretype/migrant.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 int house_population_add_to_city(int num_people)
 {
@@ -19,7 +20,7 @@ int house_population_add_to_city(int num_people)
             building_id = 1;
         }
         building *b = building_get(building_id);
-        if (b->state == BUILDING_STATE_IN_USE && b->house_size
+        if (b->state == BUILDING_STATE_IN_USE && b->house_size && !brutus_versus_ignorer(b->brutus_proprietaire) // M8
             && b->distance_from_entry > 0 && b->house_population > 0) {
             city_population_set_last_used_house_add(building_id);
             int max_people = house_population_get_capacity(b);

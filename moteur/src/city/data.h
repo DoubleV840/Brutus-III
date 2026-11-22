@@ -16,4 +16,8 @@ void city_data_load_state(buffer *main, buffer *graph_order, buffer *entry_exit_
 
 void city_data_load_basic_info(buffer *main, int *population, int *treasury, unsigned int *caravanserai_id, int version);
 
+// Brutus III (M8) : une ville de plus (Versus), voir multijoueur/versus.c
+void city_data_brutus_ecrire(buffer *main);
+void city_data_brutus_lire(buffer *main);
+
 #endif // CITY_DATA_H

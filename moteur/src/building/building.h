@@ -43,6 +43,7 @@ typedef struct building {
 
     unsigned char state;
     unsigned char faction_id;
+    unsigned char brutus_proprietaire; // Brutus III (M8) : ville propriétaire (Versus), sauvée à part (versus.c)
     unsigned char unknown_value;
     unsigned char size;
     unsigned char house_is_merged;
@@ -227,6 +228,9 @@ void building_get_from_buffer(buffer *buf, int id, building *b, int includes_bui
     int buffer_offset);
 
 int building_count(void);
+
+// Brutus III (M8) : refait les listes par type et par ville (après le chargement des propriétaires)
+void building_brutus_reconstruire_listes(void);
 
 int building_find(building_type type);
 

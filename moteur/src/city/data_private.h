@@ -20,7 +20,7 @@ typedef struct {
     int8_t happy_bolts;
 } god_status;
 
-extern struct city_data_t {
+struct city_data_t {
     struct {
         int16_t triumphal_arches_available;
         int16_t triumphal_arches_placed;
@@ -416,6 +416,12 @@ extern struct city_data_t {
     struct {
         int32_t total_food;
     } caravanserai;
-} city_data;
+};
+
+// Brutus III (M8) : une copie des données par ville (Versus). `city_data` désigne la ville ACTIVE
+// (multijoueur/versus.h) ; avec une seule ville, c'est toujours brutus_villes_donnees[0].
+extern struct city_data_t brutus_villes_donnees[2];
+extern struct city_data_t *brutus_ville_courante;
+#define city_data (*brutus_ville_courante)
 
 #endif // CITY_DATA_PRIVATE_H

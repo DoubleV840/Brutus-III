@@ -22,6 +22,7 @@
 #include "figuretype/wall.h"
 #include "figuretype/water.h"
 #include "figuretype/workcamp.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 
 static void figure_nobody_action(figure *f)
@@ -132,11 +133,19 @@ static void (*figure_action_callbacks[])(figure *f) = {
 
 void figure_action_handle(void)
 {
-    city_figures_reset();
-    city_entertainment_set_hippodrome_has_race(0);
+    // Brutus III (M8) : chaque personnage travaille pour la ville de son propriétaire (Versus).
+    for (int v = 0; v < brutus_versus_villes(); v++) {
+        brutus_ville_activer(v);
+        city_figures_reset();
+        city_entertainment_set_hippodrome_has_race(0);
+    }
+    brutus_ville_activer(0);
     for (unsigned int i = 1; i < figure_count(); i++) {
         figure *f = figure_get(i);
         if (f->state) {
+            if (brutus_versus_actif()) {
+                brutus_ville_activer(f->brutus_proprietaire);
+            }
             if (f->targeted_by_figure_id) {
                 figure *attacker = figure_get(f->targeted_by_figure_id);
                 if (attacker->state != FIGURE_STATE_ALIVE) {
@@ -152,4 +161,5 @@ void figure_action_handle(void)
             }
         }
     }
+    brutus_ville_activer(0);
 }

@@ -45,14 +45,22 @@
 #include "map/routing_terrain.h"
 #include "map/terrain.h"
 #include "map/tiles.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 #define BUILDING_ARRAY_SIZE_STEP 2000
 
 static struct {
     array(building) buildings;
-    building *first_of_type[BUILDING_TYPE_MAX];
-    building *last_of_type[BUILDING_TYPE_MAX];
+    // Brutus III (M8) : une liste par ville et par type ; building_first_of_type() donne celle de la
+    // ville active, donc chaque système ne voit que les bâtiments de sa ville (une seule ville : inchangé).
+    building *first_of_type[BRUTUS_VILLES_MAX][BUILDING_TYPE_MAX];
+    building *last_of_type[BRUTUS_VILLES_MAX][BUILDING_TYPE_MAX];
 } data;
+
+static int ville_de(const building *b)
+{
+    return b->brutus_proprietaire < BRUTUS_VILLES_MAX ? b->brutus_proprietaire : 0;
+}
 
 static struct {
     int created_sequence;
@@ -109,7 +117,7 @@ int building_count(void)
 
 int building_find(building_type type)
 {
-    for (building *b = data.first_of_type[type]; b; b = b->next_of_type) {
+    for (building *b = data.first_of_type[brutus_ville_active()][type]; b; b = b->next_of_type) {
         if (b->state == BUILDING_STATE_IN_USE) {
             return b->id;
         }
@@ -119,7 +127,7 @@ int building_find(building_type type)
 
 int building_find_with_mothballed(building_type type)
 {
-    for (building *b = data.first_of_type[type]; b; b = b->next_of_type) {
+    for (building *b = data.first_of_type[brutus_ville_active()][type]; b; b = b->next_of_type) {
         if (b->state == BUILDING_STATE_IN_USE || b->state == BUILDING_STATE_MOTHBALLED) {
             return b->id;
         }
@@ -129,7 +137,7 @@ int building_find_with_mothballed(building_type type)
 
 building *building_first_of_type(building_type type)
 {
-    return data.first_of_type[type];
+    return data.first_of_type[brutus_ville_active()][type];
 }
 
 building *building_main(const building *b)
@@ -151,28 +159,29 @@ building *building_next(building *b)
 
 static void fill_adjacent_types(building *b)
 {
-    building *first = data.first_of_type[b->type];
-    building *last = data.last_of_type[b->type];
+    int v = ville_de(b);
+    building *first = data.first_of_type[v][b->type];
+    building *last = data.last_of_type[v][b->type];
     if (!first || !last) {
         b->prev_of_type = 0;
         b->next_of_type = 0;
-        data.first_of_type[b->type] = b;
-        data.last_of_type[b->type] = b;
+        data.first_of_type[v][b->type] = b;
+        data.last_of_type[v][b->type] = b;
     } else if (b->id < first->id) {
         first->prev_of_type = b;
         b->next_of_type = first;
         b->prev_of_type = 0;
-        data.first_of_type[b->type] = b;
+        data.first_of_type[v][b->type] = b;
     } else if (b->id > last->id) {
         last->next_of_type = b;
         b->prev_of_type = last;
         b->next_of_type = 0;
-        data.last_of_type[b->type] = b;
+        data.last_of_type[v][b->type] = b;
     } else if (b != first && b != last) {
         int id = b->id - 1;
         while (id) {
             building *prev = building_get(id);
-            if (prev->state != BUILDING_STATE_UNUSED && prev->type == b->type) {
+            if (prev->state != BUILDING_STATE_UNUSED && prev->type == b->type && ville_de(prev) == v) {
                 b->prev_of_type = prev;
                 b->next_of_type = prev->next_of_type;
                 b->next_of_type->prev_of_type = b;
@@ -186,18 +195,19 @@ static void fill_adjacent_types(building *b)
 
 static void remove_adjacent_types(building *b)
 {
-    building *first = data.first_of_type[b->type];
-    building *last = data.last_of_type[b->type];
+    int v = ville_de(b);
+    building *first = data.first_of_type[v][b->type];
+    building *last = data.last_of_type[v][b->type];
     if (b == first && b == last) {
-        data.first_of_type[b->type] = 0;
-        data.last_of_type[b->type] = 0;
+        data.first_of_type[v][b->type] = 0;
+        data.last_of_type[v][b->type] = 0;
     } else if (b == first) {
-        data.first_of_type[b->type] = b->next_of_type;
+        data.first_of_type[v][b->type] = b->next_of_type;
         if (b->next_of_type) {
             b->next_of_type->prev_of_type = 0;
         }
     } else if (b == last) {
-        data.last_of_type[b->type] = b->prev_of_type;
+        data.last_of_type[v][b->type] = b->prev_of_type;
         if (b->prev_of_type) {
             b->prev_of_type->next_of_type = 0;
         }
@@ -231,6 +241,7 @@ building *building_create(building_type type, int x, int y)
 
     b->state = BUILDING_STATE_CREATED;
     b->faction_id = 1;
+    b->brutus_proprietaire = (unsigned char) brutus_versus_proprietaire_nouveau(); // Brutus III (M8)
     b->type = type;
     b->size = props->size;
     b->created_sequence = extra.created_sequence++;
@@ -321,6 +332,21 @@ building *building_create(building_type type, int x, int y)
     b->is_close_to_water = building_is_close_to_water(b);
 
     return b;
+}
+
+// Brutus III (M8) : après le chargement des propriétaires (bloc Versus), les listes par ville sont refaites.
+void building_brutus_reconstruire_listes(void)
+{
+    memset(data.first_of_type, 0, sizeof(data.first_of_type));
+    memset(data.last_of_type, 0, sizeof(data.last_of_type));
+    for (int i = 1; i < (int) data.buildings.size; i++) {
+        building *b = array_item(data.buildings, i);
+        b->prev_of_type = 0;
+        b->next_of_type = 0;
+        if (b->state != BUILDING_STATE_UNUSED) {
+            fill_adjacent_types(b);
+        }
+    }
 }
 
 void building_change_type(building *b, building_type type)

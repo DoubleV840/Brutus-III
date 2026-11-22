@@ -4,7 +4,9 @@
 // Fabrique un journal de commandes (format de docs/commandes.md) à partir de la carte texte
 // écrite par le moteur (`--info-carte`). Même graine + même carte = même journal.
 //
-//   node outils/bot-rejouage.mjs <carte.txt> <journal.txt> [--graine 42] [--ticks 150000]
+//   node outils/bot-rejouage.mjs <carte.txt> <journal.txt> [--graine 42] [--ticks 150000] [--joueur 0] [--eviter x,y]
+//   (M8, Versus : --joueur donne le numéro du joueur des commandes, --eviter écarte le centre de la ville
+//   d'au moins 30 cases de ce point, pour que deux bots bâtissent deux villes séparées)
 //
 // Le bot ne voit pas la partie : il tient une carte d'occupation approximative et choisit
 // des actions plausibles (routes, maisons, services, démolitions, impôts, main-d'œuvre,
@@ -25,6 +27,9 @@ const option = (nom, defaut) => {
 };
 const GRAINE = option('--graine', 42);
 const TICKS = option('--ticks', 150000);
+const JOUEUR = option('--joueur', 0);
+const iEviter = args.indexOf('--eviter');
+const EVITER = iEviter >= 0 && iEviter + 1 < args.length ? args[iEviter + 1].split(',').map(Number) : null;
 
 // --- Aléatoire reproductible (mulberry32) ---
 let etatAlea = GRAINE >>> 0;
@@ -93,7 +98,10 @@ let meilleur = -Infinity;
 for (let essai = 0; essai < 400; essai++) {
   const cx = entier(14, L - 15);
   const cy = entier(14, H - 15);
-  const score = compterLibres(cx, cy, 12) - 0.5 * Math.hypot(cx - ex, cy - ey);
+  let score = compterLibres(cx, cy, 12) - 0.5 * Math.hypot(cx - ex, cy - ey);
+  if (EVITER && Math.hypot(cx - EVITER[0], cy - EVITER[1]) < 30) {
+    score -= 1e6; // M8 : loin de l'autre ville
+  }
   if (score > meilleur) {
     meilleur = score;
     centre = [cx, cy];
@@ -136,7 +144,7 @@ const commandes = [];
 let orientation = 0;
 const compteur = {};
 function ajouter(t, nom, ...params) {
-  commandes.push({ t: TICK0 + t, ligne: `${TICK0 + t} 0 ${nom} ${params.join(' ')}`.trimEnd() });
+  commandes.push({ t: TICK0 + t, ligne: `${TICK0 + t} ${JOUEUR} ${nom} ${params.join(' ')}`.trimEnd() });
   compteur[nom] = (compteur[nom] || 0) + 1;
 }
 const construire = (t, type, x0, y0, x1 = x0, y1 = y0) =>

@@ -9,6 +9,7 @@
 #include "input/scroll.h"
 
 #include "SDL.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 static int is_alt_down(SDL_KeyboardEvent *event)
 {
@@ -335,6 +336,10 @@ void platform_handle_key_down(void *event)
                 break;
             case SDLK_x:
                 game_cheat_console();
+                break;
+            case SDLK_w: // Brutus III (M8) : Versus local (passer en Versus, puis changer de ville)
+                brutus_versus_touche();
+                break;
         }
     }
 }

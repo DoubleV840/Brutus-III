@@ -65,6 +65,17 @@
 #include "scenario/request.h"
 #include "sound/music.h"
 #include "widget/minimap.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
+
+// Brutus III (M8) : en Versus, ces appels se font une fois par ville, la ville active étant celle qui
+// travaille (city_data et listes de bâtiments par type). Une seule ville : un seul appel, comme avant.
+#define PAR_VILLE(appel) do { \
+        for (int ville_ = 0; ville_ < brutus_versus_villes(); ville_++) { \
+            brutus_ville_activer(ville_); \
+            appel; \
+        } \
+        brutus_ville_activer(0); \
+    } while (0)
 
 static void advance_year(void)
 {
@@ -74,31 +85,31 @@ static void advance_year(void)
     city_message_clear_old_messages();
 
     scenario_empire_process_expansion();
-    city_population_request_yearly_update();
-    city_finance_handle_year_change();
+    PAR_VILLE(city_population_request_yearly_update());
+    PAR_VILLE(city_finance_handle_year_change());
     empire_city_reset_yearly_trade_amounts();
     building_maintenance_update_fire_direction();
-    city_ratings_update(1, 0);
+    PAR_VILLE(city_ratings_update(1, 0));
 }
 
 static void advance_month(void)
 {
-    city_migration_reset_newcomers();
-    city_health_update();
+    PAR_VILLE(city_migration_reset_newcomers());
+    PAR_VILLE(city_health_update());
     scenario_random_event_process();
-    city_finance_handle_month_change();
-    city_resource_consume_food();
+    PAR_VILLE(city_finance_handle_month_change());
+    PAR_VILLE(city_resource_consume_food());
     scenario_distant_battle_process();
     scenario_invasion_process();
     scenario_request_process();
     scenario_demand_change_process();
     scenario_price_change_process();
-    city_victory_update_months_to_govern();
+    PAR_VILLE(city_victory_update_months_to_govern());
     formation_update_monthly_morale_at_rest();
     city_message_decrease_delays();
-    city_sentiment_decrement_blessing_boost();
-    building_industry_advance_stats();
-    building_industry_start_strikes();
+    PAR_VILLE(city_sentiment_decrement_blessing_boost());
+    PAR_VILLE(building_industry_advance_stats());
+    PAR_VILLE(building_industry_start_strikes());
     building_trim();
 
     building_connectable_update_connections();
@@ -113,13 +124,13 @@ static void advance_month(void)
     if (game_time_advance_month()) {
         advance_year();
     } else {
-        city_ratings_update(0, 1);
+        PAR_VILLE(city_ratings_update(0, 1));
     }
 
-    city_population_record_monthly();
-    city_festival_update();
-    city_games_decrement_month_counts();
-    city_gods_update_blessings();
+    PAR_VILLE(city_population_record_monthly());
+    PAR_VILLE(city_festival_update());
+    PAR_VILLE(city_games_decrement_month_counts());
+    PAR_VILLE(city_gods_update_blessings());
     tutorial_on_month_tick();
     if (setting_monthly_autosave()) {
         game_file_write_saved_game(dir_append_location("autosave.svx", PATH_LOCATION_SAVEGAME));
@@ -134,10 +145,10 @@ static void advance_day(void)
         advance_month();
     }
     if (game_time_day() == 0 || game_time_day() == 8) {
-        city_sentiment_update(1);
+        PAR_VILLE(city_sentiment_update(1));
     }
     if (game_time_day() == 0 || game_time_day() == 7) {
-        building_lighthouse_consume_timber();
+        PAR_VILLE(building_lighthouse_consume_timber());
     }
     tutorial_on_day_tick();
     if (config_get(CONFIG_GP_CH_YEARLY_AUTOSAVE) && game_time_month() == 11 && game_time_day() == 15) {
@@ -154,47 +165,47 @@ static void advance_tick(void)
     // 0, 10, 11, 13, 14, 15, 18, 26, 41
     // max is 49
     switch (game_time_tick()) {
-        case 1: city_gods_calculate_moods(1); break;
+        case 1: PAR_VILLE(city_gods_calculate_moods(1)); break;
         case 2: sound_music_update(0); break;
         case 3: widget_minimap_invalidate(); break;
-        case 4: city_emperor_update(); break;
+        case 4: PAR_VILLE(city_emperor_update()); break;
         case 5: formation_update_all(0); break;
         case 6: map_natives_check_land(1); break;
         case 7: map_road_network_update(); break;
-        case 8: building_granaries_calculate_stocks(); break;
-        case 9: city_buildings_update_plague(); break;
+        case 8: PAR_VILLE(building_granaries_calculate_stocks()); break;
+        case 9: PAR_VILLE(city_buildings_update_plague()); break;
         case 12: house_service_decay_houses_covered(); break;
-        case 16: city_resource_calculate_warehouse_stocks(); break;
-        case 17: city_resource_calculate_food_stocks_and_supply_wheat(); break;
+        case 16: PAR_VILLE(city_resource_calculate_warehouse_stocks()); break;
+        case 17: PAR_VILLE(city_resource_calculate_food_stocks_and_supply_wheat()); break;
         case 19: building_dock_update_open_water_access(); break;
-        case 20: building_industry_update_production(1); break;
+        case 20: PAR_VILLE(building_industry_update_production(1)); break;
         case 21: building_maintenance_check_rome_access(); break;
-        case 22: house_population_update_room(); break;
-        case 23: house_population_update_migration(); break;
-        case 24: house_population_evict_overcrowded(); break;
-        case 25: city_labor_update(); break;
+        case 22: PAR_VILLE(house_population_update_room()); break;
+        case 23: PAR_VILLE(house_population_update_migration()); break;
+        case 24: PAR_VILLE(house_population_evict_overcrowded()); break;
+        case 25: PAR_VILLE(city_labor_update()); break;
         case 27: map_water_supply_update_reservoir_fountain(); break;
         case 28: map_water_supply_update_buildings(); break;
         case 29: formation_update_all(1); break;
         case 30: widget_minimap_invalidate(); break;
         case 31: building_figure_generate(); break;
-        case 32: city_trade_update(); break;
-        case 33: building_entertainment_run_shows(); city_culture_update_coverage(); break;
-        case 34: building_government_distribute_treasury(); break;
-        case 35: house_service_decay_culture(); break;
-        case 36: house_service_calculate_culture_aggregates(); break;
+        case 32: PAR_VILLE(city_trade_update()); break;
+        case 33: PAR_VILLE((building_entertainment_run_shows(), city_culture_update_coverage())); break;
+        case 34: PAR_VILLE(building_government_distribute_treasury()); break;
+        case 35: PAR_VILLE(house_service_decay_culture()); break;
+        case 36: PAR_VILLE(house_service_calculate_culture_aggregates()); break;
         case 37: map_desirability_update(); break;
         case 38: building_update_desirability(); break;
-        case 39: building_house_process_evolve_and_consume_goods(); break;
+        case 39: PAR_VILLE(building_house_process_evolve_and_consume_goods()); break;
         case 40: building_update_state(); break;
-        case 42: city_finance_spawn_tourist(); break;
+        case 42: PAR_VILLE(city_finance_spawn_tourist()); break;
         case 43: building_maintenance_update_burning_ruins(); break;
         case 44: building_maintenance_check_fire_collapse(); break;
-        case 45: figure_generate_criminals(); break;
-        case 46: building_industry_update_production(0); break;
-        case 47: city_games_decrement_duration(); break;
-        case 48: house_service_decay_tax_collector(); break;
-        case 49: city_culture_calculate(); break;
+        case 45: PAR_VILLE(figure_generate_criminals()); break;
+        case 46: PAR_VILLE(building_industry_update_production(0)); break;
+        case 47: PAR_VILLE(city_games_decrement_duration()); break;
+        case 48: PAR_VILLE(house_service_decay_tax_collector()); break;
+        case 49: PAR_VILLE(city_culture_calculate()); break;
     }
     if (game_time_advance_tick()) {
         advance_day();

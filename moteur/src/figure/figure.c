@@ -18,6 +18,7 @@
 #include "map/grid.h"
 #include "figure.h"
 #include "multijoueur/empreinte.h" // Brutus III
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 #define FIGURE_ARRAY_SIZE_STEP 1000
 
@@ -49,6 +50,7 @@ figure *figure_create(figure_type type, int x, int y, direction_type dir)
 
     f->state = FIGURE_STATE_ALIVE;
     f->faction_id = 1;
+    f->brutus_proprietaire = (unsigned char) brutus_versus_proprietaire_nouveau(); // Brutus III (M8)
     f->type = type;
     f->use_cross_country = 0;
     f->is_friendly = 1;

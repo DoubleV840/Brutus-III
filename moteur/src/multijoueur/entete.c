@@ -96,33 +96,37 @@ void brutus_entete_ecrire_fichier(FILE *fp)
     fwrite(texte, 1, taille, fp);
 }
 
-static void lire_depuis(const uint8_t *octets, size_t disponibles)
+// Retourne le nombre d'octets de l'en-tête (0 s'il n'y en a pas) : le bloc Versus (M8) le suit.
+static size_t lire_depuis(const uint8_t *octets, size_t disponibles)
 {
     etat.lu = 0;
     if (disponibles < sizeof(MARQUE) + 4 || memcmp(octets, MARQUE, sizeof(MARQUE)) != 0) {
-        return;
+        return 0;
     }
     const uint8_t *t = octets + sizeof(MARQUE);
     uint32_t taille = t[0] | (t[1] << 8) | (t[2] << 16) | ((uint32_t) t[3] << 24);
     if (taille >= TEXTE_MAX || sizeof(MARQUE) + 4 + taille > disponibles) {
-        return;
+        return 0;
     }
     memcpy(etat.texte_lu, t + 4, taille);
     etat.texte_lu[taille] = 0;
     etat.lu = 1;
+    return sizeof(MARQUE) + 4 + taille;
 }
 
 void brutus_entete_lire_fichier(FILE *fp)
 {
     uint8_t tampon[sizeof(MARQUE) + 4 + TEXTE_MAX];
+    long position = ftell(fp);
     size_t n = fread(tampon, 1, sizeof(tampon), fp);
-    lire_depuis(tampon, n);
+    size_t lus = lire_depuis(tampon, n);
+    fseek(fp, position + (long) lus, SEEK_SET); // juste après l'en-tête (M8 : le bloc Versus suit)
 }
 
 void brutus_entete_lire_tampon(buffer *buf)
 {
     size_t reste = buf->size > buf->index ? buf->size - buf->index : 0;
-    lire_depuis(buf->data + buf->index, reste);
+    buf->index += lire_depuis(buf->data + buf->index, reste); // M8 : le bloc Versus suit
 }
 
 static void garder_locaux(void)

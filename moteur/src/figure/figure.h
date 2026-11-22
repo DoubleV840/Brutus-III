@@ -26,6 +26,7 @@ typedef struct {
     unsigned char is_friendly;
     unsigned char state;
     unsigned char faction_id; // 2 = roamer preview, 1 = city, 0 = enemy
+    unsigned char brutus_proprietaire; // Brutus III (M8) : ville propriétaire (Versus), sauvée à part (versus.c)
     unsigned char action_state_before_attack;
     signed char direction;
     signed char previous_tile_direction;

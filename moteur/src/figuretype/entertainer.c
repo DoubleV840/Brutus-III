@@ -17,6 +17,7 @@
 #include "map/road_access.h"
 #include "map/road_network.h"
 #include "scenario/gladiator_revolt.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 #define INFINITE 10000
 
@@ -41,7 +42,7 @@ static int determine_tourist_destination(int x, int y)
 
     for (int i = 1; i < building_count(); i++) {
         building *b = building_get(i);
-        if (b->state != BUILDING_STATE_IN_USE) {
+        if (b->state != BUILDING_STATE_IN_USE || brutus_versus_ignorer(b->brutus_proprietaire)) { // M8
             continue;
         }
         if (city_festival_games_active()) {

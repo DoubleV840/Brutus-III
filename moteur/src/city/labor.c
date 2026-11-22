@@ -13,6 +13,7 @@
 #include "game/time.h"
 #include "scenario/data.h"
 #include "scenario/property.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 #define PLEB_PERCENTAGE 45
 
@@ -282,7 +283,7 @@ static void calculate_workers_needed_per_category(void)
     }
     for (int i = 1; i < building_count(); i++) {
         building *b = building_get(i);
-        if (b->state != BUILDING_STATE_IN_USE) {
+        if (b->state != BUILDING_STATE_IN_USE || brutus_versus_ignorer(b->brutus_proprietaire)) { // M8
             continue;
         }
         int category = CATEGORY_FOR_BUILDING_TYPE[b->type];

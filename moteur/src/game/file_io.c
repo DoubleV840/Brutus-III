@@ -53,6 +53,7 @@
 #include "multijoueur/simulation.h" // Brutus III
 #include "multijoueur/entete.h" // Brutus III
 #include "multijoueur/empreinte.h" // Brutus III
+#include "multijoueur/versus.h" // Brutus III (M8)
 #include "scenario/allowed_building.h"
 #include "scenario/criteria.h"
 #include "scenario/custom_media.h"
@@ -1265,6 +1266,7 @@ uint64_t game_file_io_brutus_empreinte_detail(FILE *detail, FILE *brut)
     }
     // Brutus III : réglages de la partie (en-tête) : des réglages différents = autre partie
     h = brutus_entete_empreinte(h);
+    h = brutus_versus_empreinte(h); // Brutus III (M8) : inchangée avec une seule ville
     if (detail) {
         fprintf(detail, "entete %016llx\n", (unsigned long long) brutus_entete_empreinte(BRUTUS_FNV_DEPART));
     }
@@ -1820,6 +1822,7 @@ int game_file_io_read_save_game_from_buffer(buffer *buf)
         result = savegame_read_from_buffer(buf, save_version);
         if (result) {
             brutus_entete_lire_tampon(buf); // Brutus III : en-tête de partie (s'il y en a un)
+            brutus_versus_lire_tampon(buf); // Brutus III (M8) : villes en plus (Versus)
         }
     }
     if (!result) {
@@ -1828,6 +1831,7 @@ int game_file_io_read_save_game_from_buffer(buffer *buf)
     }
     brutus_entete_appliquer_lu(); // Brutus III : réglages de la partie avant de lire l'état
     savegame_load_from_state(&savegame_data.state, save_version);
+    brutus_versus_appliquer_lu(); // Brutus III (M8) : propriétaires et villes en plus, ou une seule ville
     clear_savegame_pieces();
     return FILE_LOAD_SUCCESS;
 }
@@ -1858,6 +1862,7 @@ int game_file_io_read_saved_game(const char *filename, int offset)
         result = savegame_read_from_file(fp, save_version);
         if (result) {
             brutus_entete_lire_fichier(fp); // Brutus III : en-tête de partie (s'il y en a un)
+            brutus_versus_lire_fichier(fp); // Brutus III (M8) : villes en plus (Versus)
         }
     }
     file_close(fp);
@@ -1867,6 +1872,7 @@ int game_file_io_read_saved_game(const char *filename, int offset)
     }
     brutus_entete_appliquer_lu(); // Brutus III : réglages de la partie avant de lire l'état
     savegame_load_from_state(&savegame_data.state, save_version);
+    brutus_versus_appliquer_lu(); // Brutus III (M8) : propriétaires et villes en plus, ou une seule ville
     clear_savegame_pieces();
     return 1;
 }
@@ -2087,6 +2093,7 @@ int game_file_io_write_saved_game(const char *filename)
     core_memory_block_init(&compress_buffer, COMPRESS_BUFFER_INITIAL_SIZE);
     savegame_write_to_file(fp, &compress_buffer);
     brutus_entete_ecrire_fichier(fp); // Brutus III : réglages de la partie, après les morceaux
+    brutus_versus_ecrire_fichier(fp); // Brutus III (M8) : villes en plus (Versus), après l'en-tête
     core_memory_block_free(&compress_buffer);
     clear_savegame_pieces();
     file_close(fp);

@@ -59,7 +59,7 @@ Méthode, audit et résultats : `docs/determinisme.md`. Les sorties vont dans `b
 
 ## Multijoueur : relais local (serveur-multi/)
 
-Le relais est un Cloudflare Worker + un Durable Object par salon. Il ne fait que transmettre les messages des joueurs, sans logique de jeu. Protocole : `docs/protocole.md`. Il est branché dans la version web (mission M6b : client `web/lockstep.js`, panneau « Jouer à deux »), mais pas encore déployé (M13) : tout tourne en local, sans compte Cloudflare.
+Le relais est un Cloudflare Worker + un Durable Object par salon. Il ne fait que transmettre les messages des joueurs, sans logique de jeu. Protocole : `docs/protocole.md`. Il est branché dans la version web (client `web/lockstep.js`, menu « Multijoueur » du jeu), mais pas encore déployé (M13) : tout tourne en local, sans compte Cloudflare.
 
 ```bash
 cd serveur-multi
@@ -72,7 +72,7 @@ npm run demo -- ws://127.0.0.1:8787   # la démo contre le relais lancé par npm
 
 `npm test` et `npm run demo` démarrent eux-mêmes un relais local sur un port libre de 127.0.0.1, puis l'arrêtent. S'il est impossible d'ouvrir un port local (bac à sable), ils s'arrêtent au bout de 30 s avec un message : seul `npm run test:sans-port` (réassemblage des sauvegardes) tourne alors. Le job CI `relais` lance `npm test`, mais le déploiement du site ne dépend pas de lui.
 
-## Jouer à deux en local
+## Multijoueur en local
 
 Trois terminaux (le relais, la page, puis le navigateur) :
 
@@ -82,17 +82,20 @@ cd serveur-multi && npm ci && npm run dev                 # terminal 1 : le rela
 cd build-web && python3 -m http.server 8000               # terminal 2 : la page
 ```
 
-Puis, dans **deux fenêtres de Chrome placées côte à côte** (un onglet masqué est ralenti par le navigateur, l'autre joueur l'attend) : ouvrir `http://localhost:8000/augustus.html` dans chacune, choisir le dossier du jeu dans chacune. L'hôte lance ou charge une partie (la ville doit être à l'écran) ; l'invité peut rester au menu principal : il reçoit la partie de l'hôte (cas à confirmer à la main).
+Puis, dans **deux fenêtres de Chrome placées côte à côte** (un onglet masqué est ralenti par le navigateur, l'autre joueur l'attend) : ouvrir `http://localhost:8000/augustus.html` dans chacune, choisir le dossier du jeu dans chacune.
 
-1. Fenêtre 1 (hôte), la ville à l'écran : bouton **« Jouer à deux »** en bas à gauche → **« Créer une partie »** : un code de 6 caractères s'affiche.
-2. Fenêtre 2 : **« Jouer à deux »** → saisir le code → **« Rejoindre »**. L'hôte envoie sa partie, les deux la rechargent (« resynchronisation… »), puis le jeu reprend pour les deux.
+Tout se fait dans le jeu, par le menu **« Multijoueur »** : un bouton au menu principal (sous « Nouvelle campagne »), et la première ligne du menu **Fichier** en partie.
+
+1. Fenêtre 1 (hôte) : **Multijoueur** → **« Nouvelle partie »** (choix de la carte) ou **« Charger une sauvegarde »** ; la partie à deux est créée dès que la ville est à l'écran, et la fenêtre montre le code de 6 caractères. Depuis une ville déjà ouverte : **Fichier → Multijoueur → « Créer avec cette ville »**.
+2. Fenêtre 2 : **Multijoueur** → saisir le code (minuscules acceptées) → **« Rejoindre »**, en restant au menu principal. L'hôte envoie sa partie, les deux la chargent (« resynchronisation… »), puis le jeu reprend pour les deux.
 3. Vitesse et pause sont partagées. Si l'autre joueur se déconnecte, le jeu se met en pause (« en attente de … ») et reprend à son retour. L'hôte peut recharger sa page : la partie est récupérée auprès de l'invité.
 4. « Quitter la partie à deux » revient au solo.
-5. Mode Coop : vous gérez **la même ville**, avec les mêmes pouvoirs ; chacun a sa caméra et ses fenêtres, et les événements (César, invasions, fêtes, catastrophes) s'affichent chez les deux. Sur la mini-carte, un **cadre de couleur** montre la vue de l'autre joueur, et la case sous sa souris est colorée dans la ville. **Touche G** : signaler l'endroit sous la souris (il clignote chez les deux ; « Voir » dans le chat y amène). Le panneau a un **chat** et affiche la latence de chaque joueur. Si deux ordres incompatibles tombent dans le même tour (par exemple deux bâtiments sur la même case), celui de l'hôte passe et l'autre joueur voit « L'autre joueur a agi au même moment : ton ordre n'a pas abouti. »
+5. Mode Coop : vous gérez **la même ville**, avec les mêmes pouvoirs ; chacun a sa caméra et ses fenêtres, et les événements (César, invasions, fêtes, catastrophes) s'affichent chez les deux. Sur la mini-carte, un **cadre de couleur** montre la vue de l'autre joueur, et la case sous sa souris est colorée dans la ville. **Touche G** : signaler l'endroit sous la souris (il clignote chez les deux ; « Voir » dans le chat y amène). La fenêtre **Multijoueur** (Fichier → Multijoueur) a un **chat** (un message reçu s'affiche aussi en haut de la ville), la latence de chaque joueur, et pour l'hôte un bouton **« Retirer »**. Si deux ordres incompatibles tombent dans le même tour (par exemple deux bâtiments sur la même case), celui de l'hôte passe et l'autre joueur voit « L'autre joueur a agi au même moment : ton ordre n'a pas abouti. »
 6. Sauvegarder fonctionne chez les deux joueurs. Pour **reprendre une partie à deux**, l'hôte charge la sauvegarde (avant de créer la partie, ou après tant que l'autre n'est pas arrivé), puis l'autre rejoint.
-7. En partie à deux, **« Charger », « Recommencer » et « Quitter la mission » sont désactivés** (ils changeraient la ville d'un seul joueur : divergence). Si tu quittes quand même la ville par le menu principal, la partie à deux se met en attente : le bouton **« Revenir dans la partie »** te ramène dans la partie en cours (l'hôte la récupère auprès de l'invité). Si l'hôte reste bloqué plus de 60 s à récupérer sa partie, il est ramené en solo avec un message.
+7. En partie à deux, **« Charger », « Recommencer » et « Quitter la mission » sont désactivés** (ils changeraient la ville d'un seul joueur : divergence). Si tu quittes quand même la ville par le menu principal, la partie à deux se met en attente et la fenêtre Multijoueur s'ouvre : le bouton **« Revenir dans la partie »** te ramène dans la partie en cours (l'hôte la récupère auprès de l'invité). Si l'hôte reste bloqué plus de 60 s à récupérer sa partie, il est ramené en solo avec un message.
 
-Le panneau n'apparaît que si la page est servie depuis `localhost` ou `127.0.0.1` (le site public reste inchangé jusqu'à la mise en ligne du relais, M13). Si quelque chose cloche, noter le message affiché dans le panneau et la console du navigateur.
+Le multijoueur ne fonctionne que si la page est servie depuis `localhost` ou `127.0.0.1` (relais en local jusqu'à sa mise en ligne, M13) ; ailleurs, et dans la version native, la fenêtre Multijoueur explique où jouer. Si quelque chose cloche, noter le message affiché dans la fenêtre et la console du navigateur.
+
 
 Tests du client réseau, sans navigateur :
 
@@ -103,7 +106,11 @@ bash outils/test-reseau-30min.sh           # même scénario avec le VRAI relais
 BRUTUS_VITESSE=200 bash outils/test-reseau-30min.sh 225000 Lugdunum --production   # constantes de production (ping 20 s, coupure 45 s…), 20 min réelles ou plus
 ```
 
-Le premier lance une compilation wasm pour Node (`build-reseau-wasm/`, quelques minutes la première fois). Le dernier ouvre un port local : à lancer dans ton terminal, pas dans un bac à sable. `--production` garde les délais réels du client (une empreinte tous les 50 groupes, ping 20 s, coupure 45 s) ; rapport dans `build-reseau/rapport-relais-production.txt`. **Code de sortie 3 = test non exécuté** (jeu absent) : ce n'est pas un succès. Un test réussi affiche « RÉSULTAT OK » et sort avec 0. Le scénario (coupures, resynchronisations, panne injectée, rechargement de l'hôte) est décrit dans `docs/determinisme.md`.
+Le premier lance une compilation wasm pour Node (`build-reseau-wasm/`, quelques minutes la première fois). Le dernier ouvre un port local : à lancer dans ton terminal, pas dans un bac à sable. `--production` garde les délais réels du client (une empreinte tous les 50 groupes, ping 20 s, coupure 45 s) ; rapport dans `build-reseau/rapport-relais-production.txt`. **Code de sortie 3 = test non exécuté** (jeu absent) : ce n'est pas un succès. Un test réussi affiche « RÉSULTAT OK » et sort avec 0. Le scénario (coupures, resynchronisations, panne injectée, rechargement de l'hôte) est décrit dans `docs/determinisme.md`. Depuis le 22/11, il couvre aussi la route de Rome coupée par des murs, une forte latence (300 à 700 ms entre joueurs), une arrivée pendant une resynchronisation et la même partie ouverte dans deux onglets (ces trois derniers avec le relais en mémoire seulement).
+
+## Versus local (M8, en cours)
+
+Deux villes sur la même carte, sur un seul écran : en ville, **Alt+W** fait passer la partie en Versus, puis chaque **Alt+W** fait jouer l'autre ville (trésor, population, bâtiments à elle). Principe, limites et ce qui reste : `docs/versus.md`. Test automatique : `bash outils/test-versus.sh` (deux bots, déterminisme, sauvegarde et rechargement).
 
 ## Publication
 
