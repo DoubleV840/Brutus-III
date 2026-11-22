@@ -219,9 +219,9 @@ L'API WebSocket Hibernation est utilisée (`ctx.acceptWebSocket`) : le salon peu
 
 Non testé en local : le réveil après une vraie hibernation (le runtime local ne décharge pas l'objet à la demande). À vérifier en ligne en M13.
 
-## Ce qui reste au client (M6b)
+## Ce qui reste au client (M6b) : cahier des charges, réalisé
 
-Le relais ne fait que transporter. Le lockstep est entièrement côté client :
+Le relais ne fait que transporter. Le lockstep est entièrement côté client. Ce cahier des charges (écrit en M5) a été réalisé en M6b ; ce qui a été fait, avec les écarts, est décrit dans la section suivante (« Client réseau : ce qui est fait »).
 
 1. **Délai d'entrée** : une action faite au tick T est envoyée pour le tick T + D, avec D ≈ 100 à 200 ms de jeu (5 à 10 ticks à vitesse normale ; à adapter à la vitesse et à la latence mesurée). Chaque client envoie **un `TOUR` par tick**, vide s'il n'a rien fait (ou, pour moins de messages, un `TOUR` par groupe de ticks ; à décider en M6b, le serveur ne change pas).
 2. **Joueurs attendus et avancée des ticks** : l'ensemble des joueurs attendus est fixé **par la sauvegarde chargée** : ce sont les places attribuées (champ `joueurs` du dernier message de session reçu) au moment où l'hôte envoie la `SAUVEGARDE` de départ ou de resynchronisation. L'hôte l'écrit dans l'en-tête de partie (`multijoueur/entete.c`), pour que tous aient la même liste. Le tick N n'est joué que lorsque le `TOUR` N de chaque joueur attendu est arrivé (le sien compris, reçu en écho avec `dest = 0xFF`). Les commandes reçues sont mises en file par `brutus_commande_ajouter()` (joueur et tick de l'en-tête), puis le tick est autorisé par `brutus_ticks_externes_ajouter(1)`. L'ordre d'application (tick, joueur, arrivée) est fait par le moteur, identique chez tous. Une arrivée, un retour ou une expulsion change l'ensemble seulement à la resynchronisation suivante.
@@ -234,3 +234,42 @@ Le relais ne fait que transporter. Le lockstep est entièrement côté client :
 9. **Coupure silencieuse** : le serveur ne la voit pas toujours (le `pong` est servi sans réveiller le salon, et un réseau coupé sans fermeture TCP ne produit pas de `joueur-parti` tout de suite). Chaque client envoie donc `ping` toutes les 15 à 30 s, et :
    - sans `pong` depuis ~45 s, il considère sa connexion morte, la ferme et se reconnecte avec son jeton ;
    - s'il attend le `TOUR` d'un joueur depuis plus de ~10 s, il affiche « en attente de … » comme pour `joueur-parti`. Quand ce joueur se reconnecte, sa nouvelle connexion remplace la morte et les autres reçoivent `joueur-revenu`.
+
+## Client réseau : ce qui est fait (M6b)
+
+Code : `web/lockstep.js` (script classique, sans DOM, inséré dans la page par `moteur/CMakeLists.txt` et chargé sous Node par les tests), côté moteur `moteur/src/multijoueur/reseau.c` (pont par un tampon statique de 64 Ko ; l'échange passe par les fonctions `brutus_reseau_*`), interface dans `web/shell.html.in`. Le serveur (`serveur-multi/`) n'a pas changé.
+
+### Choix : un `TOUR` par groupe de 5 ticks
+
+- 5 divise 50, le nombre de ticks d'un jour de jeu : un groupe ne chevauche jamais un changement de jour.
+- 5 ticks = 80 ms à 100 %, 40 ms à 200 %, 10 ms à 500 % : le délai d'entrée de 2 groupes (D = 2) donne 160 ms à 100 % (dans la fourchette de 100 à 200 ms), moins à vitesse élevée.
+- Cinq fois moins de messages qu'un `TOUR` par tick (le test de 30 minutes : environ 90 000 `TOUR` pour 225 000 ticks et 2 joueurs, contre 450 000), donc moins de travail pour le relais et pour le quota du Durable Object. Le coût : une commande attend en moyenne un demi-groupe de plus avant d'être jouée (au plus 40 ms à 100 %).
+- Les groupes sont alignés sur T0, le tick juste après le chargement de la sauvegarde. Le `tick` de l'en-tête d'un `TOUR` est le premier tick du groupe. Les groupes 0 à D-1 sont vides par construction et ne sont pas envoyés. Un `TOUR` k ne part que si k < prochain groupe + D, et un `TOUR` reçu avec k ≥ prochain + 2D + 1 est ignoré.
+- Format du `TOUR` : celui proposé plus haut (type, nombre de paramètres, paramètres `int32`), plusieurs commandes à la suite. Le moteur reçoit les commandes avec le tick du `TOUR` et les applique avant le premier tick du groupe de la même façon que pour tous.
+
+### Point par point
+
+1. **Délai d'entrée** : D = 2 groupes. Une action est mise dans la boîte de sortie du moteur (`brutus_reseau_sortie`) et part dans le prochain `TOUR` envoyé, joué deux groupes plus tard.
+2. **Avancée des ticks** : le moteur n'avance pas seul en multijoueur ; JS appelle `brutus_reseau_avancer` pour un groupe seulement quand les `TOUR` de tous les joueurs attendus sont arrivés (le sien reçu en écho). Les ticks sont joués au rythme de la vitesse partagée.
+3. **Vitesse et pause** : message `VITESSE`, 3 octets : pourcentage (u16) puis pause (u8), valeur **absolue**. Tick d'effet : début du groupe en cours d'envoi (ou du groupe attendu si on est déjà en pause). Les changements du même groupe sont appliqués triés par (tick, joueur, rang d'arrivée). La pause n'étant pas sauvegardée, elle est réappliquée après chaque avance et chaque chargement. Vitesses : 10 à 100 % par pas de 10, puis 200, 300 et 500 %.
+4. **Pause sur déconnexion** : « en attente de … » dès `joueur-parti` ou après 10 s sans `TOUR` d'un joueur ; plus aucun groupe n'avance. Au `joueur-revenu` (avec ou sans `joueur-parti` avant : testé), l'hôte resynchronise.
+5. **Arrivée et resynchronisation** : l'hôte écrit sa sauvegarde, l'envoie en morceaux de 60 000 octets (règles de réception de `Reception`, reprises en JS) et tout le monde recharge par `brutus_resynchroniser`, hôte compris. L'hôte qui recharge sa page : `SAUVEGARDE_DEMANDE` au plus petit invité connecté, toutes les 5 s au plus, jusqu'à réception ; testé.
+6. **Empreinte** : `EMPREINTE` (tick, 8 octets de FNV-1a 64 bits, `dest` 0xFF) tous les 50 groupes (250 ticks) par défaut. Seul l'hôte compare ; s'il voit une différence, il resynchronise tout le monde (message « resynchronisation… » pendant au moins 2 s). Un invité peut aussi forcer la resynchronisation.
+7. **Fermetures par le serveur** : le client agit sur `erreur` sans attendre `close`. Pas de reconnexion après `remplace` ni `expulse` ; `message-trop-gros` ferme puis reconnecte.
+8. **Reconnexion** : code et jeton dans `sessionStorage` dès la `bienvenue` ; essais à 1, 2, 4 puis 8 s. Bouton « Retirer » pour l'hôte.
+9. **Coupure silencieuse** : `ping` texte toutes les 20 s ; connexion jugée morte après 45 s sans rien recevoir ; « en attente » après 10 s sans `TOUR`.
+
+### Écarts avec le cahier des charges
+
+- **Liste des joueurs attendus** : elle n'est pas dans `multijoueur/entete.c` mais dans un préfixe de la `SAUVEGARDE` ajouté par le client JS : « BR3S », version, époque, nombre de joueurs, leurs numéros, vitesse (u16), pause (u8), puis les octets de la sauvegarde du moteur. Le moteur n'a pas besoin de connaître le réseau ; `entete.c` n'est pas modifié.
+- **Époque** : l'octet 3 de l'en-tête (réservé) porte l'époque de la partie. L'hôte l'incrémente à chaque sauvegarde envoyée (cycle 1 à 255). Les messages d'une autre époque sont ignorés : un `TOUR` tardif d'avant la resynchronisation ne peut pas fausser la partie rechargée.
+- **Vitesse absolue** et non relative : deux joueurs qui changent la vitesse en même temps n'obtiennent pas la somme des deux demandes mais la dernière dans l'ordre (tick, joueur, arrivée), identique chez tous.
+
+### Test et limites
+
+- Test sans port : `bash outils/test-reseau-memoire.sh` (deux moteurs wasm, relais en mémoire qui reprend les règles du serveur). Résultat et scénario : `docs/determinisme.md`, « Test réseau (M6b) ».
+- Test avec le vrai relais : `bash outils/test-reseau-30min.sh` (`wrangler dev` local, deux clients Node, même scénario). **À lancer par le fondateur** : le bac à sable des agents ne peut pas ouvrir de port.
+- **La page (« Jouer à deux ») n'a pas été essayée dans un navigateur** : seul son code JS est partagé avec les tests. À vérifier à la main (voir README).
+- Onglet en arrière-plan : les navigateurs ralentissent fortement les minuteurs d'un onglet masqué ; le jeu de cet onglet prend du retard et les autres l'attendent (« en attente de … »). Garder les deux onglets visibles, dans deux fenêtres côte à côte.
+- Ordre des `VITESSE` : appliqués par (tick, joueur, arrivée) ; l'arrivée est l'ordre du relais, le même pour tous les clients (une seule connexion par joueur).
+- Le test n'exerce que les commandes du bot et une partie des messages du serveur ; pas de latence réelle de plusieurs centaines de ms, pas de perte de paquets au sens TCP.

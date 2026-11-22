@@ -36,7 +36,8 @@ enum {
     MODE_AUCUN = 0,
     MODE_REJOUER,
     MODE_CREER_SAUVEGARDE,
-    MODE_INFO_CARTE
+    MODE_INFO_CARTE,
+    MODE_RESEAU
 };
 
 static struct {
@@ -132,6 +133,10 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
             options.mode = MODE_CREER_SAUVEGARDE;
             options.carte = argv[++i];
             options.sortie = argv[++i];
+        } else if (strcmp(a, "--reseau") == 0 && i + 1 < argc) {
+            // M6b : test du client réseau sous Node (voir brutus_rejouage_garder_actif)
+            options.mode = MODE_RESEAU;
+            options.sauvegarde = argv[++i];
         } else if (strcmp(a, "--info-carte") == 0 && i + 2 < argc) {
             options.mode = MODE_INFO_CARTE;
             options.sauvegarde = argv[++i];
@@ -538,9 +543,29 @@ static int info_carte(void)
     return 0;
 }
 
+// M6b : charge la sauvegarde de départ puis rend la main sans quitter : JavaScript (le client
+// réseau de web/lockstep.js) pilote ensuite le moteur par les fonctions de multijoueur/reseau.h.
+static int mode_reseau(void)
+{
+    imposer_reglages();
+    if (!charger_sauvegarde(options.sauvegarde)) {
+        return 4;
+    }
+    window_city_show();
+    printf("Brutus III : moteur prêt pour le client réseau (tick %u)\n", (unsigned int) brutus_tick_absolu());
+    return 0;
+}
+
+int brutus_rejouage_garder_actif(void)
+{
+    return options.mode == MODE_RESEAU;
+}
+
 int brutus_rejouage_executer(void)
 {
     switch (options.mode) {
+        case MODE_RESEAU:
+            return mode_reseau();
         case MODE_REJOUER:
             return rejouer();
         case MODE_CREER_SAUVEGARDE:

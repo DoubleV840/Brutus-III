@@ -715,6 +715,9 @@ int main(int argc, char **argv)
     // Brutus III : mode rejouage sans affichage, sans boucle principale ni horloge réelle
     if (brutus_rejouage_demande()) {
         int code = brutus_rejouage_executer();
+        if (code == 0 && brutus_rejouage_garder_actif()) {
+            return 0; // M6b : le moteur reste en vie, piloté par JavaScript (EXIT_RUNTIME=0)
+        }
         SDL_Quit();
         exit(code);
     }
