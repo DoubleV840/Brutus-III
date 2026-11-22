@@ -110,6 +110,16 @@ Scénario déclenché par la progression : coupure propre de l'invité, coupure 
 
 Résultat, 225 000 ticks (30 minutes de jeu à 200 %), carte Lugdunum : 4 495 empreintes comparables (une tous les 50 ticks) **identiques**, zéro divergence réelle, comparaison finale directe identique, panne détectée une fois, scénario complet. **Aucune variable statique oubliée ni source de non-déterminisme nouvelle n'est apparue** : aucune modification du moteur n'a été nécessaire pour la synchronisation. Les chargements du test sont ceux de `brutus_resynchroniser` (tout le monde recharge, hôte compris).
 
+**Relancé le 22/11/2026 après les corrections QA** (Mac du fondateur) :
+
+| Passe | Ticks | Durée réelle | Empreintes comparables | Divergences réelles | Comparaison finale |
+|---|---|---|---|---|---|
+| sans port, accélérée (`test-reseau-memoire.sh`) | 279 495 | 60 s | 5 583 | 0 | identique |
+| sans port, constantes de production (`… 20000 Lugdunum --production`) | 20 275 | 280 s | 75 | 0 | identique |
+| **vrai relais `wrangler dev`** (`test-reseau-30min.sh`) | 225 260 | 2 239 s | 4 498 | 0 | identique |
+
+Dans les trois passes : panne injectée détectée une fois et réparée dans une nouvelle époque, tous les événements du scénario et tous les cas complémentaires cochés.
+
 Limites : le test n'exerce que les commandes du bot (joueur 0 de chaque client) sur Lugdunum ; une panne volontaire ne prouve pas l'absence d'état caché, seulement que la détection fonctionne. Avec `BRUTUS_RELAIS`, le même scénario passe par un vrai relais (`outils/test-reseau-30min.sh`) : voir `docs/protocole.md` pour son état.
 
 ## Divergences trouvées à la relecture QA (M6b) : causes corrigées
