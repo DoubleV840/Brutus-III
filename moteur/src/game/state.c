@@ -1,4 +1,5 @@
 #include "state.h"
+#include "multijoueur/reseau.h" // Brutus III
 
 #include "city/victory.h"
 #include "city/view.h"
@@ -45,6 +46,11 @@ void game_state_unpause(void)
 
 void game_state_toggle_paused(void)
 {
+    // Brutus III (M6b) : en réseau, la pause est partagée : on enregistre une demande, le client la diffuse.
+    if (brutus_reseau_actif()) {
+        brutus_reseau_demander_pause();
+        return;
+    }
     data.paused = data.paused ? 0 : 1;
 }
 

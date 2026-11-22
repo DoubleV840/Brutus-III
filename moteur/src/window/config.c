@@ -11,6 +11,7 @@
 #include "game/settings.h"
 #include "game/system.h"
 #include "game/speed.h"
+#include "multijoueur/reseau.h" // Brutus III
 #include "graphics/button.h"
 #include "graphics/color.h"
 #include "graphics/generic_button.h"
@@ -698,6 +699,9 @@ static int config_change_game_speed(int key)
 {
     config_change_basic(key);
     int target_speed = game_speed_get_speed(data.config_values[key].new_value);
+    if (brutus_reseau_actif()) { // Brutus III (M6b) : vitesse partagée en partie à deux
+        return 1;
+    }
     setting_set_game_speed(target_speed);
     return 1;
 }

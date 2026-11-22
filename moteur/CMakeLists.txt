@@ -210,6 +210,15 @@ configure_file(${PROJECT_SOURCE_DIR}/gen/version.txt.in ${PROJECT_SOURCE_DIR}/re
 if(${TARGET_PLATFORM} STREQUAL "emscripten")
     # Brutus III : page web remplaçable (outils/build-web.sh passe web/shell.html.in)
     set(BRUTUS_SHELL_IN "${PROJECT_SOURCE_DIR}/gen/shell.html.in" CACHE FILEPATH "Brutus III : modèle de la page web")
+    # M6b : le client réseau (web/lockstep.js, sans DOM, testé sous Node) est inséré dans la page à la
+    # place du marqueur de style arobase BRUTUS_LOCKSTEP_JS arobase. Le contenu substitué n'est pas
+    # ré-analysé par configure_file ; il ne doit pas contenir de dollar+accolade ni de marqueur arobase.
+    get_filename_component(BRUTUS_SHELL_DIR "${BRUTUS_SHELL_IN}" DIRECTORY)
+    set(BRUTUS_LOCKSTEP_JS "")
+    if(EXISTS "${BRUTUS_SHELL_DIR}/lockstep.js")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${BRUTUS_SHELL_DIR}/lockstep.js")
+        file(READ "${BRUTUS_SHELL_DIR}/lockstep.js" BRUTUS_LOCKSTEP_JS)
+    endif()
     configure_file(${BRUTUS_SHELL_IN} ${PROJECT_SOURCE_DIR}/res/shell.html)
 endif()
 
@@ -840,6 +849,7 @@ set(MULTIJOUEUR_FILES
     ${PROJECT_SOURCE_DIR}/src/multijoueur/simulation.c # Brutus III : M6a (simulation, entete, rejouage_interface)
     ${PROJECT_SOURCE_DIR}/src/multijoueur/entete.c
     ${PROJECT_SOURCE_DIR}/src/multijoueur/rejouage_interface.c
+    ${PROJECT_SOURCE_DIR}/src/multijoueur/reseau.c # Brutus III : M6b (pont vers le client réseau JavaScript)
 )
 
 set(SOURCE_FILES
@@ -934,7 +944,7 @@ if(${TARGET_PLATFORM} STREQUAL "emscripten")
     # Brutus III : `--bind` (embind, C++, inutilisé) retiré ; IDBFS exporté
     # explicitement (Module.IDBFS), sinon Emscripten 7 l'élimine du JS.
     set(EMSCRIPTEN_LINK_FLAGS
-        "-lidbfs.js -s SINGLE_FILE=1 -s SINGLE_FILE_BINARY_ENCODE=0 --shell-file ${PROJECT_SOURCE_DIR}/res/shell.html --embed-file ${ASSETS_DIR}@/assets -s INITIAL_MEMORY=268435456 -s ALLOW_MEMORY_GROWTH=1 -s INVOKE_RUN=0 -s EXPORTED_FUNCTIONS=[\"_main\"] -s EXPORTED_RUNTIME_METHODS=[\"callMain\",\"FS\",\"IDBFS\"] -s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=[\"$autoResumeAudioContext\"]"
+        "-lidbfs.js -s SINGLE_FILE=1 -s SINGLE_FILE_BINARY_ENCODE=0 --shell-file ${PROJECT_SOURCE_DIR}/res/shell.html --embed-file ${ASSETS_DIR}@/assets -s INITIAL_MEMORY=268435456 -s ALLOW_MEMORY_GROWTH=1 -s INVOKE_RUN=0 -s EXPORTED_FUNCTIONS=[\"_main\"] -s EXPORTED_RUNTIME_METHODS=[\"callMain\",\"FS\",\"IDBFS\",\"ccall\",\"cwrap\",\"HEAPU8\"] -s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=[\"$autoResumeAudioContext\"]"
     )
     # Brutus III : variante sans page, pour le rejouage sous Node (outils/test-rejouage-wasm.sh).
     # Les fichiers de l'ordinateur sont montés sous /hote (NODEFS) ; la page publiée n'est pas concernée.
@@ -942,6 +952,15 @@ if(${TARGET_PLATFORM} STREQUAL "emscripten")
     if(BRUTUS_REJOUAGE_NODE)
         set(EMSCRIPTEN_LINK_FLAGS
             "-lnodefs.js -s ENVIRONMENT=node -s EXIT_RUNTIME=1 --embed-file ${ASSETS_DIR}@/assets -s INITIAL_MEMORY=268435456 -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB --pre-js ${PROJECT_SOURCE_DIR}/src/multijoueur/rejouage-node-pre.js"
+        )
+        set_target_properties(${SHORT_NAME} PROPERTIES SUFFIX ".js")
+    endif()
+    # Brutus III (M6b) : variante Node pilotée par JavaScript (outils/test-reseau-memoire.mjs) : module
+    # importable (MODULARIZE), le moteur reste en vie après main() (mode --reseau), ccall/HEAPU8/FS exportés.
+    option(BRUTUS_RESEAU_NODE "Brutus III : wasm pour Node, piloté par le client réseau JavaScript" OFF)
+    if(BRUTUS_RESEAU_NODE)
+        set(EMSCRIPTEN_LINK_FLAGS
+            "-lnodefs.js -s ENVIRONMENT=node -s MODULARIZE=1 -s EXPORT_NAME=BrutusModule --embed-file ${ASSETS_DIR}@/assets -s INITIAL_MEMORY=268435456 -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB --pre-js ${PROJECT_SOURCE_DIR}/src/multijoueur/rejouage-node-pre.js -s EXPORTED_FUNCTIONS=[\"_main\"] -s EXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\",\"FS\",\"HEAPU8\"]"
         )
         set_target_properties(${SHORT_NAME} PROPERTIES SUFFIX ".js")
     endif()

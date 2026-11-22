@@ -59,7 +59,7 @@ Méthode, audit et résultats : `docs/determinisme.md`. Les sorties vont dans `b
 
 ## Multijoueur : relais local (serveur-multi/)
 
-Le relais est un Cloudflare Worker + un Durable Object par salon. Il ne fait que transmettre les messages des joueurs, sans logique de jeu. Protocole : `docs/protocole.md`. Pas encore branché dans le jeu (mission M6b), et pas encore déployé (M13) : tout tourne en local, sans compte Cloudflare.
+Le relais est un Cloudflare Worker + un Durable Object par salon. Il ne fait que transmettre les messages des joueurs, sans logique de jeu. Protocole : `docs/protocole.md`. Il est branché dans la version web (mission M6b : client `web/lockstep.js`, panneau « Jouer à deux »), mais pas encore déployé (M13) : tout tourne en local, sans compte Cloudflare.
 
 ```bash
 cd serveur-multi
@@ -71,6 +71,37 @@ npm run demo -- ws://127.0.0.1:8787   # la démo contre le relais lancé par npm
 ```
 
 `npm test` et `npm run demo` démarrent eux-mêmes un relais local sur un port libre de 127.0.0.1, puis l'arrêtent. S'il est impossible d'ouvrir un port local (bac à sable), ils s'arrêtent au bout de 30 s avec un message : seul `npm run test:sans-port` (réassemblage des sauvegardes) tourne alors. Le job CI `relais` lance `npm test`, mais le déploiement du site ne dépend pas de lui.
+
+## Jouer à deux en local
+
+Trois terminaux (le relais, la page, puis le navigateur) :
+
+```bash
+bash outils/build-web.sh                                  # une fois (et après chaque changement du moteur ou de web/)
+cd serveur-multi && npm ci && npm run dev                 # terminal 1 : le relais, ws://127.0.0.1:8787
+cd build-web && python3 -m http.server 8000               # terminal 2 : la page
+```
+
+Puis, dans **deux fenêtres de Chrome placées côte à côte** (un onglet masqué est ralenti par le navigateur, l'autre joueur l'attend) : ouvrir `http://localhost:8000/augustus.html` dans chacune, choisir le dossier du jeu dans chacune. L'hôte lance ou charge une partie (la ville doit être à l'écran) ; l'invité peut rester au menu principal : il reçoit la partie de l'hôte (cas à confirmer à la main).
+
+1. Fenêtre 1 (hôte), la ville à l'écran : bouton **« Jouer à deux »** en bas à gauche → **« Créer une partie »** : un code de 6 caractères s'affiche.
+2. Fenêtre 2 : **« Jouer à deux »** → saisir le code → **« Rejoindre »**. L'hôte envoie sa partie, les deux la rechargent (« resynchronisation… »), puis le jeu reprend pour les deux.
+3. Vitesse et pause sont partagées. Si l'autre joueur se déconnecte, le jeu se met en pause (« en attente de … ») et reprend à son retour. L'hôte peut recharger sa page : la partie est récupérée auprès de l'invité.
+4. « Quitter la partie à deux » revient au solo.
+5. En partie à deux, **« Charger », « Recommencer » et « Quitter la mission » sont désactivés** (ils changeraient la ville d'un seul joueur : divergence). Si tu quittes quand même la ville par le menu principal, la partie à deux se met en attente : le bouton **« Revenir dans la partie »** te ramène dans la partie en cours (l'hôte la récupère auprès de l'invité). Si l'hôte reste bloqué plus de 60 s à récupérer sa partie, il est ramené en solo avec un message.
+
+Le panneau n'apparaît que si la page est servie depuis `localhost` ou `127.0.0.1` (le site public reste inchangé jusqu'à la mise en ligne du relais, M13). Pas de chat ni de curseur de l'autre joueur (phase 3). **La page n'a pas encore été essayée dans un navigateur** : si quelque chose cloche, noter le message affiché dans le panneau et la console du navigateur.
+
+Tests du client réseau, sans navigateur :
+
+```bash
+bash outils/test-reseau-memoire.sh court   # ~30 s : deux moteurs wasm dans Node, relais en mémoire, aucun port
+bash outils/test-reseau-memoire.sh         # 225 000 ticks (30 minutes de jeu à 200 %), ~1 min ; rapport : build-reseau/rapport-memoire.txt
+bash outils/test-reseau-30min.sh           # même scénario avec le VRAI relais en local (wrangler dev) et la cadence réelle du jeu, ~10 min ; rapport : build-reseau/rapport-relais.txt
+BRUTUS_VITESSE=200 bash outils/test-reseau-30min.sh 225000 Lugdunum --production   # constantes de production (ping 20 s, coupure 45 s…), 20 min réelles ou plus
+```
+
+Le premier lance une compilation wasm pour Node (`build-reseau-wasm/`, quelques minutes la première fois). Le dernier ouvre un port local : à lancer dans ton terminal, pas dans un bac à sable. `--production` garde les délais réels du client (une empreinte tous les 50 groupes, ping 20 s, coupure 45 s) ; rapport dans `build-reseau/rapport-relais-production.txt`. **Code de sortie 3 = test non exécuté** (jeu absent) : ce n'est pas un succès. Un test réussi affiche « RÉSULTAT OK » et sort avec 0. Le scénario (coupures, resynchronisations, panne injectée, rechargement de l'hôte) est décrit dans `docs/determinisme.md`.
 
 ## Publication
 

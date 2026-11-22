@@ -44,6 +44,7 @@
 #include "map/bridge.h"
 #include "map/building.h"
 #include "map/grid.h"
+#include "multijoueur/reseau.h"
 #include "multijoueur/simulation.h"
 #include "scenario/allowed_building.h"
 #include "scenario/earthquake.h"
@@ -246,6 +247,12 @@ void brutus_commande_envoyer(brutus_commande_type type, int nb_params, const int
 {
     if (etat.ignorer_interface) {
         etat.interface_ignorees++;
+        return;
+    }
+    // Brutus III (M6b) : avec le client réseau, la commande part dans la boîte de sortie (TOUR) ;
+    // elle reviendra par le relais, comme celles des autres joueurs, avec son tick d'application.
+    if (brutus_reseau_actif()) {
+        brutus_reseau_deposer((int) type, nb_params, params);
         return;
     }
     brutus_commande cmd;

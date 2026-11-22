@@ -19,6 +19,7 @@
 #include "empire/export_xml.h"
 #include "empire/import_xml.h"
 #include "game/file.h"
+#include "multijoueur/reseau.h" // Brutus III
 #include "game/file_editor.h"
 #include "game/file_io.h"
 #include "game/save_version.h"
@@ -700,6 +701,10 @@ static void button_ok_cancel(int is_ok, int param2)
 
     if (data.dialog_type == FILE_DIALOG_LOAD) {
         if (data.type == FILE_TYPE_SAVED_GAME) {
+            if (brutus_reseau_menu_refuse()) { // Brutus III (M6b) : seconde garde, la fenêtre peut être restée ouverte
+                window_go_back();
+                return;
+            }
             int result = game_file_load_saved_game(filename);
             if (result == FILE_LOAD_SUCCESS) {
                 window_city_show();
@@ -879,6 +884,10 @@ static void handle_tooltip(tooltip_context *c)
 
 void window_file_dialog_show(file_type type, file_dialog_type dialog_type)
 {
+    // Brutus III (M6b) : en partie à deux, charger une sauvegarde changerait la ville sans commande.
+    if (dialog_type == FILE_DIALOG_LOAD && type == FILE_TYPE_SAVED_GAME && brutus_reseau_menu_refuse()) {
+        return;
+    }
     window_type window = {
         WINDOW_FILE_DIALOG,
         draw_background,

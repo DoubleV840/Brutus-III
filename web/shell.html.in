@@ -198,6 +198,71 @@
         color: white;
       }
 
+      /* Jouer à deux (M6b) : panneau en bas à gauche, visible seulement quand le jeu tourne. */
+      #multi {
+        display: none;
+        position: absolute;
+        left: 10px;
+        bottom: 10px;
+        z-index: 4;
+        font: 10pt sans-serif;
+        color: rgb(230, 230, 230);
+      }
+
+      #multiPanneau {
+        display: none;
+        margin-top: 6px;
+        padding: 8px 10px;
+        width: 260px;
+        border: 1px solid rgb(120, 120, 120);
+        border-radius: 3px;
+        background-color: rgba(0, 0, 0, 0.8);
+      }
+
+      #multi input[type='button'] {
+        font: 10pt sans-serif;
+        padding: 4px 8px;
+        margin: 2px 0;
+        cursor: pointer;
+      }
+
+      #multi input[type='text'] {
+        font: 11pt monospace;
+        width: 120px;
+        padding: 3px 5px;
+        text-transform: uppercase;
+      }
+
+      #multiCodeAffiche {
+        font: bold 16pt monospace;
+        letter-spacing: 3px;
+        color: rgb(242, 210, 122);
+      }
+
+      #multiJoueurs {
+        list-style: none;
+        margin: 6px 0;
+        padding: 0;
+      }
+
+      #multiTexte {
+        margin-top: 6px;
+        min-height: 1.2em;
+      }
+
+      #multiTexte.erreur {
+        color: rgb(255, 140, 120);
+      }
+
+      #multiAvis {
+        margin-top: 6px;
+        color: rgb(255, 200, 120);
+      }
+
+      #multiRevenir {
+        display: none;
+      }
+
       #OSD {
         display: none;
         position: absolute;
@@ -259,12 +324,34 @@
         Caesar III est une marque de ses propriétaires respectifs. Projet non officiel.
       </div>
     </div>
+    <div id="multi">
+      <input type="button" data-action="basculer" id="multiBouton" value="Jouer à deux">
+      <div id="multiPanneau">
+        <div id="multiAccueil">
+          <input type="button" data-action="creer" value="Créer une partie">
+          <div>
+            <input type="text" id="multiCode" maxlength="6" placeholder="Code" autocomplete="off" spellcheck="false">
+            <input type="button" data-action="rejoindre" value="Rejoindre">
+          </div>
+          <small>Chaque joueur doit avoir les fichiers du jeu dans son navigateur. Celui qui crée la partie la lance ou la charge ; l'autre la reçoit. Garde l'onglet visible pendant la partie : un onglet masqué ralentit les deux joueurs.</small>
+        </div>
+        <div id="multiSalon">
+          <div>Code de la partie : <span id="multiCodeAffiche"></span></div>
+          <ul id="multiJoueurs"></ul>
+          <input type="button" data-action="revenir" id="multiRevenir" value="Revenir dans la partie">
+          <input type="button" data-action="quitter" value="Quitter la partie à deux">
+        </div>
+        <div id="multiTexte" role="status"></div>
+        <div id="multiAvis" role="alert"></div>
+      </div>
+    </div>
     <div id="OSD">
       <span id="OSDSpinner" class="spinner small"></span>
       <span id="OSDStatus"></span>
     </div>
     <input type="file" id="loaddir" name="fileList" webkitdirectory multiple>
     <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <script type='text/javascript'>@BRUTUS_LOCKSTEP_JS@</script>
     <script type='text/javascript'>
       // Point de montage IDBFS. Le nom de la base IndexedDB est ce chemin.
       // Gardé identique à Augustus ('/C3') : le moteur le reçoit en argument.
@@ -508,6 +595,147 @@
         });
       }
 
+      // ---- Jouer à deux (M6b) : le client lockstep est dans web/lockstep.js (inséré ci-dessus).
+      var multi = { ls: null, minuterie: null, ouvert: false };
+      var multiElement = document.getElementById('multi');
+      var multiPanneauElement = document.getElementById('multiPanneau');
+      var multiAccueilElement = document.getElementById('multiAccueil');
+      var multiSalonElement = document.getElementById('multiSalon');
+      var multiTexteElement = document.getElementById('multiTexte');
+      var multiAvisElement = document.getElementById('multiAvis');
+      var multiRevenirElement = document.getElementById('multiRevenir');
+      var multiCodeElement = document.getElementById('multiCode');
+      var multiCodeAfficheElement = document.getElementById('multiCodeAffiche');
+      var multiJoueursElement = document.getElementById('multiJoueurs');
+
+      // Adresse du relais : seulement en local pour l'instant (mise en ligne : mission M13). Ailleurs,
+      // le panneau reste caché et la page se comporte comme avant.
+      function multiBase() {
+        var h = window.location.hostname;
+        return h === 'localhost' || h === '127.0.0.1' ? 'ws://127.0.0.1:8787' : '';
+      }
+
+      function multiAfficher(e) {
+        var enSession = e.phase !== 'inactif' && e.phase !== 'erreur';
+        multiAccueilElement.style.display = enSession ? 'none' : 'block';
+        multiSalonElement.style.display = enSession && e.code ? 'block' : 'none';
+        multiCodeAfficheElement.textContent = e.code || '';
+        multiTexteElement.textContent = e.texte || '';
+        multiTexteElement.className = e.phase === 'erreur' ? 'erreur' : '';
+        multiRevenirElement.style.display = e.phase === 'hors-ville' ? 'inline-block' : 'none';
+        // Divergence répétée ou menu refusé : le message doit se voir, même panneau replié.
+        var avis = (e.alerte ? e.alerte + ' ' : '') + (e.avis || '');
+        multiAvisElement.textContent = avis;
+        if ((avis || e.phase === 'hors-ville') && !multi.ouvert) {
+          multi.ouvert = true;
+          multiPanneauElement.style.display = 'block';
+        }
+        while (multiJoueursElement.firstChild) {
+          multiJoueursElement.removeChild(multiJoueursElement.firstChild);
+        }
+        for (var i = 0; i < e.salon.length; i++) {
+          var p = e.salon[i];
+          var li = document.createElement('li');
+          li.textContent = 'Joueur ' + (p.joueur + 1) + (p.joueur === e.joueur ? ' (toi)' : '') +
+            (p.joueur === 0 ? ', hôte' : '') + (p.connecte ? '' : ' : déconnecté');
+          if (e.hote && p.joueur !== 0) {
+            var b = document.createElement('input');
+            b.type = 'button';
+            b.value = 'Retirer';
+            b.setAttribute('data-action', 'expulser');
+            b.setAttribute('data-joueur', String(p.joueur));
+            li.appendChild(document.createTextNode(' '));
+            li.appendChild(b);
+          }
+          multiJoueursElement.appendChild(li);
+        }
+      }
+
+      function multiDemarrer() {
+        var base = multiBase();
+        if (multi.ls || !base) {
+          return;
+        }
+        multiElement.style.display = 'block';
+        multi.ls = BrutusLockstep.creerLockstep({
+          moteur: BrutusLockstep.moteurEmscripten(Module),
+          transport: BrutusLockstep.transportWebSocket(),
+          stockage: BrutusLockstep.stockageSession('brutus-session'),
+          base: base,
+          surChangement: multiAfficher,
+          pomperSurMessage: true,
+          journal: function(m) { console.log('[à deux] ' + m); }
+        });
+        // Un onglet masqué ralentit les minuteries : la pompe passe aussi par les messages du relais
+        // (non limités) et par le retour de visibilité ; le titre prévient que la partie à deux souffre.
+        multi.minuterie = setInterval(function() { multi.ls.pomper(); }, 20);
+        multi.titre = document.title;
+        multi.visibilite = function() {
+          if (!multi.ls) {
+            return;
+          }
+          var actif = multi.ls.etat().actif;
+          document.title = document.hidden && actif ? '(onglet masqué : partie à deux ralentie) ' + multi.titre : multi.titre;
+          multi.ls.pomper();
+        };
+        document.addEventListener('visibilitychange', multi.visibilite);
+        if (multi.ls.reprendre()) {
+          multi.ouvert = true;
+          multiPanneauElement.style.display = 'block';
+        }
+        multiAfficher(multi.ls.etat());
+      }
+
+      function multiArreter() {
+        if (!multi.ls) {
+          return;
+        }
+        clearInterval(multi.minuterie);
+        document.removeEventListener('visibilitychange', multi.visibilite);
+        document.title = multi.titre;
+        multi.ls.quitter();
+        multi.ls = null;
+        multiElement.style.display = 'none';
+      }
+
+      function multiAction(cible) {
+        var bouton = cible.closest ? cible.closest('[data-action]') : null;
+        if (!bouton || !multi.ls) {
+          return;
+        }
+        var action = bouton.getAttribute('data-action');
+        if (action === 'basculer') {
+          multi.ouvert = !multi.ouvert;
+          multiPanneauElement.style.display = multi.ouvert ? 'block' : 'none';
+        } else if (action === 'creer') {
+          multi.ls.creer(2);
+        } else if (action === 'rejoindre') {
+          multi.ls.rejoindre(multiCodeElement.value);
+        } else if (action === 'revenir') {
+          multi.ls.revenir();
+        } else if (action === 'quitter') {
+          multi.ls.quitter();
+        } else if (action === 'expulser') {
+          multi.ls.expulser(Number(bouton.getAttribute('data-joueur')));
+        }
+      }
+
+      // Le moteur (SDL) écoute clavier et souris sur toute la fenêtre, en phase de capture : sans ceci,
+      // taper le code ou cliquer dans le panneau agirait aussi sur le jeu. Cet écouteur est posé avant
+      // le démarrage du moteur, donc il passe le premier, traite les clics du panneau puis coupe l'événement.
+      ['keydown', 'keyup', 'keypress', 'mousedown', 'mouseup', 'mousemove', 'click', 'dblclick', 'wheel',
+       'pointerdown', 'pointerup', 'touchstart', 'touchend', 'contextmenu'].forEach(function(type) {
+        window.addEventListener(type, function(event) {
+          if (!multiElement.contains(event.target)) {
+            return;
+          }
+          if (type === 'click') {
+            multiAction(event.target);
+          }
+          event.stopImmediatePropagation();
+        }, true);
+      });
+
       var Module = {
         preRun: [],
         postRun: [],
@@ -616,6 +844,7 @@
           Module.setStatus("Lancement du jeu...");
           Module.running = true;
           Module.callMain([C3Dir]);
+          multiDemarrer();
           setTimeout(function() {
             if (Module.running) {
               infoElement.style.display = 'none';
@@ -626,6 +855,7 @@
         // 1 et 2 = fichiers du jeu invalides ; -1 et -2 = SDL, fenêtre ou WebGL indisponible.
         quitGame: function(status) {
           Module.running = false;
+          multiArreter();
           infoElement.style.display = 'flex';
           if (status < 0) {
             // Rien à voir avec les fichiers : on n'efface rien.

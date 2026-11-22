@@ -9,6 +9,7 @@
 #include "game/state.h"
 #include "game/system.h"
 #include "game/undo.h"
+#include "multijoueur/reseau.h" // Brutus III
 #include "graphics/generic_button.h"
 #include "graphics/graphics.h"
 #include "graphics/lang_text.h"
@@ -86,7 +87,7 @@ static void handle_input(const mouse *m, const hotkeys *h)
 
 static void replay_map_confirmed(int confirmed, int checked)
 {
-    if (!confirmed) {
+    if (!confirmed || brutus_reseau_menu_refuse()) { // Brutus III (M6b) : pas de « Recommencer » en partie à deux
         return;
     }
     if (!game_campaign_is_active()) {
@@ -107,6 +108,9 @@ static void replay_map_confirmed(int confirmed, int checked)
 
 static void main_menu_confirmed(int confirmed, int checked)
 {
+    if (confirmed && brutus_reseau_menu_refuse()) { // Brutus III (M6b) : on quitte la partie à deux par la page
+        return;
+    }
     if (confirmed) {
         building_construction_clear_type();
         game_undo_disable();

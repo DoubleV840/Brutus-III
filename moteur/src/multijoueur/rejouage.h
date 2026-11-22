@@ -21,6 +21,9 @@ int brutus_rejouage_extraire_options(int argc, char **argv);
 /** Vrai si un mode sans affichage a été demandé. */
 int brutus_rejouage_demande(void);
 
+/** Vrai pour --reseau <sauvegarde> (test du client réseau sous Node) : le programme ne quitte pas après. */
+int brutus_rejouage_garder_actif(void);
+
 /** Exécute le mode demandé (après l'initialisation du jeu). Retourne le code de sortie. */
 int brutus_rejouage_executer(void);
 

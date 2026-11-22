@@ -102,18 +102,55 @@ Durées (natif) : 6 à 8 s par rejouage, 50 à 60 s pour l'interface ouverte (le
 
 Contrôle négatif fait en M4 (non refait ici) : une commande `impots` retirée du journal → empreintes différentes dès l'empreinte suivante.
 
+## Test réseau (M6b, 22/11/2026)
+
+`bash outils/test-reseau-memoire.sh [ticks]` : deux instances wasm du moteur (`--reseau`, variante Node en `MODULARIZE`, option CMake `BRUTUS_RESEAU_NODE`) dans un même processus Node, chacune pilotée par le vrai client `web/lockstep.js`, reliées par un relais en mémoire qui reprend les règles de `serveur-multi/src/index.js` (en-tête de 8 octets, destinataires obligatoires, jetons, remplacement de connexion, `erreur`, ping/pong, latence de 0 à 2 tours de boucle). Chaque client injecte son journal du bot (graines 42 et 43). Rapport : `build-reseau/rapport-memoire.txt`.
+
+Scénario déclenché par la progression : coupure propre de l'invité, coupure silencieuse (le relais jette tout sans fermer), resynchronisation forcée (invité puis hôte), pause partagée, vitesses simultanées, coupure de l'hôte, **panne injectée** (impôts +3 sur l'invité seul : l'empreinte doit diverger, être détectée une fois par l'hôte et réparée par la resynchronisation), rechargement de la page de l'hôte (nouvelle instance du moteur, partie récupérée auprès de l'invité).
+
+Résultat, 225 000 ticks (30 minutes de jeu à 200 %), carte Lugdunum : 4 495 empreintes comparables (une tous les 50 ticks) **identiques**, zéro divergence réelle, comparaison finale directe identique, panne détectée une fois, scénario complet. **Aucune variable statique oubliée ni source de non-déterminisme nouvelle n'est apparue** : aucune modification du moteur n'a été nécessaire pour la synchronisation. Les chargements du test sont ceux de `brutus_resynchroniser` (tout le monde recharge, hôte compris).
+
+**Relancé le 22/11/2026 après les corrections QA** (Mac du fondateur) :
+
+| Passe | Ticks | Durée réelle | Empreintes comparables | Divergences réelles | Comparaison finale |
+|---|---|---|---|---|---|
+| sans port, accélérée (`test-reseau-memoire.sh`) | 279 495 | 60 s | 5 583 | 0 | identique |
+| sans port, constantes de production (`… 20000 Lugdunum --production`) | 20 275 | 280 s | 75 | 0 | identique |
+| **vrai relais `wrangler dev`** (`test-reseau-30min.sh`) | 225 260 | 2 239 s | 4 498 | 0 | identique |
+
+Dans les trois passes : panne injectée détectée une fois et réparée dans une nouvelle époque, tous les événements du scénario et tous les cas complémentaires cochés.
+
+Limites : le test n'exerce que les commandes du bot (joueur 0 de chaque client) sur Lugdunum ; une panne volontaire ne prouve pas l'absence d'état caché, seulement que la détection fonctionne. Avec `BRUTUS_RELAIS`, le même scénario passe par un vrai relais (`outils/test-reseau-30min.sh`) : voir `docs/protocole.md` pour son état.
+
+## Divergences trouvées à la relecture QA (M6b) : causes corrigées
+
+Deux familles de divergence que la resynchronisation aurait cachées (le client recharge l'état de l'hôte à la première empreinte différente, et le symptôme disparaît). Elles sont corrigées **à la cause**, dans le moteur :
+
+- **Menus « Charger », « Recommencer », « Quitter la mission »** : ils changent la ville d'un seul joueur sans commande (`game_file_load_saved_game`, `game_file_start_scenario_by_name`). En partie à deux ils sont refusés (`brutus_reseau_menu_refuse()` : `window/file_dialog.c`, `window/city.c`, `window/pause_menu.c`, `widget/top_menu.c`, commentés « Brutus III (M6b) »). Les deux seuls chemins restants (menu principal, choix de mission) appellent `brutus_reseau_ville_quittee()` : le client passe en phase `hors-ville` et n'avance plus (voir `docs/protocole.md`). Victoire et fin de mission : M11. On n'utilise pas `jeuEnCours` pour cela : il ne couvre que `WINDOW_CITY` à `WINDOW_TRADE_LEDGER` et figerait les deux joueurs dès l'ouverture de la fenêtre d'options.
+- **Vitesse changée en local** : retour à la vitesse par défaut après la première invasion (`city/message.c`) et fenêtre d'options (`window/config.c`). Ignorés en réseau ; de plus le client remet la vitesse locale à la vitesse commune avant chaque groupe (`verifierVitesse`, compteur `vitessesCorrigees`).
+
+**Règle** : en réseau, tout appel direct à `setting_set_game_speed`, `game_file_load_saved_game` ou `game_file_start_scenario_by_name` contourne le client et fait diverger. Toute nouvelle entrée de menu qui en appelle un doit être gardée.
+
+**Détection** : le moteur écrit le détail de la dernière empreinte par morceau dans `/tmp/brutus-empreinte-detail.txt` (`empreinte.c`, lu par `moteur.detailEmpreinte()`). À la première divergence le client le journalise ; à 3 divergences en 10 minutes il affiche une alerte (`etat().alerte`). Le test exige zéro divergence avant la panne injectée, une détection, et une réparation dans une nouvelle époque.
+
+**Cas complémentaires du test** (un critère chacun dans le rapport) : menus refusés, vitesse locale corrigée, invité hors ville, hôte hors ville (récupération de sa partie), chargement refusé chez l'invité (redemande une fois), envoi refusé par le relais (nouvel essai sans recharger seul).
+
+**Non testé** : latence de plusieurs centaines de ms ; route de Rome coupée (pause déclenchée par la simulation) ; deux onglets avec le même jeton ; arrivée d'un joueur pendant une resynchronisation ou au milieu des morceaux de sauvegarde ; onglet masqué dans un vrai navigateur.
+
+**Constantes** : TOUR par groupe de 5 ticks (5 divise 50, un jour de jeu), délai d'entrée D = 2 groupes, empreinte tous les 50 groupes (250 ticks, hôte seul), ping 20 s, mort 45 s, attente 10 s, réessai de sauvegarde 5 s, récupération hôte 60 s. Le test rapide les raccourcit ; `--production` les garde (passe d'au moins 20 minutes réelles).
+
 ## Limites connues
 
-- Navigateur réel : la variante wasm testée tourne sous Node (même code, mêmes options, mais pas le fichier publié `SINGLE_FILE`). Deux onglets synchronisés restent à faire (M6b).
+- Navigateur réel : les variantes wasm testées tournent sous Node (même code, mêmes options, mais pas le fichier publié `SINGLE_FILE`). Le test réseau de M6b (deux moteurs wasm, client `web/lockstep.js`, relais en mémoire puis vrai relais en local) n'est pas un test à deux onglets dans un navigateur : voir « Test réseau (M6b) » plus bas.
 - Natif ↔ wasm est identique sur les trois cartes, mais pas garanti dans tous les cas (`log10` et `pow` de libm différentes). Non bloquant : les deux joueurs utilisent le wasm.
 - **État hors sauvegarde** : six cas trouvés et remis à zéro au chargement. D'autres variables statiques de la simulation peuvent exister ; le test hôte / invité ne les voit que si elles changent la partie sur ces trois cartes. À chaque nouvelle fonction du moteur, vérifier qu'un état qui change la partie est soit sauvegardé, soit remis dans `brutus_partie_chargee()`.
 - Partie rechargée ≠ partie continue (voir plus haut) : sans conséquence si tout le monde recharge. Une sauvegarde automatique ne doit donc pas servir de point de resynchronisation sans être rechargée par tous.
-- Vitesse, pause et pause déclenchée par la simulation (route de Rome coupée) : à partager par le lockstep (M6b). En multijoueur, `game_run()` ignore la vitesse et la pause locales.
+- Vitesse et pause sont partagées par le lockstep depuis M6b (messages VITESSE, voir `docs/protocole.md`). En multijoueur, `game_run()` ignore la vitesse et la pause locales. Une pause déclenchée par la simulation elle-même (route de Rome coupée) n'a pas été essayée dans le test réseau.
 - Multijoueur : quelques valeurs des conseillers (explications des notes, cause de l'absence d'immigration, demandes culturelles, estimation des impôts, stocks des entrepôts) ne sont plus recalculées à l'ouverture : elles ne bougent que quand la simulation les recalcule (certaines jamais). L'annonce « marchandises prêtes » de César n'arrive qu'au contrôle mensuel. L'aperçu des parcours est coupé. À reprendre en M7 (Coop) si gênant.
 - Les aperçus sont retirés et remis à chaque passage dans la simulation : en multijoueur, pendant un glisser, l'aperçu est recalculé à chaque image où des ticks passent.
 - `brutus_resynchroniser` abandonne le glisser en cours du joueur local.
 - Le bot n'exerce que la validation de `depot-ordre`, `monument-*`, `monnaie-conversion`, `production-reserve`, `dock-route`, `barrage-permission`, `caserne-*`, `jeux`, `legions-bataille`, `victoire-continuer` (voir `docs/commandes.md`). Les chemins de l'interface vers ces commandes n'ont pas été testés à la main.
-- Le chemin de l'interface en solo (clic → commande → pose, fenêtres modifiées en M6a) n'a pas été testé à la main dans cette mission : les tests passent par le journal et l'interface scriptée.
+- Solo : le chemin de l'interface (clic → commande → pose, sauvegarde et rechargement) a été testé à la main par le fondateur dans le navigateur et fonctionne. Les tests automatiques, eux, passent par le journal et l'interface scriptée. Les chemins de l'interface propres au multijoueur (page « Jouer à deux ») n'ont pas été essayés dans un navigateur.
 - Effets durables des triches : dans l'en-tête de partie (pas dans le format d'Augustus) : une sauvegarde Brutus III les garde, une sauvegarde d'Augustus les remet à zéro.
 - Ouvrir la fenêtre d'un dépôt ne remet plus son ordre en état (ressource par défaut, source ou destination invalides) : c'est fait par la commande `depot-ordre` suivante. La simulation ignore déjà un stockage inactif.
 - Messages : le numéro de séquence est sauvegardé sur 16 bits ; après 32 767 messages, l'ordre du tableau pourrait différer entre une partie continue et une partie rechargée (sans effet si tout le monde recharge).

@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #define BRUTUS_FNV_DEPART 0xcbf29ce484222325ULL
 
@@ -22,5 +23,7 @@ void brutus_empreinte_marquer(int en_cours);
 
 /** Empreinte de l'état courant de la partie. */
 uint64_t brutus_empreinte_partie(void);
+/** Idem, et écrit l'empreinte de chaque morceau de la sauvegarde dans `detail` (diagnostic d'une divergence). */
+uint64_t brutus_empreinte_partie_detail(FILE *detail);
 
 #endif // MULTIJOUEUR_EMPREINTE_H

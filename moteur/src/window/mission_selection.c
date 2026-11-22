@@ -15,6 +15,7 @@
 #include "graphics/screen.h"
 #include "graphics/window.h"
 #include "input/input.h"
+#include "multijoueur/reseau.h"
 #include "scenario/property.h"
 #include "sound/device.h"
 #include "sound/music.h"
@@ -240,12 +241,14 @@ static void show(void)
 
 void window_mission_selection_show(void)
 {
+    brutus_reseau_ville_quittee(); // Brutus III (M6b)
     init();
     data.mission.intro_video ? window_video_show(data.mission.intro_video, show) : show();
 }
 
 void window_mission_selection_show_again(void)
 {
+    brutus_reseau_ville_quittee(); // Brutus III (M6b)
     init();
     show();
 }

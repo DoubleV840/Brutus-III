@@ -1,6 +1,7 @@
 #include "city.h"
 
 #include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/reseau.h" // Brutus III
 
 #include "building/clone.h"
 #include "building/construction.h"
@@ -814,6 +815,9 @@ static void handle_hotkeys(const hotkeys *h)
         return;
     }
     if (h->quickload) {
+        if (brutus_reseau_menu_refuse()) { // Brutus III (M6b) : pas de chargement en partie à deux
+            return;
+        }
         int result = game_file_quickload();
         if (result == FILE_LOAD_SUCCESS) {
             window_city_show();

@@ -4,6 +4,7 @@
 #include "core/buffer.h"
 #include "core/calc.h"
 #include "multijoueur/entete.h" // Brutus III
+#include "multijoueur/reseau.h" // Brutus III
 #include "core/config.h"
 #include "core/dir.h"
 #include "core/file.h"
@@ -277,6 +278,11 @@ int setting_set_game_speed(int speed)
 
 void setting_decrease_game_speed(void)
 {
+    // Brutus III (M6b) : vitesse partagée en réseau, l'interface ne fait que la demander.
+    if (brutus_reseau_actif()) {
+        brutus_reseau_demander_vitesse(-1);
+        return;
+    }
     int index = game_speed_get_index(data.game_speed);
     if (index > 0) {
         index--;
@@ -286,6 +292,11 @@ void setting_decrease_game_speed(void)
 
 void setting_increase_game_speed(void)
 {
+    // Brutus III (M6b) : voir setting_decrease_game_speed.
+    if (brutus_reseau_actif()) {
+        brutus_reseau_demander_vitesse(1);
+        return;
+    }
     int index = game_speed_get_index(data.game_speed);
     if (index < TOTAL_GAME_SPEEDS - 1) {
         index++;
