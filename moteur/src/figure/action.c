@@ -139,7 +139,7 @@ void figure_action_handle(void)
         city_figures_reset();
         city_entertainment_set_hippodrome_has_race(0);
     }
-    brutus_ville_activer(0);
+    brutus_ville_activer_commune();
     for (unsigned int i = 1; i < figure_count(); i++) {
         figure *f = figure_get(i);
         if (f->state) {
@@ -161,5 +161,5 @@ void figure_action_handle(void)
             }
         }
     }
-    brutus_ville_activer(0);
+    brutus_ville_activer_commune();
 }

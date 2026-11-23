@@ -53,7 +53,7 @@ Une commande arrive d'un pair : elle est revérifiée avant d'agir. Une commande
 | `don-ville` | montant positif, borné par l'épargne (pari en cours déduit) |
 | `legions-bataille` | une bataille lointaine est demandée (`city_request_has_troop_request`) |
 | `victoire-continuer` | mission gagnée ; 1 à 10 mois |
-| `triche` | numéro de la console (hors triches d'affichage) ou 100 argent, 101 victoire, 102 invasion |
+| `triche` | numéro de la console (hors triches d'affichage) ou 100 argent, 101 victoire, 102 invasion, 103 Versus (M8), 104 demande de César de 100 deniers (tests, M8) |
 | autres | bornes, bâtiment ou légion existants, argent (`fete`), victoire (`salaire-gouverneur`) |
 
 Pas vérifié : les restrictions propres aux tutoriels et les ressources nécessaires d'un bâtiment (`can_get_required_resource` du menu). Le moteur bloque déjà la plupart de ces cas à la pose.

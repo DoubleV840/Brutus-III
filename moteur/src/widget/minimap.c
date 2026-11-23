@@ -11,6 +11,7 @@
 #include "graphics/image.h"
 #include "graphics/renderer.h"
 #include "map/building.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 #include "map/figure.h"
 #include "map/grid.h"
 #include "map/property.h"
@@ -379,7 +380,13 @@ static void draw_building(int x_offset, int y_offset, int grid_offset)
             return;
         }
 
-        if (b->house_size) {
+        static building_tile_color autre_ville; // Brutus III (M8) : bâtiment de l'autre ville (Versus)
+        if (brutus_versus_a_autre_ville(b->brutus_proprietaire)) {
+            color_t c = brutus_versus_couleur(b->brutus_proprietaire);
+            autre_ville.edges.left = autre_ville.edges.right = c;
+            autre_ville.center.left = autre_ville.center.right = c;
+            colors = &autre_ville;
+        } else if (b->house_size) {
             colors = &minimap_colors.house;
         } else if (building_is_water_structure(b->type)) {
             colors = &minimap_colors.water_structure;

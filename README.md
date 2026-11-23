@@ -108,9 +108,9 @@ BRUTUS_VITESSE=200 bash outils/test-reseau-30min.sh 225000 Lugdunum --production
 
 Le premier lance une compilation wasm pour Node (`build-reseau-wasm/`, quelques minutes la première fois). Le dernier ouvre un port local : à lancer dans ton terminal, pas dans un bac à sable. `--production` garde les délais réels du client (une empreinte tous les 50 groupes, ping 20 s, coupure 45 s) ; rapport dans `build-reseau/rapport-relais-production.txt`. **Code de sortie 3 = test non exécuté** (jeu absent) : ce n'est pas un succès. Un test réussi affiche « RÉSULTAT OK » et sort avec 0. Le scénario (coupures, resynchronisations, panne injectée, rechargement de l'hôte) est décrit dans `docs/determinisme.md`. Depuis le 22/11, il couvre aussi la route de Rome coupée par des murs, une forte latence (300 à 700 ms entre joueurs), une arrivée pendant une resynchronisation et la même partie ouverte dans deux onglets (ces trois derniers avec le relais en mémoire seulement).
 
-## Versus local (M8, en cours)
+## Versus local (M8)
 
-Deux villes sur la même carte, sur un seul écran : en ville, **Alt+W** fait passer la partie en Versus, puis chaque **Alt+W** fait jouer l'autre ville (trésor, population, bâtiments à elle). Principe, limites et ce qui reste : `docs/versus.md`. Test automatique : `bash outils/test-versus.sh` (deux bots, déterminisme, sauvegarde et rechargement).
+Deux villes sur la même carte, sur un seul écran : en ville, **Alt+W** fait passer la partie en Versus, puis chaque **Alt+W** fait jouer l'autre ville (trésor, population, bâtiments, messages et demandes de César à elle ; les bâtiments de l'autre ville sont teintés de sa couleur : 1 bleue, 2 rouge). Principe, limites et ce qui reste : `docs/versus.md`. Test automatique : `bash outils/test-versus.sh` (deux bots, déterminisme, sauvegarde et rechargement).
 
 ## Publication
 

@@ -16,12 +16,16 @@
 #include "game/time.h"
 #include "game/tutorial.h"
 #include "scenario/property.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 #define REQUESTS_ARRAY_SIZE_STEP 16
 
 #define REQUESTS_STRUCT_SIZE_CURRENT (7 * sizeof(int16_t) + 5 * sizeof(uint16_t) + 6 * sizeof(uint8_t))
 
-static array(scenario_request) requests;
+// Brutus III (M8) : en Versus, chaque ville a ses demandes de César (copiées de la ville 1 quand la
+// partie passe en Versus). `requests` désigne celles de la ville active ; une seule ville : comme avant.
+static array(scenario_request) requests_brutus[BRUTUS_VILLES_MAX];
+#define requests (requests_brutus[brutus_ville_active()])
 
 static void new_request(scenario_request *request, unsigned int index)
 {
@@ -541,4 +545,74 @@ void scenario_request_load_state_old_version(buffer *list, requests_old_state_se
         }
         array_trim(requests);
     }
+}
+
+// ---- Brutus III (M8) : demandes de chaque ville en Versus (bloc de sauvegarde BR3V)
+
+void scenario_request_brutus_ecrire(buffer *b)
+{
+    buffer_write_u32(b, requests.size);
+    const scenario_request *request;
+    array_foreach(requests, request)
+    {
+        request_save(b, request);
+    }
+}
+
+int scenario_request_brutus_lire(buffer *b)
+{
+    unsigned int nb = buffer_read_u32(b);
+    if (nb > 10000 || !array_init(requests, REQUESTS_ARRAY_SIZE_STEP, new_request, request_in_use) ||
+        !array_expand(requests, nb)) {
+        return 0;
+    }
+    for (unsigned int i = 0; i < nb; i++) {
+        scenario_request *request = array_next(requests);
+        request_load(b, request, SCENARIO_CURRENT_VERSION);
+    }
+    array_trim(requests);
+    return 1;
+}
+
+unsigned int scenario_request_brutus_taille(void)
+{
+    return 4 + requests.size * (unsigned int) REQUESTS_STRUCT_SIZE_CURRENT;
+}
+
+int scenario_request_brutus_copier(int vers)
+{
+    if (vers <= 0 || vers >= BRUTUS_VILLES_MAX) {
+        return 0;
+    }
+    unsigned int nb = requests_brutus[0].size;
+    if (!array_init(requests_brutus[vers], REQUESTS_ARRAY_SIZE_STEP, new_request, request_in_use) ||
+        !array_expand(requests_brutus[vers], nb)) {
+        return 0;
+    }
+    for (unsigned int i = 0; i < nb; i++) {
+        scenario_request *copie = array_next(requests_brutus[vers]);
+        *copie = *array_item(requests_brutus[0], i);
+    }
+    return 1;
+}
+
+void scenario_request_brutus_oublier(int ville)
+{
+    if (ville > 0 && ville < BRUTUS_VILLES_MAX) {
+        array_clear(requests_brutus[ville]);
+    }
+}
+
+int scenario_request_brutus_triche(void)
+{
+    int id = scenario_request_new();
+    if (id < 0) {
+        return 0;
+    }
+    scenario_request *request = array_item(requests, id);
+    request->resource = RESOURCE_DENARII;
+    request->amount.min = request->amount.max = 100;
+    request->deadline_years = 10;
+    request->favor = 8;
+    return scenario_request_force_start(id);
 }

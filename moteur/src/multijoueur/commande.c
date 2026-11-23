@@ -162,6 +162,11 @@ int brutus_commande_joueur_en_cours(void)
 
 int brutus_interface_pour_moi(void)
 {
+    // M8 (Versus) : ce qui concerne une autre ville que la nôtre ne s'affiche pas chez nous
+    int ville = brutus_versus_ville_concernee();
+    if (ville >= 0 && ville != brutus_ville_vue()) {
+        return 0;
+    }
     return etat.joueur_en_cours < 0 || etat.joueur_en_cours == etat.joueur_local;
 }
 
@@ -982,7 +987,7 @@ int brutus_commandes_appliquer(uint32_t tick)
         }
         etat.total_appliquees++;
         etat.appliquees_par_type[c->type]++;
-        brutus_ville_activer(0);
+        brutus_ville_activer_commune();
     }
     random_brutus_reinitialiser_compteur();
     etat.repere++;

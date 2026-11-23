@@ -25,6 +25,7 @@
 #include "graphics/weather.h"
 #include "graphics/window.h"
 #include "scenario/invasion.h"
+#include "scenario/request.h"
 #include "scenario/property.h"
 #include "scenario/scenario.h"
 #include "translation/translation.h"
@@ -491,6 +492,8 @@ int game_cheat_brutus_executer(int numero, const int32_t *args)
             return 1;
         case BRUTUS_TRICHE_VERSUS:
             return brutus_versus_activer();
+        case BRUTUS_TRICHE_DEMANDE:
+            return scenario_request_brutus_triche();
         default:
             break;
     }

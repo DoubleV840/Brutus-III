@@ -19,6 +19,7 @@
 #include "map/routing_terrain.h"
 #include "map/terrain.h"
 #include "map/tiles.h"
+#include "multijoueur/versus.h"
 #include "sound/effect.h"
 
 #include <string.h>
@@ -290,7 +291,8 @@ void building_destroy_last_placed(void)
     for (int i = 1; i < building_count(); i++) {
         building *b = building_get(i);
         if ((b->state == BUILDING_STATE_CREATED || b->state == BUILDING_STATE_IN_USE) &&
-            !building_properties_for_type(b->type)->shared) {
+            !building_properties_for_type(b->type)->shared &&
+            !brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8)
             if (b->created_sequence > highest_sequence) {
                 highest_sequence = b->created_sequence;
                 last_building = b;

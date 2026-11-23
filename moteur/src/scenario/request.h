@@ -100,4 +100,14 @@ void scenario_request_load_state(buffer *list, int version);
 
 void scenario_request_load_state_old_version(buffer *list, requests_old_state_sections section);
 
+/** Brutus III (M8) : demandes de la ville active, pour le bloc Versus (format de la version courante). */
+void scenario_request_brutus_ecrire(buffer *b);
+int scenario_request_brutus_lire(buffer *b);
+unsigned int scenario_request_brutus_taille(void);
+/** Les demandes de la ville 1 deviennent aussi celles de la ville `vers` (passage en Versus). */
+int scenario_request_brutus_copier(int vers);
+void scenario_request_brutus_oublier(int ville);
+/** Triche 104 (tests) : César demande 100 deniers à la ville active, tout de suite. */
+int scenario_request_brutus_triche(void);
+
 #endif // SCENARIO_REQUEST_H

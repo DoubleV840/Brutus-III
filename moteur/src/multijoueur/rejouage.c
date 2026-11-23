@@ -1,5 +1,8 @@
 // Brutus III : mode rejouage sans affichage (voir rejouage.h)
 #include "multijoueur/rejouage.h"
+#include "city/ratings.h"
+#include "graphics/screenshot.h"
+#include "scenario/request.h"
 #include "multijoueur/versus.h"
 
 #include "building/building.h"
@@ -21,6 +24,7 @@
 #include "multijoueur/rejouage_interface.h"
 #include "multijoueur/simulation.h"
 #include "game/game.h"
+#include "graphics/window.h"
 #include "window/city.h"
 
 #include <stdio.h>
@@ -54,6 +58,7 @@ static struct {
     const char *detail;
     int multijoueur;
     int interface_test;
+    int capture; // M8 : à la fin, image de toute la ville et de la mini-carte (dossier des captures)
     long ticks_par_image;
     long resync_au_tick[64];
     int nb_resync;
@@ -105,6 +110,8 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
             options.detail = argv[++i];
         } else if (strcmp(a, "--multijoueur") == 0) {
             options.multijoueur = 1;
+        } else if (strcmp(a, "--capture") == 0) {
+            options.capture = 1;
         } else if (strcmp(a, "--interface-test") == 0) {
             options.multijoueur = 1;
             options.interface_test = 1;
@@ -486,10 +493,34 @@ static int rejouer(void)
                 a_elle++;
             }
         }
-        printf("Brutus III : ville %d : population %d, trésor %d, %d bâtiments\n", v + 1, city_population(),
-            city_finance_treasury(), a_elle);
+        int demandes = 0;
+        int servies = 0;
+        for (unsigned int i = 0; i < scenario_request_count_total(); i++) {
+            const scenario_request *r = scenario_request_get((int) i);
+            if (r && r->resource && r->visible) {
+                demandes++;
+            }
+            if (r && r->resource && (r->state == REQUEST_STATE_DISPATCHED || r->state == REQUEST_STATE_DISPATCHED_LATE ||
+                r->state == REQUEST_STATE_RECEIVED)) {
+                servies++;
+            }
+        }
+        printf("Brutus III : ville %d : population %d, trésor %d, %d bâtiments, faveur %d, "
+            "demandes de César : %d en cours, %d servies\n",
+            v + 1, city_population(), city_finance_treasury(), a_elle, city_rating_favor(), demandes, servies);
     }
     brutus_ville_activer(0);
+
+    if (options.capture) {
+        // Vue de la ville du joueur local (ville 1) : les bâtiments de l'autre ville ont sa teinte
+        // Les messages en attente s'ouvrent au premier dessin de la ville : on les referme.
+        for (int essai = 0; essai < 50 && (essai == 0 || window_get_id() != WINDOW_CITY); essai++) {
+            window_city_show();
+            window_draw(1);
+        }
+        graphics_save_screenshot(SCREENSHOT_FULL_CITY);
+        graphics_save_screenshot(SCREENSHOT_MINIMAP);
+    }
 
     if (options.sauvegarde_finale && !game_file_write_saved_game(options.sauvegarde_finale)) {
         fprintf(stderr, "Brutus III : impossible d'écrire %s\n", options.sauvegarde_finale);

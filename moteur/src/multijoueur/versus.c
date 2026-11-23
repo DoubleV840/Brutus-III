@@ -4,15 +4,18 @@
 #include "building/building.h"
 #include "city/data.h"
 #include "city/data_private.h"
+#include "city/message.h"
 #include "core/log.h"
 #include "figure/figure.h"
 #include "multijoueur/empreinte.h"
 #include "multijoueur/simulation.h"
+#include "scenario/request.h"
+#include "widget/minimap.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#define VERSION_BLOC 1
+#define VERSION_BLOC 3 // 2 : ville de chaque message ; 3 : demandes de César de chaque ville
 #define TAILLE_VILLE_MAX 65536
 
 static const char MARQUE[4] = { 'B', 'R', '3', 'V' };
@@ -21,12 +24,13 @@ static struct {
     int villes;
     int active;
     int vue;
+    int commune; // vrai entre deux passes de ville : ce qui arrive concerne toutes les villes
     struct {
         int lu;
         uint8_t *octets;
         uint32_t taille;
     } bloc;
-} etat = { 1, 0, 0, { 0, 0, 0 } };
+} etat = { 1, 0, 0, 0, { 0, 0, 0 } };
 
 // ------------------------------------------------------------------ villes
 
@@ -51,7 +55,19 @@ void brutus_ville_activer(int ville)
         ville = 0;
     }
     etat.active = ville;
+    etat.commune = 0;
     brutus_ville_courante = &brutus_villes_donnees[ville];
+}
+
+void brutus_ville_activer_commune(void)
+{
+    brutus_ville_activer(0);
+    etat.commune = 1;
+}
+
+int brutus_versus_ville_concernee(void)
+{
+    return etat.villes > 1 && !etat.commune ? etat.active : -1;
 }
 
 int brutus_ville_vue(void)
@@ -68,11 +84,12 @@ void brutus_ville_vue_changer(int ville)
     if (!brutus_simulation_en_cours()) {
         brutus_ville_activer(ville);
     }
+    widget_minimap_invalidate(); // les couleurs des propriétaires changent
 }
 
 void brutus_versus_entrer_simulation(void)
 {
-    brutus_ville_activer(0);
+    brutus_ville_activer_commune();
 }
 
 void brutus_versus_sortir_simulation(void)
@@ -97,8 +114,20 @@ int brutus_versus_ignorer(int proprietaire)
 
 uint32_t brutus_versus_couleur(int ville)
 {
-    static const uint32_t couleurs[BRUTUS_VILLES_MAX] = { 0xff3399ff, 0xffff6633 };
+    static const uint32_t couleurs[BRUTUS_VILLES_MAX] = { 0xff3399ff, 0xffdd2222 };
     return ville >= 0 && ville < BRUTUS_VILLES_MAX ? couleurs[ville] : 0xffffffff;
+}
+
+int brutus_versus_a_autre_ville(int proprietaire)
+{
+    return etat.villes > 1 && proprietaire != etat.vue;
+}
+
+uint32_t brutus_versus_teinte(int ville)
+{
+    // Masque multiplicatif, assez clair pour garder le dessin lisible
+    static const uint32_t teintes[BRUTUS_VILLES_MAX] = { 0xff8cc0ff, 0xffff9c8c };
+    return ville >= 0 && ville < BRUTUS_VILLES_MAX ? teintes[ville] : 0xffffffff;
 }
 
 static void remettre_une_ville(void)
@@ -107,6 +136,7 @@ static void remettre_une_ville(void)
     etat.vue = 0;
     brutus_ville_activer(0);
     memset(&brutus_villes_donnees[1], 0, sizeof(brutus_villes_donnees[1]));
+    scenario_request_brutus_oublier(1);
 }
 
 int brutus_versus_activer(void)
@@ -122,6 +152,7 @@ int brutus_versus_activer(void)
     city_data_init();
     city_data_init_scenario();
     brutus_villes_donnees[1].map = brutus_villes_donnees[0].map;
+    scenario_request_brutus_copier(1); // mêmes demandes de César, mais chacune les siennes
     brutus_ville_activer(avant);
     log_info("Brutus III (M8) : partie en Versus, deux villes", 0, 0);
     return 1;
@@ -147,8 +178,15 @@ static uint32_t composer(uint8_t **sortie)
 {
     unsigned int nb_batiments = (unsigned int) building_count();
     unsigned int nb_figures = figure_count();
-    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures;
+    unsigned int nb_messages = (unsigned int) city_message_brutus_cases();
+    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures + 4 + nb_messages;
     taille += (uint32_t) (etat.villes - 1) * (4 + TAILLE_VILLE_MAX);
+    int active_avant = etat.active;
+    for (int v = 1; v < etat.villes; v++) {
+        brutus_ville_activer(v);
+        taille += scenario_request_brutus_taille();
+    }
+    brutus_ville_activer(active_avant);
     uint8_t *d = calloc(1, taille);
     if (!d) {
         *sortie = 0;
@@ -167,6 +205,11 @@ static uint32_t composer(uint8_t **sortie)
     for (unsigned int i = 0; i < nb_figures; i++) {
         d[p++] = figure_get(i)->brutus_proprietaire;
     }
+    ecrire_u32(d + p, nb_messages);
+    p += 4;
+    for (unsigned int i = 0; i < nb_messages; i++) {
+        d[p++] = (uint8_t) (city_message_brutus_ville_case((int) i) + 1); // 0 : toutes les villes
+    }
     int avant = etat.active;
     for (int v = 1; v < etat.villes; v++) {
         buffer b;
@@ -175,6 +218,9 @@ static uint32_t composer(uint8_t **sortie)
         city_data_brutus_ecrire(&b);
         ecrire_u32(d + p, (uint32_t) b.index);
         p += 4 + (uint32_t) b.index;
+        buffer_init(&b, d + p, scenario_request_brutus_taille());
+        scenario_request_brutus_ecrire(&b);
+        p += (uint32_t) b.index;
     }
     brutus_ville_activer(avant);
     *sortie = d;
@@ -267,7 +313,8 @@ void brutus_versus_appliquer_lu(void)
     const uint8_t *d = etat.bloc.octets;
     uint32_t taille = etat.bloc.taille;
     uint32_t p = 0;
-    int ok = taille >= 2 && d[0] == VERSION_BLOC && d[1] >= 1 && d[1] <= BRUTUS_VILLES_MAX;
+    int version = taille >= 1 ? d[0] : 0;
+    int ok = taille >= 2 && version >= 1 && version <= VERSION_BLOC && d[1] >= 1 && d[1] <= BRUTUS_VILLES_MAX;
     int villes = ok ? d[1] : 1;
     p = 2;
     unsigned int nb_batiments = 0;
@@ -295,6 +342,16 @@ void brutus_versus_appliquer_lu(void)
         }
         p += nb_figures;
     }
+    if (ok && version >= 2) {
+        ok = p + 4 <= taille;
+        unsigned int nb_messages = ok ? lire_u32(d + p) : 0;
+        p += 4;
+        ok = ok && p + nb_messages <= taille && nb_messages == (unsigned int) city_message_brutus_cases();
+        for (unsigned int i = 0; ok && i < nb_messages; i++) {
+            city_message_brutus_ville_case_definir((int) i, (int) d[p + i] - 1);
+        }
+        p += nb_messages;
+    }
     if (!ok) {
         log_error("Brutus III (M8) : bloc Versus illisible, partie chargée avec une seule ville", 0, 0);
         oublier_bloc();
@@ -320,6 +377,13 @@ void brutus_versus_appliquer_lu(void)
         city_data_brutus_lire(&b);
         brutus_villes_donnees[v].map = brutus_villes_donnees[0].map;
         p += t;
+        if (version >= 3) {
+            buffer_init(&b, (uint8_t *) d + p, taille - p);
+            ok = scenario_request_brutus_lire(&b) && !b.overflow;
+            p += (uint32_t) b.index;
+        } else {
+            scenario_request_brutus_copier(v); // ancien bloc : les demandes de la ville 1
+        }
     }
     brutus_ville_activer(0);
     oublier_bloc();
@@ -383,7 +447,7 @@ void brutus_versus_touche(void)
     brutus_ville_vue_changer(ville);
     brutus_joueur_local_definir(ville);
     char ligne[120];
-    snprintf(ligne, sizeof(ligne), "Tu joues maintenant pour la ville %d (%s).", ville + 1, ville ? "orange" : "bleue");
+    snprintf(ligne, sizeof(ligne), "Tu joues maintenant pour la ville %d (%s).", ville + 1, ville ? "rouge" : "bleue");
     encoding_from_utf8(ligne, texte, sizeof(texte));
     city_warning_show_custom(texte, NEW_WARNING_SLOT);
 }

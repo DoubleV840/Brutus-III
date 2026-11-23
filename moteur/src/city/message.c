@@ -14,6 +14,7 @@
 #include "graphics/window.h"
 #include "multijoueur/commande.h" // Brutus III
 #include "multijoueur/reseau.h" // Brutus III
+#include "multijoueur/versus.h" // Brutus III (M8)
 #include "scenario/request.h"
 #include "sound/effect.h"
 #include "window/message_dialog.h"
@@ -236,6 +237,7 @@ void city_message_post(int use_popup, int message_type, int param1, int param2)
     msg->param1 = param1;
     msg->param2 = param2;
     msg->sequence = ++data.next_message_sequence;
+    msg->brutus_ville = brutus_versus_ville_concernee(); // Brutus III (M8)
 
     int text_id = city_message_get_text_id(message_type);
     lang_message_type lang_msg_type = lang_get_message(text_id)->message_type;
@@ -281,7 +283,7 @@ void city_message_brutus_afficher(void)
             continue;
         }
         int id = message_par_sequence(a_afficher.items[n].sequence);
-        if (id < 0) {
+        if (id < 0 || !city_message_brutus_visible(&data.messages[id])) {
             continue;
         }
         city_message *msg = &data.messages[id];
@@ -306,6 +308,37 @@ void city_message_brutus_afficher(void)
             play_sound(text_id);
         }
     }
+}
+
+int city_message_brutus_visible(const city_message *msg)
+{
+    return msg->brutus_ville < 0 || !brutus_versus_actif() || msg->brutus_ville == brutus_ville_vue();
+}
+
+int city_message_brutus_nombre_visible(void)
+{
+    int nb = 0;
+    for (int i = 0; i < data.total_messages; i++) {
+        if (city_message_brutus_visible(&data.messages[i])) {
+            nb++;
+        }
+    }
+    return nb;
+}
+
+int city_message_brutus_cases(void)
+{
+    return MAX_MESSAGES;
+}
+
+int city_message_brutus_ville_case(int i)
+{
+    return data.messages[i].brutus_ville;
+}
+
+void city_message_brutus_ville_case_definir(int i, int ville)
+{
+    data.messages[i].brutus_ville = ville;
 }
 
 int city_message_brutus_marquer_lu(int sequence)
@@ -843,6 +876,7 @@ void city_message_load_state(buffer *messages, buffer *extra, buffer *counts, bu
         msg->sequence = buffer_read_i16(messages);
         msg->is_read = buffer_read_u8(messages);
         msg->month = buffer_read_u8(messages);
+        msg->brutus_ville = -1; // Brutus III (M8) : le bloc Versus le redonne
         update_message_param_if_resource(msg);
         buffer_skip(messages, 2);
     }

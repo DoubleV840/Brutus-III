@@ -14,6 +14,7 @@
 #include "game/time.h"
 #include "map/building.h"
 #include "map/grid.h"
+#include "multijoueur/versus.h"
 
 #define MAX_COVERAGE 96
 #define TOURISM_COOLDOWN 96
@@ -29,6 +30,9 @@ static int provide_culture(int x, int y, void (*callback)(building *))
             int building_id = map_building_at(grid_offset);
             if (building_id) {
                 building *b = building_get(building_id);
+                if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : pas les maisons de l'autre ville
+                    continue;
+                }
                 if (b->house_size && b->house_population > 0) {
                     callback(b);
                     serviced++;
@@ -49,6 +53,9 @@ static void provide_sickness(int x, int y, void (*callback)(building *, int sick
             int building_id = map_building_at(grid_offset);
             if (building_id) {
                 building *b = building_get(building_id);
+                if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : pas les maisons de l'autre ville
+                    continue;
+                }
                 random_generate_next();
                 // 1/16 chance of spreading sickness
                 if (b->house_size && b->house_population > 0 && !(random_short() & 0xf)) {
@@ -70,6 +77,9 @@ static int provide_entertainment(int x, int y, int shows, void (*callback)(build
             int building_id = map_building_at(grid_offset);
             if (building_id) {
                 building *b = building_get(building_id);
+                if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : pas les maisons de l'autre ville
+                    continue;
+                }
                 if (b->house_size && b->house_population > 0) {
                     callback(b, shows);
                     serviced++;
@@ -231,6 +241,9 @@ static int tourist_visit(int x, int y, figure *f, void (*callback)(building *, f
             int building_id = map_building_at(grid_offset);
             if (building_id) {
                 building *b = building_get(building_id);
+                if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : pas les maisons de l'autre ville
+                    continue;
+                }
                 callback(b, f);
             }
         }
@@ -283,6 +296,9 @@ static int provide_service(int x, int y, int *data, void (*callback)(building *,
             int building_id = map_building_at(grid_offset);
             if (building_id) {
                 building *b = building_get(building_id);
+                if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : pas les maisons de l'autre ville
+                    continue;
+                }
                 callback(b, data);
                 if (b->house_size && b->house_population > 0) {
                     serviced++;
@@ -438,6 +454,9 @@ static int provide_market_goods(int market_building_id, int x, int y)
             int building_id = map_building_at(grid_offset);
             if (building_id) {
                 building *b = building_get(building_id);
+                if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : pas les maisons de l'autre ville
+                    continue;
+                }
                 if (b->house_size && b->house_population > 0) {
                     distribute_market_resources(b, market);
                     serviced++;
@@ -461,6 +480,9 @@ static int provide_venus_wine_to_taverns(int market_building_id, int x, int y)
             int building_id = map_building_at(grid_offset);
             if (building_id) {
                 building *b = building_get(building_id);
+                if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : pas les maisons de l'autre ville
+                    continue;
+                }
                 if (b->type == BUILDING_TAVERN) {
                     int amount_wanted = 200 - b->resources[RESOURCE_WINE];
                     if (market->resources[RESOURCE_WINE] > 0 && amount_wanted > 0) {
@@ -492,6 +514,9 @@ static int collect_offerings(int market_building_id, int x, int y)
             int building_id = map_building_at(grid_offset);
             if (building_id) {
                 building *b = building_get(building_id);
+                if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : pas les maisons de l'autre ville
+                    continue;
+                }
                 if (b->house_size && b->house_population > 0) {
                     collect_offerings_from_house(b, market);
                     serviced++;

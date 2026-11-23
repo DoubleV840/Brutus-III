@@ -36,6 +36,17 @@ int brutus_ville_active(void);
 /** Change la ville active (simulation). Sans effet hors Versus (toujours 0). */
 void brutus_ville_activer(int ville);
 
+/**
+ * Fin d'une passe de ville : ville 0 active, et ce qui se fait ensuite est commun à toutes les villes
+ * (événements du scénario, invasions…). Voir brutus_versus_ville_concernee().
+ */
+void brutus_ville_activer_commune(void);
+/**
+ * Ville concernée par ce qui se passe en ce moment (message, avertissement) : la ville active pendant
+ * une passe de ville, un personnage, un bâtiment ou une commande ; -1 si c'est commun (ou hors Versus).
+ */
+int brutus_versus_ville_concernee(void);
+
 /** Ville du joueur local (interface, hors simulation). */
 int brutus_ville_vue(void);
 /** Change la ville vue (touche de test du Versus local : on joue pour l'autre ville). */
@@ -65,6 +76,13 @@ void brutus_versus_touche(void);
 
 /** Couleur d'un propriétaire (affichage). */
 uint32_t brutus_versus_couleur(int ville);
+/**
+ * Affichage (vue de la ville, mini-carte) : vrai si ce bâtiment ou ce personnage est à une autre
+ * ville que celle du joueur local (toujours faux hors Versus).
+ */
+int brutus_versus_a_autre_ville(int proprietaire);
+/** Masque de couleur des bâtiments d'une autre ville dans la vue de la ville (teinte de leur couleur). */
+uint32_t brutus_versus_teinte(int ville);
 
 // ---- sauvegarde, chargement, empreinte (bloc « BR3V » après l'en-tête ; absent avec une seule ville)
 

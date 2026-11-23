@@ -27,19 +27,22 @@
 #include "map/routing_terrain.h"
 #include "map/terrain.h"
 #include "map/tiles.h"
+#include "multijoueur/versus.h"
 #include "scenario/property.h"
 #include "sound/effect.h"
 
 static struct {
     int fire_spread_direction;
-    int obstruction_message_displayed;
+    int obstruction_message_displayed[BRUTUS_VILLES_MAX]; // Brutus III (M8) : une fois par ville
 } data;
 
 // Brutus III : hors sauvegarde : repart de zéro à chaque chargement (hôte qui recharge = invité)
 void building_maintenance_brutus_partie_chargee(void)
 {
     data.fire_spread_direction = 0;
-    data.obstruction_message_displayed = 0;
+    for (int v = 0; v < BRUTUS_VILLES_MAX; v++) {
+        data.obstruction_message_displayed[v] = 0;
+    }
 }
 
 void building_maintenance_update_fire_direction(void)
@@ -189,6 +192,9 @@ void building_maintenance_check_fire_collapse(void)
         if (b->state != BUILDING_STATE_IN_USE || b->fire_proof || b->state == BUILDING_STATE_RUBBLE) {
             continue;
         }
+        if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : appelée une fois par ville
+            continue;
+        }
         if (b->type == BUILDING_HIPPODROME && b->prev_part_building_id) {
             continue;
         }
@@ -250,6 +256,9 @@ void building_maintenance_check_rome_access(void)
     for (int i = 1; i < building_count(); i++) {
         building *b = building_get(i);
         if (b->state != BUILDING_STATE_IN_USE) {
+            continue;
+        }
+        if (brutus_versus_ignorer(b->brutus_proprietaire)) { // Brutus III (M8) : appelée une fois par ville
             continue;
         }
         int road_grid_offset = -1;
@@ -342,8 +351,8 @@ void building_maintenance_check_rome_access(void)
         if (city_population() <= 0) {
             return;
         }
-        if (!data.obstruction_message_displayed) {
-            data.obstruction_message_displayed = 1;
+        if (!data.obstruction_message_displayed[brutus_ville_active()]) {
+            data.obstruction_message_displayed[brutus_ville_active()] = 1;
             city_message_post(1, MESSAGE_ROAD_TO_ROME_WARNING, 0, 0);
             game_state_pause();
             return;
@@ -375,6 +384,6 @@ void building_maintenance_check_rome_access(void)
         city_view_go_to_grid_offset(problem_grid_offset);
         game_state_pause();
     } else {
-        data.obstruction_message_displayed = 0;
+        data.obstruction_message_displayed[brutus_ville_active()] = 0;
     }
 }

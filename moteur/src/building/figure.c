@@ -2370,5 +2370,5 @@ void building_figure_generate(void)
             }
         }
     }
-    brutus_ville_activer(0); // Brutus III (M8)
+    brutus_ville_activer_commune(); // Brutus III (M8)
 }

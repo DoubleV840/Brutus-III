@@ -41,6 +41,7 @@ void game_cheat_reset_markets_filled(void);
 #define BRUTUS_TRICHE_VICTOIRE 101
 #define BRUTUS_TRICHE_INVASION 102
 #define BRUTUS_TRICHE_VERSUS 103 // M8 : la partie passe en Versus (deux villes)
+#define BRUTUS_TRICHE_DEMANDE 104 // M8 (test) : César demande 100 deniers à la ville du joueur
 int game_cheat_brutus_executer(int numero, const int32_t *args);
 #define BRUTUS_TRICHE_EFFETS 4
 int game_cheat_brutus_effet(int numero);

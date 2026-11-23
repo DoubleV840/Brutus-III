@@ -74,7 +74,7 @@
             brutus_ville_activer(ville_); \
             appel; \
         } \
-        brutus_ville_activer(0); \
+        brutus_ville_activer_commune(); \
     } while (0)
 
 static void advance_year(void)
@@ -101,7 +101,7 @@ static void advance_month(void)
     PAR_VILLE(city_resource_consume_food());
     scenario_distant_battle_process();
     scenario_invasion_process();
-    scenario_request_process();
+    PAR_VILLE(scenario_request_process()); // Brutus III (M8) : chaque ville a ses demandes
     scenario_demand_change_process();
     scenario_price_change_process();
     PAR_VILLE(city_victory_update_months_to_govern());
@@ -179,7 +179,7 @@ static void advance_tick(void)
         case 17: PAR_VILLE(city_resource_calculate_food_stocks_and_supply_wheat()); break;
         case 19: building_dock_update_open_water_access(); break;
         case 20: PAR_VILLE(building_industry_update_production(1)); break;
-        case 21: building_maintenance_check_rome_access(); break;
+        case 21: PAR_VILLE(building_maintenance_check_rome_access()); break;
         case 22: PAR_VILLE(house_population_update_room()); break;
         case 23: PAR_VILLE(house_population_update_migration()); break;
         case 24: PAR_VILLE(house_population_evict_overcrowded()); break;
@@ -200,7 +200,7 @@ static void advance_tick(void)
         case 40: building_update_state(); break;
         case 42: PAR_VILLE(city_finance_spawn_tourist()); break;
         case 43: building_maintenance_update_burning_ruins(); break;
-        case 44: building_maintenance_check_fire_collapse(); break;
+        case 44: PAR_VILLE(building_maintenance_check_fire_collapse()); break;
         case 45: PAR_VILLE(figure_generate_criminals()); break;
         case 46: PAR_VILLE(building_industry_update_production(0)); break;
         case 47: PAR_VILLE(city_games_decrement_duration()); break;

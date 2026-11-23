@@ -305,9 +305,9 @@ static void initialize_saved_game(void)
     figure_route_clean();
     map_road_network_update();
     map_routing_update_land();
-    building_maintenance_check_rome_access();
     for (int v = 0; v < brutus_versus_villes(); v++) { // Brutus III (M8) : chaque ville
         brutus_ville_activer(v);
+        building_maintenance_check_rome_access();
         building_granaries_calculate_stocks();
     }
     brutus_ville_activer(brutus_ville_vue());
@@ -325,7 +325,11 @@ static void initialize_saved_game(void)
 
     image_load_climate(scenario_property_climate(), 0, 0, 0);
     image_load_enemy(scenario_property_enemy());
-    city_military_determine_distant_battle_city();
+    for (int v = 0; v < brutus_versus_villes(); v++) { // Brutus III (M8) : chaque ville
+        brutus_ville_activer(v);
+        city_military_determine_distant_battle_city();
+    }
+    brutus_ville_activer(brutus_ville_vue());
 
     migrate_altar_rotations(); // this has to go after all image loading since it migrates data from image_ids
 

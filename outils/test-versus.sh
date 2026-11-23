@@ -60,7 +60,9 @@ echo "   ville 1 autour de $CENTRE0, ville 2 autour de $CENTRE1"
   grep '^#' "$SORTIE/bot-0.txt"
   echo "1 0 triche 103 0 0 0 0"
   # Les commandes du bot qui tombent avant le tick 2 attendent un peu (la partie doit être en Versus).
-  grep -hv '^#' "$SORTIE/bot-0.txt" "$SORTIE/bot-1.txt" | awk '{ if ($1 < 2) $1 = 2; print }' | sort -s -n -k1,1
+  # Tick 100 : César demande 100 deniers à la ville 1 seulement (triche 104 du joueur 0).
+  { echo "100 0 triche 104 0 0 0 0"; grep -hv '^#' "$SORTIE/bot-0.txt" "$SORTIE/bot-1.txt"; } |
+    awk '{ if ($1 < 2) $1 = 2; print }' | sort -s -n -k1,1
 } > "$SORTIE/journal.txt"
 echo "   $(grep -vc '^#' "$SORTIE/journal.txt") commandes"
 
@@ -91,6 +93,15 @@ for v in 1 2; do
   fi
 done
 echo "OK : les deux villes ont leurs bâtiments, leurs habitants et leur trésor."
+
+# Demandes de César par ville : celle de la triche 104 (joueur 0) ne concerne que la ville 1.
+d1=$(grep "Brutus III : ville 1 :" "$SORTIE/rejouage-1.log" | sed -n 's/.*César : \([0-9]*\) en cours.*/\1/p')
+d2=$(grep "Brutus III : ville 2 :" "$SORTIE/rejouage-1.log" | sed -n 's/.*César : \([0-9]*\) en cours.*/\1/p')
+if [ "${d1:-0}" -lt 1 ] || [ "${d2:-0}" -ne 0 ]; then
+  echo "ÉCHEC : demandes de César mélangées (ville 1 : ${d1:-?} en cours, ville 2 : ${d2:-?})."
+  exit 1
+fi
+echo "OK : la demande de César faite à la ville 1 ne concerne pas la ville 2."
 
 P=$(( TICKS / 2 / TOUS_LES * TOUS_LES ))
 echo "== Sauvegarde au tick $P (Versus compris), puis rechargement par un lancement neuf"

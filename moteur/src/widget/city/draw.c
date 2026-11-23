@@ -52,6 +52,7 @@
 #include "widget/city/figure.h"
 #include "widget/city/highway.h"
 #include "widget/city/overlay/overlay.h"
+#include "multijoueur/versus.h" // Brutus III (M8)
 
 #define OFFSET(x,y) (x + GRID_SIZE * y)
 
@@ -345,6 +346,12 @@ color_t city_draw_get_color_mask(int grid_offset, int is_top)
             config_get(CONFIG_UI_CV_CURSOR_SHADOW) && !scroll_in_progress()) {
             color_mask = COLOR_MASK_HOVER;
         }
+    }
+
+    // Brutus III (M8) : en Versus, les bâtiments de l'autre ville prennent sa couleur
+    if (building_id && brutus_versus_a_autre_ville(building_get(building_id)->brutus_proprietaire)) {
+        color_t teinte = brutus_versus_teinte(building_get(building_id)->brutus_proprietaire);
+        color_mask = color_mask != COLOR_MASK_NONE ? COLOR_MIX_COLORS(teinte, color_mask) : teinte;
     }
 
     if (map_property_is_outskirts(grid_offset)) {

@@ -148,6 +148,9 @@ static void select_messages(void)
     data.filtered_message_list = (int *) malloc(sizeof(int) * city_message_count());
     for (int i = 0; i < city_message_count(); i++) {
         const city_message *msg = city_message_get(i);
+        if (!city_message_brutus_visible(msg)) { // Brutus III (M8) : pas les messages de l'autre ville
+            continue;
+        }
         if (data.type_displayed == COMMON_MESSAGES_ONLY && (msg->message_type == MESSAGE_CUSTOM_MESSAGE)) {
             continue;
         }
@@ -406,7 +409,7 @@ static void button_delete_all_common(const generic_button *button)
     // Brutus III : une commande par message supprimé
     for (int id = 0; id < city_message_count(); id++) {
         const city_message *msg = city_message_get(id);
-        if (msg->message_type && msg->message_type != MESSAGE_CUSTOM_MESSAGE) {
+        if (msg->message_type && msg->message_type != MESSAGE_CUSTOM_MESSAGE && city_message_brutus_visible(msg)) {
             brutus_commande_1(BRUTUS_CMD_MESSAGE_SUPPRIMER, msg->sequence);
         }
     }
@@ -417,7 +420,7 @@ static void button_delete_all_read(const generic_button *button)
     // Brutus III : une commande par message supprimé
     for (int id = 0; id < city_message_count(); id++) {
         const city_message *msg = city_message_get(id);
-        if (msg->message_type && msg->is_read) {
+        if (msg->message_type && msg->is_read && city_message_brutus_visible(msg)) {
             brutus_commande_1(BRUTUS_CMD_MESSAGE_SUPPRIMER, msg->sequence);
         }
     }

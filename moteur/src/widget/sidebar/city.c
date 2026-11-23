@@ -132,7 +132,7 @@ static void draw_sidebar_remainder(int x_offset, int is_collapsed)
 
 static void draw_number_of_messages(int x_offset)
 {
-    int messages = city_message_count();
+    int messages = city_message_brutus_nombre_visible(); // Brutus III (M8) : ceux de notre ville
     int show_messages = game_campaign_is_original() || messages > 0 || scenario_intro_message();
     buttons_build_expanded[13].enabled = show_messages;
     buttons_build_expanded[14].enabled = city_message_problem_area_count();

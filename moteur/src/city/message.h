@@ -202,6 +202,7 @@ typedef struct {
     int param1;
     int param2;
     int is_read;
+    int brutus_ville; // Brutus III (M8) : ville concernée (Versus), -1 : toutes ; sauvée à part (versus.c)
 } city_message;
 
 void city_message_init_scenario(void);
@@ -271,6 +272,15 @@ int city_message_brutus_supprimer(int sequence);
 
 /** Brutus III : change à chaque ajout, lecture ou suppression de message. */
 unsigned int city_message_brutus_version(void);
+
+/** Brutus III (M8) : le message concerne-t-il la ville du joueur local ? (toujours vrai hors Versus) */
+int city_message_brutus_visible(const city_message *msg);
+/** Nombre de messages visibles par le joueur local. */
+int city_message_brutus_nombre_visible(void);
+/** Ville de chaque case du tableau des messages (sauvegarde Versus) : MAX_MESSAGES cases. */
+int city_message_brutus_cases(void);
+int city_message_brutus_ville_case(int i);
+void city_message_brutus_ville_case_definir(int i, int ville);
 
 /** Brutus III : partie chargée (messages à afficher et file d'attente vidés). */
 void city_message_brutus_partie_chargee(void);
