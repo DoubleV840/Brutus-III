@@ -906,6 +906,9 @@ static scenario_version_t save_version_to_scenario_version(savegame_version_t sa
 
 static void savegame_load_from_state(savegame_state *state, savegame_version_t version)
 {
+    // Brutus III (M12) : les données de ville du fichier sont celles de la ville 0 (city_data = ville active).
+    // Hors simulation, la ville active est la ville vue : en Versus réseau, l'invité voit la ville 1.
+    brutus_ville_activer(0);
     scenario_version_t scenario_version = save_version_to_scenario_version(version, state->scenario_version);
     scenario_settings_load_state(state->scenario_campaign_mission,
         state->scenario_settings,
@@ -1270,6 +1273,7 @@ uint64_t game_file_io_brutus_empreinte_detail(FILE *detail, FILE *brut)
     h = brutus_versus_empreinte(h); // Brutus III (M8) : inchangée avec une seule ville
     if (detail) {
         fprintf(detail, "entete %016llx\n", (unsigned long long) brutus_entete_empreinte(BRUTUS_FNV_DEPART));
+        fprintf(detail, "versus %016llx\n", (unsigned long long) brutus_versus_empreinte(BRUTUS_FNV_DEPART)); // M12
     }
     clear_savegame_pieces();
     return h;

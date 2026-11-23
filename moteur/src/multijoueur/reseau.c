@@ -3,6 +3,7 @@
 
 #include "core/log.h"
 #include "game/file.h"
+#include "game/file_io.h"
 #include "game/settings.h"
 #include "game/state.h"
 #include "graphics/window.h"
@@ -10,6 +11,8 @@
 #include "multijoueur/empreinte.h"
 #include "multijoueur/menu.h"
 #include "multijoueur/simulation.h"
+#include "multijoueur/versus.h"
+#include "city/view.h"
 #include "window/city.h"
 
 #include <stdio.h>
@@ -207,6 +210,7 @@ static void appliquer_pause_partagee(void)
 
 BRUTUS_RESEAU_EXPORT int brutus_reseau_avancer(int n)
 {
+    brutus_menu_versus_lancer(); // M12 : partie créée en Versus, commandes du passage en Versus (hôte)
     int faits = brutus_avancer_ticks(n);
     appliquer_pause_partagee();
     return faits;
@@ -221,11 +225,30 @@ BRUTUS_RESEAU_EXPORT uint32_t brutus_reseau_empreinte(void)
 {
     // M6b : le détail par morceau est écrit à côté (lu par JS, gardé pour diagnostiquer une divergence).
     FILE *detail = fopen(BRUTUS_RESEAU_DETAIL, "w");
+    // M12 : calculée comme dans la simulation (ville 0 active), pas sur la ville vue : en Versus réseau,
+    // chaque joueur voit sa ville, et city_data désigne la ville active.
+    brutus_simulation_debut();
     etat.derniere_empreinte = brutus_empreinte_partie_detail(detail);
+    brutus_simulation_fin();
     if (detail) {
         fclose(detail);
     }
     return (uint32_t) (etat.derniere_empreinte & 0xffffffffu);
+}
+
+BRUTUS_RESEAU_EXPORT int brutus_reseau_test_brut(const char *chemin)
+{
+    // Tests (M12) : contenu brut de l'état (numéro de morceau, taille, octets), pour comparer deux joueurs
+    // octet par octet après une divergence.
+    FILE *f = fopen(chemin, "wb");
+    if (!f) {
+        return 0;
+    }
+    brutus_simulation_debut();
+    game_file_io_brutus_empreinte_detail(0, f);
+    brutus_simulation_fin();
+    fclose(f);
+    return 1;
 }
 
 BRUTUS_RESEAU_EXPORT uint32_t brutus_reseau_empreinte_haute(void)
@@ -244,12 +267,23 @@ BRUTUS_RESEAU_EXPORT int brutus_reseau_sauvegarder(const char *chemin)
 
 BRUTUS_RESEAU_EXPORT int brutus_reseau_charger(const char *chemin)
 {
+    // M12 : chacun garde sa vue d'une resynchronisation à l'autre (la sauvegarde a celle de l'hôte) ;
+    // à l'arrivée dans une partie Versus, la vue part de l'entrée de sa ville.
+    int avait_partie = brutus_reseau_jeu_en_cours();
+    int camera_x, camera_y;
+    city_view_get_camera(&camera_x, &camera_y);
     if (!brutus_resynchroniser(chemin)) {
         return 0;
     }
+
     appliquer_pause_partagee();
     etat.ville_quittee = 0;
     window_city_show();
+    if (avait_partie) {
+        city_view_set_camera(camera_x, camera_y);
+    } else {
+        brutus_versus_aller_chez_moi();
+    }
     return 1;
 }
 

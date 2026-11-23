@@ -572,6 +572,8 @@
       dernierePresence: 0,
       presenceEnvoyee: "",
       signalesNonLus: 0,
+      info: "", // M12 : mode, carte et options de la partie (donnés par l'hôte, transmis par le relais)
+      pseudo: "", // M12 : pseudo du joueur local
     };
 
     function villeQuittee() {
@@ -675,6 +677,7 @@
         avis: t < s.avisJusqua ? s.avis : "",
         chat: s.chat.slice(),
         latences: s.latences,
+        info: s.info,
       };
     }
 
@@ -683,7 +686,7 @@
         return;
       }
       var e = etat();
-      var cle = JSON.stringify([e.phase, e.texte, e.code, e.joueur, e.salon, e.pause, e.alerte, e.avis, s.chatId, e.latences]);
+      var cle = JSON.stringify([e.phase, e.texte, e.code, e.joueur, e.salon, e.pause, e.alerte, e.avis, s.chatId, e.latences, e.info]);
       if (cle !== s.derniereNotif) {
         s.derniereNotif = cle;
         o.surChangement(e);
@@ -800,26 +803,36 @@
     }
 
     function enregistrerSession() {
-      stockage.ecrire({ code: s.code, jeton: s.jeton, joueur: s.joueur });
+      stockage.ecrire({ code: s.code, jeton: s.jeton, joueur: s.joueur, pseudo: s.pseudo });
+    }
+
+    // M12 : pseudo du joueur local, envoyé au relais à chaque connexion (il le donne à tous dans « joueurs »).
+    function paramPseudo() {
+      return s.pseudo ? "&pseudo=" + encodeURIComponent(s.pseudo) : "";
     }
 
     function reconnecter(compter) {
       if (compter) {
         stats.reconnexions++;
       }
-      ouvrir("/rejoindre/" + encodeURIComponent(s.code) + "?version=" + VERSION_PROTOCOLE + "&jeton=" + encodeURIComponent(s.jeton));
+      ouvrir("/rejoindre/" + encodeURIComponent(s.code) + "?version=" + VERSION_PROTOCOLE + "&jeton=" + encodeURIComponent(s.jeton) + paramPseudo());
     }
 
-    function creer(joueurs) {
+    // info (M12) : ligne d'information de la partie (mode, carte, options), que le relais donne à tous.
+    function creer(joueurs, info, pseudo) {
       s.rechargee = false;
       s.erreur = null;
-      ouvrir("/creer?version=" + VERSION_PROTOCOLE + "&joueurs=" + (joueurs || o.joueurs));
+      s.info = "";
+      s.pseudo = pseudo ? String(pseudo).slice(0, 40) : "";
+      ouvrir("/creer?version=" + VERSION_PROTOCOLE + "&joueurs=" + (joueurs || o.joueurs) +
+        (info ? "&info=" + encodeURIComponent(String(info).slice(0, 200)) : "") + paramPseudo());
     }
 
-    function rejoindre(code) {
+    function rejoindre(code, pseudo) {
       s.rechargee = false;
       s.erreur = null;
-      ouvrir("/rejoindre/" + encodeURIComponent(String(code).trim().toUpperCase()) + "?version=" + VERSION_PROTOCOLE);
+      s.pseudo = pseudo ? String(pseudo).slice(0, 40) : "";
+      ouvrir("/rejoindre/" + encodeURIComponent(String(code).trim().toUpperCase()) + "?version=" + VERSION_PROTOCOLE + paramPseudo());
     }
 
     // Reprend la session gardée dans le stockage (après rechargement de la page).
@@ -831,6 +844,7 @@
       s.code = g.code;
       s.jeton = g.jeton;
       s.joueur = g.joueur;
+      s.pseudo = typeof g.pseudo === "string" ? g.pseudo : "";
       s.session = true;
       s.rechargee = true;
       s.erreur = null;
@@ -846,6 +860,7 @@
       s.jeton = null;
       s.joueur = -1;
       s.salon = [];
+      s.info = "";
     }
 
     // ------------------------------------------------------------ messages de session (JSON)
@@ -903,6 +918,7 @@
       s.joueur = m.joueur;
       s.jeton = m.jeton;
       s.joueursMax = m.joueursMax;
+      s.info = typeof m.info === "string" ? m.info : "";
       s.salon = m.joueurs || [];
       s.session = true;
       s.connecte = true;
@@ -1227,8 +1243,11 @@
       var r = [];
       for (var i = 0; i < lignes.length; i++) {
         var p = lignes[i].split(" ");
-        if (p[0] === "morceau" && p.length >= 6) {
-          r.push(p[1] + "/" + p[3] + "=" + p[5]);
+        // « morceau N champ C taille T empreinte » (M12 : l'empreinte, et non la taille, est la 7e colonne)
+        if (p[0] === "morceau" && p.length >= 7) {
+          r.push(p[1] + "/" + p[3] + "=" + p[6].slice(0, 8));
+        } else if (p[0] && p[0] !== "#" && p.length >= 2) {
+          r.push(p[0] + "=" + p[p.length - 1].slice(0, 8));
         }
       }
       return r.join(" ");

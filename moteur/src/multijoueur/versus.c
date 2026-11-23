@@ -2,6 +2,7 @@
 #include "multijoueur/versus.h"
 
 #include "building/building.h"
+#include "building/menu.h"
 #include "city/data.h"
 #include "city/data_private.h"
 #include "city/message.h"
@@ -9,7 +10,9 @@
 #include "figure/figure.h"
 #include "multijoueur/carte_versus.h"
 #include "multijoueur/combat_versus.h"
+#include "multijoueur/commande.h"
 #include "multijoueur/empreinte.h"
+#include "multijoueur/recap_versus.h"
 #include "multijoueur/simulation.h"
 #include "multijoueur/victoire_versus.h"
 #include "scenario/request.h"
@@ -18,8 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define VERSION_BLOC 6 // 2 : ville de chaque message ; 3 : demandes de César ; 4 : points de la carte ; 5 : combat ;
-                       // 6 : durée et fin de la partie (M11)
+#define VERSION_BLOC 7 // 2 : ville de chaque message ; 3 : demandes de César ; 4 : points de la carte ; 5 : combat ;
+                       // 6 : durée et fin de la partie (M11) ; 7 : récap de la partie (M12)
 #define TAILLE_VILLE_MAX 65536
 
 static const char MARQUE[4] = { 'B', 'R', '3', 'V' };
@@ -29,12 +32,13 @@ static struct {
     int active;
     int vue;
     int commune; // vrai entre deux passes de ville : ce qui arrive concerne toutes les villes
+    int aller_chez_moi; // M12 : la vue doit partir de l'entrée de la ville du joueur (hors simulation)
     struct {
         int lu;
         uint8_t *octets;
         uint32_t taille;
     } bloc;
-} etat = { 1, 0, 0, 0, { 0, 0, 0 } };
+} etat = { 1, 0, 0, 0, 0, { 0, 0, 0 } };
 
 // ------------------------------------------------------------------ villes
 
@@ -99,6 +103,9 @@ void brutus_versus_entrer_simulation(void)
 void brutus_versus_sortir_simulation(void)
 {
     brutus_ville_activer(etat.vue);
+    if (etat.aller_chez_moi) {
+        brutus_versus_aller_chez_moi();
+    }
 }
 
 int brutus_versus_ville_du_joueur(int joueur)
@@ -138,6 +145,7 @@ static void remettre_une_ville(void)
 {
     brutus_combat_definir_option(1); // M10 : combat activé par défaut au passage en Versus
     brutus_victoire_remettre(); // M11 : durée par défaut, aucune fin
+    brutus_recap_remettre(); // M12 : aucun relevé
     etat.villes = 1;
     etat.vue = 0;
     brutus_ville_activer(0);
@@ -161,6 +169,13 @@ int brutus_versus_activer(void)
     scenario_request_brutus_copier(1); // mêmes demandes de César, mais chacune les siennes
     brutus_ville_activer(avant);
     brutus_carte_versus_appliquer_aux_villes(); // M9 : carte à deux, la ville 2 prend les points du joueur 2
+    brutus_recap_remettre();
+    brutus_recap_relever(0); // M12 : premier relevé du récap, au départ
+    if (brutus_multijoueur_actif()) {
+        // M12 : en réseau, chacun joue sa ville (joueur n = ville n), dès le passage en Versus
+        etat.vue = brutus_versus_ville_du_joueur(brutus_joueur_local());
+        etat.aller_chez_moi = 1;
+    }
     log_info("Brutus III (M8) : partie en Versus, deux villes", 0, 0);
     return 1;
 }
@@ -186,7 +201,8 @@ static uint32_t composer(uint8_t **sortie)
     unsigned int nb_batiments = (unsigned int) building_count();
     unsigned int nb_figures = figure_count();
     unsigned int nb_messages = (unsigned int) city_message_brutus_cases();
-    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures + 4 + nb_messages + BRUTUS_CARTE_VERSUS_TAILLE + 1 + BRUTUS_VICTOIRE_TAILLE;
+    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures + 4 + nb_messages + BRUTUS_CARTE_VERSUS_TAILLE + 1 + BRUTUS_VICTOIRE_TAILLE +
+        4 + brutus_recap_taille();
     taille += (uint32_t) (etat.villes - 1) * (4 + TAILLE_VILLE_MAX);
     int active_avant = etat.active;
     for (int v = 1; v < etat.villes; v++) {
@@ -226,6 +242,9 @@ static uint32_t composer(uint8_t **sortie)
     d[p++] = (uint8_t) brutus_combat_option(); // M10 (version 5) : options du Versus (bit 0 : combat)
     brutus_victoire_ecrire(d + p); // M11 (version 6) : durée, mois écoulés, fin et scores
     p += BRUTUS_VICTOIRE_TAILLE;
+    ecrire_u32(d + p, brutus_recap_taille()); // M12 (version 7) : récap de la partie
+    brutus_recap_ecrire(d + p + 4);
+    p += 4 + brutus_recap_taille();
     int avant = etat.active;
     for (int v = 1; v < etat.villes; v++) {
         buffer b;
@@ -396,6 +415,15 @@ void brutus_versus_appliquer_lu(void)
             p += BRUTUS_VICTOIRE_TAILLE;
         }
     }
+    brutus_recap_remettre(); // avant la version 7 : pas de récap
+    if (ok && version >= 7) {
+        ok = p + 4 <= taille;
+        uint32_t t = ok ? lire_u32(d + p) : 0;
+        p += 4;
+        uint32_t lus = 0;
+        ok = ok && p + t <= taille && brutus_recap_lire(d + p, t, &lus) && lus == t;
+        p += t;
+    }
     if (!ok) {
         log_error("Brutus III (M8) : bloc Versus illisible, partie chargée avec une seule ville", 0, 0);
         oublier_bloc();
@@ -403,7 +431,8 @@ void brutus_versus_appliquer_lu(void)
         return;
     }
     etat.villes = villes;
-    etat.vue = 0;
+    // M12 : en réseau, la ville vue est celle du joueur local (joueur n = ville n)
+    etat.vue = brutus_multijoueur_actif() ? brutus_versus_ville_du_joueur(brutus_joueur_local()) : 0;
     for (int v = 1; v < villes && ok; v++) {
         if (p + 4 > taille) {
             ok = 0;
@@ -432,6 +461,8 @@ void brutus_versus_appliquer_lu(void)
     brutus_ville_activer(0);
     oublier_bloc();
     brutus_carte_versus_appliquer_aux_villes(); // M9 : chaque ville a les points de son joueur
+    // La suite du chargement d'Augustus recalcule des données de ville : ville 0 active, comme chez tous les
+    // joueurs. La ville vue ne devient active qu'après (brutus_versus_apres_chargement).
     building_brutus_reconstruire_listes(); // les listes par type et par ville suivent les propriétaires
     if (!ok) {
         log_error("Brutus III (M8) : données de ville Versus illisibles", 0, 0);
@@ -480,7 +511,8 @@ void brutus_versus_touche(void)
     }
     static uint8_t texte[200];
     if (brutus_multijoueur_actif()) {
-        encoding_from_utf8("Versus en réseau : pas encore (M12).", texte, sizeof(texte));
+        encoding_from_utf8("En réseau, chacun joue sa ville : le Versus se choisit dans le menu Multijoueur.",
+            texte, sizeof(texte));
         city_warning_show_custom(texte, NEW_WARNING_SLOT);
         return;
     }
@@ -506,4 +538,32 @@ void brutus_versus_touche(void)
     snprintf(ligne, sizeof(ligne), "Tu joues maintenant pour la ville %d (%s).", ville + 1, ville ? "rouge" : "bleue");
     encoding_from_utf8(ligne, texte, sizeof(texte));
     city_warning_show_custom(texte, NEW_WARNING_SLOT);
+}
+
+void brutus_versus_apres_chargement(void)
+{
+    if (!brutus_simulation_en_cours()) {
+        brutus_ville_activer(etat.vue);
+        if (etat.vue) {
+            building_menu_update(); // menu de construction de sa ville (interface)
+        }
+    }
+}
+
+void brutus_versus_aller_chez_moi(void)
+{
+    etat.aller_chez_moi = 0;
+    if (etat.villes <= 1 || etat.vue == 0 || brutus_simulation_en_cours()) {
+        return; // ville 1 : la vue de la sauvegarde est déjà la sienne
+    }
+    int avant = etat.active;
+    brutus_ville_activer(etat.vue);
+    city_view_go_to_grid_offset(city_map_entry_point()->grid_offset);
+    brutus_ville_activer(avant);
+    if (window_is(WINDOW_CITY)) {
+        static uint8_t texte[120];
+        encoding_from_utf8(etat.vue == 1 ? "Versus : vous jouez la ville rouge." : "Versus : vous jouez la ville bleue.",
+            texte, sizeof(texte));
+        city_warning_show_custom(texte, NEW_WARNING_SLOT);
+    }
 }

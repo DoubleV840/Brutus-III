@@ -57,6 +57,11 @@ const PROD = args.includes('--constantes-production');
 const TEMPS_REEL = REEL || PROD; // le jeu suit l'horloge réelle (pas de « groupes dès qu'ils sont complets »)
 const EMPREINTE_GROUPES = Number(opt('--empreinte-groupes', PROD ? '50' : '10')); // 10 : une empreinte tous les 50 ticks
 
+// M12 : l'hôte crée la partie en Versus (menu Multijoueur : mode Versus, combat activé, durée DUREE_VERSUS mois) ;
+// chaque joueur joue sa ville ; à la fin, fin de partie et récap identiques chez les deux.
+const VERSUS = args.includes('--versus');
+const DUREE_VERSUS = Number(opt('--duree-versus', String(Math.max(2, Math.floor((TICKS * 0.7) / 800)))));
+
 const LS = require(fileURLToPath(new URL('../web/lockstep.js', import.meta.url)));
 const BrutusModule = require(MODULE);
 const { TYPE } = LS;
@@ -210,7 +215,7 @@ class Relais {
     const etat = [];
     salon.jetons.forEach((jeton, joueur) => {
       if (jeton !== null) {
-        etat.push({ joueur, connecte: connectes.has(joueur) });
+        etat.push({ joueur, connecte: connectes.has(joueur), pseudo: (salon.pseudos || [])[joueur] || '' }); // M12
       }
     });
     return etat;
@@ -266,12 +271,14 @@ class Relais {
     if (u.searchParams.get('version') !== '1') {
       return this.refuser(c, 'version');
     }
+    const pseudo = (u.searchParams.get('pseudo') || '').slice(0, 20); // M12 : comme le relais (nettoyage en moins)
     if (u.pathname === '/creer') {
       const demande = u.searchParams.get('joueurs');
       const joueurs = demande === null ? 2 : Number(demande);
       if (!Number.isInteger(joueurs) || joueurs < 2 || joueurs > 4) {
         return this.refuser(c, 'requete-invalide');
       }
+      const info = (u.searchParams.get('info') || '').slice(0, 200); // M12 : ligne d'information du salon
       let code;
       do {
         code = '';
@@ -279,7 +286,7 @@ class Relais {
           code += ALPHABET[entier(0, ALPHABET.length - 1)];
         }
       } while (this.salons.has(code));
-      const salon = { code, joueursMax: joueurs, jetons: [this.jeton()], conns: new Set() };
+      const salon = { code, joueursMax: joueurs, info, jetons: [this.jeton()], pseudos: [pseudo], conns: new Set() };
       this.salons.set(code, salon);
       return this.accepterJoueur(c, salon, 0, false);
     }
@@ -313,6 +320,7 @@ class Relais {
           ancienne.fermeRelais = true;
         }
       }
+      if (pseudo) salon.pseudos[joueur] = pseudo;
       return this.accepterJoueur(c, salon, joueur, true);
     }
     let joueur = salon.jetons.indexOf(null);
@@ -323,6 +331,7 @@ class Relais {
       joueur = salon.jetons.length;
     }
     salon.jetons[joueur] = this.jeton();
+    salon.pseudos[joueur] = pseudo;
     return this.accepterJoueur(c, salon, joueur, false);
   }
 
@@ -342,7 +351,7 @@ class Relais {
     this.descendre(c, { kind: 'ouvert' });
     this.descendre(c, {
       kind: 'msg',
-      m: JSON.stringify({ type: 'bienvenue', version: 1, code: salon.code, joueur, jeton: salon.jetons[joueur], joueursMax: salon.joueursMax, reconnexion, joueurs: this.etatJoueurs(salon, this.actives(salon)) }),
+      m: JSON.stringify({ type: 'bienvenue', version: 1, code: salon.code, joueur, jeton: salon.jetons[joueur], joueursMax: salon.joueursMax, info: salon.info || '', reconnexion, joueurs: this.etatJoueurs(salon, this.actives(salon)) }),
     });
     if (reconnexion) {
       this.stats.retours++;
@@ -553,6 +562,20 @@ const empreintesVues = new Map();
 const mismatches = [];
 let panne = null; // { epoque, tick } : la panne injectée
 
+const clientsBruts = {};
+let brutsEcrits = false;
+function ecrireBruts(tick) {
+  if (brutsEcrits) return;
+  brutsEcrits = true;
+  for (const [j, c] of Object.entries(clientsBruts)) {
+    try {
+      writeFileSync(RAPPORT.replace(/\.txt$/, '') + `-brut-${j}-${tick}.bin`, c.M.FS.readFile('/brut-' + tick + '.bin'));
+    } catch (e) {
+      ecrire(`état brut du joueur ${j} au tick ${tick} introuvable`);
+    }
+  }
+}
+
 function noterEmpreinte(tick, joueur, h, epoque) {
   const cle = epoque + ':' + tick;
   let e = empreintesVues.get(cle);
@@ -569,6 +592,7 @@ function noterEmpreinte(tick, joueur, h, epoque) {
     e.signale = true;
     const attendue = panne !== null && panne.epoque === epoque && tick >= panne.tick;
     mismatches.push({ epoque, tick, attendue, valeurs: { ...e } });
+    if (VERSUS && !attendue) ecrireBruts(tick);
     ecrire(`DIVERGENCE ${attendue ? 'attendue (panne injectée)' : 'RÉELLE'} : époque ${epoque}, tick ${tick} : ${JSON.stringify(e)}`);
   }
 }
@@ -597,6 +621,22 @@ class Client {
     this.sortie = sortie;
     this.moteur = LS.moteurEmscripten(M);
     const nom = this.nom;
+    if (VERSUS) {
+      // M12 (diagnostic) : état brut gardé pour les dernières empreintes, comparé octet par octet si divergence
+      const empreinte = this.moteur.empreinte;
+      const ticks = [];
+      this.moteur.empreinte = () => {
+        const h = empreinte();
+        const t = M.ccall('brutus_reseau_tick', 'number', [], []);
+        M.ccall('brutus_reseau_test_brut', 'number', ['string'], ['/brut-' + t + '.bin']);
+        ticks.push(t);
+        while (ticks.length > 6) {
+          try { M.FS.unlink('/brut-' + ticks.shift() + '.bin'); } catch (e) { /* déjà parti */ }
+        }
+        return h;
+      };
+      clientsBruts[this.joueurAttendu] = this;
+    }
     this.lock = LS.creerLockstep(parametresLockstep(nom, {
       moteur: this.moteur,
       transport: REEL ? transportReel : relais,
@@ -653,7 +693,8 @@ class Client {
       return;
     }
     const s = this.lock.interne;
-    if (s.actif && s.connecte) {
+    // M12 : en Versus, le bot attend le passage en Versus (sinon il construirait pour la ville 1).
+    if (s.actif && s.connecte && (!VERSUS || this.versus(0) === 2)) {
       const t = this.moteur.tick();
       let n = 0;
       while (this.idx < this.journal.length && this.journal[this.idx].tick <= t && n < 30) {
@@ -666,6 +707,7 @@ class Client {
   }
 
   tick() { return this.moteur.tick(); }
+  versus(quoi) { return this.M.ccall('brutus_menu_versus_etat', 'number', ['number'], [quoi]); }
   s() { return this.lock.interne; }
 }
 
@@ -688,7 +730,17 @@ async function principal() {
   const tick0 = hote.tick();
   const cible = tick0 + TICKS;
 
-  hote.lock.creer(2);
+  if (VERSUS) {
+    // Ce que fait le menu Multijoueur : mode Versus, combat activé, durée ; « Créer avec cette ville ».
+    hote.M.ccall('brutus_menu_definir_partie', null, ['number', 'number', 'number'], [1, 1, DUREE_VERSUS]);
+    const joueurs = hote.M.ccall('brutus_menu_creer', 'number', [], []);
+    hote.M.ccall('brutus_menu_action', 'number', [], []);
+    const info = hote.M.ccall('brutus_menu_action_texte', 'string', [], []);
+    dire(`Versus : salon de ${joueurs} joueurs, info « ${info} ».`);
+    hote.lock.creer(joueurs, info, 'Léa');
+  } else {
+    hote.lock.creer(2);
+  }
   let it = 0;
   const clients = () => [hote, invite];
   const pomperTout = () => {
@@ -707,7 +759,7 @@ async function principal() {
   if (!hote.s().code) {
     throw new Error('Le salon n’a pas été créé.');
   }
-  invite.lock.rejoindre(hote.s().code);
+  invite.lock.rejoindre(hote.s().code, VERSUS ? 'Marcus' : undefined);
   dire(`Salon ${hote.s().code} : l'invité rejoint.`);
   while ((!hote.s().actif || !invite.s().actif) && it < 20000) {
     pomperTout();
@@ -1213,6 +1265,17 @@ async function principal() {
       const a = Buffer.from(hote.moteur.empreinte()).toString('hex');
       const b = Buffer.from(invite.moteur.empreinte()).toString('hex');
       direct = { comparees: true, tick: hote.tick(), a, b, identiques: a === b };
+      if (VERSUS) {
+        const etatVersus = (c) => Array.from({ length: 11 }, (_, q) => c.versus(q));
+        const pseudos = (c) => Object.fromEntries((c.s().salon || []).map((p) => [p.joueur, p.pseudo]));
+        // Ce que fait la page : les pseudos du salon vont au moteur, qui les rend par brutus_menu_nom
+        for (const c of [hote, invite]) {
+          for (const p of c.s().salon || []) c.M.ccall('brutus_menu_joueur_pseudo', null, ['number', 'string'], [p.joueur, p.pseudo || '']);
+        }
+        const nom = (c, j) => c.M.ccall('brutus_menu_nom', 'string', ['number'], [j]);
+        direct.versus = { hote: etatVersus(hote), invite: etatVersus(invite), infoInvite: invite.s().info,
+          pseudos: { hote: pseudos(hote), invite: pseudos(invite) }, noms: { hote: nom(hote, 1), invite: nom(invite, 0) } };
+      }
       break;
     }
   }
@@ -1228,8 +1291,27 @@ function M_vitesse(c, delta) {
 
 // ============================================================ rapport
 
+// M12 : état du Versus des deux joueurs (brutus_menu_versus_etat) : 0 villes, 1 vue, 2 combat, 3 durée, 4 fin,
+// 5 gagnant, 6 tick de fin, 7 relevés du récap, 8 empreinte du récap, 9-10 bâtiments des villes.
+function criteresVersus(direct) {
+  const v = direct && direct.versus;
+  const h = v ? v.hote : [];
+  const i = v ? v.invite : [];
+  const memes = (q) => h[q] === i[q];
+  return {
+    'versus : l\'invité voit le mode et les options (ligne d\'info du relais)': !!(v && /^Versus/.test(v.infoInvite || '')),
+    'versus : deux villes chez les deux, chacun voit la sienne': !!(v && h[0] === 2 && i[0] === 2 && h[1] === 0 && i[1] === 1),
+    [`versus : options de l'hôte chez les deux (combat, ${DUREE_VERSUS} mois)`]: !!(v && h[2] === 1 && i[2] === 1 && h[3] === DUREE_VERSUS && i[3] === DUREE_VERSUS),
+    'versus : chaque ville a ses bâtiments': !!(v && h[9] > 0 && h[10] > 0 && memes(9) && memes(10)),
+    'versus : même fin chez les deux (économique, même gagnant, même tick)': !!(v && h[4] === 2 && memes(4) && memes(5) && memes(6)),
+    'versus : même récap chez les deux': !!(v && h[7] >= 2 && memes(7) && memes(8)),
+    'pseudos : chacun voit celui de l\'autre (Léa, Marcus), aussi après les coupures': !!(v && v.pseudos.hote[1] === 'Marcus' &&
+      v.pseudos.invite[0] === 'Léa' && v.noms.hote === 'Marcus' && v.noms.invite === 'Léa'),
+  };
+}
+
 function rapport(r, erreur) {
-  const { hote, invite, evenements, faits, attenteVue, tick0, direct, rechargeFaite, compl } = r || {};
+  const { hote, invite, evenements = [], faits = {}, attenteVue, tick0, direct = {}, rechargeFaite, compl } = r || {};
   const duree = (performance.now() - debut) / 1000;
   const reelles = mismatches.filter((m) => !m.attendue);
   const attendues = mismatches.filter((m) => m.attendue);
@@ -1267,6 +1349,10 @@ function rapport(r, erreur) {
     }
     if (direct.comparees) {
       L.push(`  Comparaison finale directe au tick ${direct.tick} : ${direct.identiques ? 'identiques' : 'DIFFÉRENTES'} (${direct.a} / ${direct.b}).`);
+      if (direct.versus) {
+        L.push(`  Versus (villes, vue, combat, durée, fin, gagnant, tick de fin, relevés, empreinte du récap, bâtiments 1, bâtiments 2) : hôte ${JSON.stringify(direct.versus.hote)}, invité ${JSON.stringify(direct.versus.invite)}.`);
+        L.push(`  Pseudos vus par l'hôte ${JSON.stringify(direct.versus.pseudos.hote)}, par l'invité ${JSON.stringify(direct.versus.pseudos.invite)} ; noms rendus par le moteur : ${JSON.stringify(direct.versus.noms)}.`);
+      }
     } else {
       L.push('  Comparaison finale directe : impossible (ticks différents).');
     }
@@ -1328,11 +1414,18 @@ function rapport(r, erreur) {
     'envoi refusé : l\'hôte ne recharge pas seul, puis resynchronisation': !!(compl && compl.envoiRate && compl.envoiRate.vu && compl.envoiRate.seul && compl.envoiRate.fini),
     'coop : présence et latence reçues, chat et signal vus par les deux': !!(compl && compl.coop && compl.coop.presences && compl.coop.latences.hote !== undefined && compl.coop.latences.invite !== undefined && compl.coop.chat && compl.coop.signal),
     'coop : ordre en conflit signalé au second joueur seulement': !!(compl && compl.coop && compl.coop.conflit && compl.coop.hoteJamais && compl.coop.avis),
-    'route de Rome coupée : message chez les deux, partie continue, sans pause locale': !!(compl && compl.routeRome && compl.routeRome.vu && compl.routeRome.memesMessages && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0),
+    ...(VERSUS ? {
+      // M12 : en Versus, la route coupée est celle de la ville 1 : le message ne concerne que l'hôte (et ne vient
+      // qu'avec des habitants) ; l'invité ne doit pas le recevoir. Le message chez les deux est vérifié en Coop.
+      'route de Rome de la ville 1 coupée : partie continue, sans pause locale, rien chez l\'invité': !!(compl && compl.routeRome && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0 && !(compl.routeRome.apres[1] & 6)),
+    } : {
+      'route de Rome coupée : message chez les deux, partie continue, sans pause locale': !!(compl && compl.routeRome && compl.routeRome.vu && compl.routeRome.memesMessages && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0),
+    }),
     'forte latence (300 à 700 ms) : la partie avance, sans attente ni divergence': !!(compl && compl.latence && compl.latence.ticks > 100 && !compl.latence.attente && compl.latence.retour && compl.latence.divergences === 0) || (REEL && !FAUX_WS),
     'arrivée pendant une resynchronisation : partie reprise, sans divergence': !!(compl && compl.arriveeResync && compl.arriveeResync.retour && compl.arriveeResync.suite && compl.arriveeResync.divergences === 0) || (REEL && !FAUX_WS),
     'deux onglets, même jeton : l\'ancien s\'arrête sans se reconnecter, le nouveau joue': !!(compl && compl.deuxOnglets && compl.deuxOnglets.repris && compl.deuxOnglets.arret && compl.deuxOnglets.remplacements >= 1 && compl.deuxOnglets.enJeu && compl.deuxOnglets.suite && !compl.deuxOnglets.ancienActif && compl.deuxOnglets.reconnexionsAncien === 0 && compl.deuxOnglets.divergences === 0) || (REEL && !FAUX_WS),
     'hôte rechargé': !rechargeFaite || !!rechargeFaite.fini,
+    ...(VERSUS ? criteresVersus(direct) : {}),
     'vitesses identiques': !!(faits.vitesse && faits.vitesse.identiques),
     'pause vue puis reprise': !!(faits.pause && faits.pause.vue && faits.pause.reprise),
   };

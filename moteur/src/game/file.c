@@ -310,7 +310,7 @@ static void initialize_saved_game(void)
         building_maintenance_check_rome_access();
         building_granaries_calculate_stocks();
     }
-    brutus_ville_activer(brutus_ville_vue());
+    brutus_ville_activer(0); // M12 : chargement identique chez tous (la ville vue vient à la fin)
     building_menu_update();
     city_message_init_problem_areas();
 
@@ -329,7 +329,7 @@ static void initialize_saved_game(void)
         brutus_ville_activer(v);
         city_military_determine_distant_battle_city();
     }
-    brutus_ville_activer(brutus_ville_vue());
+    brutus_ville_activer(0); // M12 : chargement identique chez tous (la ville vue vient à la fin)
 
     migrate_altar_rotations(); // this has to go after all image loading since it migrates data from image_ids
 

@@ -40,6 +40,8 @@ void brutus_carte_versus_effacer(void);
 void brutus_carte_versus_appliquer_aux_villes(void);
 
 // ---- fichier de carte (bloc « BR3C » à la fin)
+/** M12 : vrai si ce fichier de carte (chemin complet) a une entrée pour le joueur 2 (carte à deux). */
+int brutus_carte_versus_fichier_a_deux(const char *chemin);
 void brutus_carte_versus_ecrire_fichier(FILE *fp);
 void brutus_carte_versus_lire_fichier(FILE *fp);
 void brutus_carte_versus_lire_tampon(buffer *buf);

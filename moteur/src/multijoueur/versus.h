@@ -56,6 +56,17 @@ void brutus_ville_vue_changer(int ville);
 void brutus_versus_entrer_simulation(void);
 void brutus_versus_sortir_simulation(void);
 
+/**
+ * M12 (réseau) : vue sur l'entrée de la ville du joueur local, s'il joue une autre ville que la 1
+ * (à l'arrivée dans une partie Versus, ou au passage en Versus).
+ */
+void brutus_versus_aller_chez_moi(void);
+/**
+ * M12 : fin du chargement d'une partie (tout est recalculé, ville 0 active comme chez tous) : l'interface passe
+ * à la ville vue (en réseau, celle du joueur local).
+ */
+void brutus_versus_apres_chargement(void);
+
 /** Ville du joueur qui envoie une commande (Versus : joueur n = ville n ; sinon 0). */
 int brutus_versus_ville_du_joueur(int joueur);
 

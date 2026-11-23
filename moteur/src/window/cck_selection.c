@@ -18,6 +18,7 @@
 #include "graphics/text.h"
 #include "graphics/window.h"
 #include "input/input.h"
+#include "multijoueur/menu.h"
 #include "sound/music.h"
 #include "widget/minimap.h"
 #include "window/mission_briefing.h"
@@ -74,6 +75,7 @@ static void init(void)
 {
     data.scenarios = dir_find_files_with_extension_at_location(PATH_LOCATION_SCENARIO, "map");
     data.scenarios = dir_append_files_with_extension("mapx");
+    brutus_menu_trier_cartes((dir_listing *) data.scenarios); // Brutus III (M12) : en Versus, cartes à deux d'abord
     data.focus_toggle_button = 0;
     data.show_minimap = 0;
     data.selected_scenario_display[0] = 0;

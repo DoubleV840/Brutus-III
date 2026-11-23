@@ -1,5 +1,6 @@
 // Brutus III : couche de commandes (phase 2a). Voir commande.h et docs/commandes.md.
 #include "multijoueur/commande.h"
+#include "multijoueur/recap_versus.h" // M12
 #include "multijoueur/versus.h"
 #include "multijoueur/combat_versus.h" // Brutus III (M10)
 #include "multijoueur/coop.h" // M7 : conflits
@@ -439,6 +440,7 @@ static int executer_construire(const brutus_commande *c)
 
     building_construction_set_type(type, 0);
     building_rotation_brutus_ecrire(c->p[5], c->p[6], c->p[7]);
+    int poses_avant = brutus_recap_compter_poses(); // M12 : récap du Versus (bâtiments construits)
     building_construction_start(x0, y0, map_grid_offset(x0, y0));
     if (building_construction_in_progress()) {
         building_construction_update(x1, y1, map_grid_offset(x1, y1));
@@ -451,6 +453,7 @@ static int executer_construire(const brutus_commande *c)
         }
         building_construction_place();
     }
+    brutus_recap_construits(brutus_recap_compter_poses() - poses_avant);
 
     city_view_brutus_forcer_orientation(orientation_avant);
     building_construction_brutus_restaurer();

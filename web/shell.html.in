@@ -533,11 +533,13 @@
         var avis = (e.alerte ? e.alerte + ' ' : '') + (e.avis || '');
         multiAppel('brutus_menu_etat', ['number', 'string', 'string', 'string', 'number', 'number'],
           [phase < 0 ? 0 : phase, e.code || '', e.texte || '', avis, e.joueur > 0 ? e.joueur : 0, e.hote ? 1 : 0]);
+        multiAppel('brutus_menu_info', ['string'], [e.info || '']);
         multiAppel('brutus_menu_joueurs_vider');
         for (var i = 0; i < e.salon.length; i++) {
           var p = e.salon[i];
           var latence = e.latences && e.latences[p.joueur] !== undefined ? e.latences[p.joueur] : -1;
           multiAppel('brutus_menu_joueur', ['number', 'number', 'number'], [p.joueur, p.connecte ? 1 : 0, latence]);
+          multiAppel('brutus_menu_joueur_pseudo', ['number', 'string'], [p.joueur, p.pseudo || '']);
         }
         var lignes = e.chat || [];
         if (!lignes.length) {
@@ -547,6 +549,15 @@
           var l = lignes[j];
           multiAppel('brutus_menu_chat', ['number', 'number', 'string', 'number'], [l.id, l.joueur, l.texte, l.signal >= 0 ? l.signal : -1]);
         }
+      }
+
+      // M12 : pseudo saisi dans la fenêtre Multijoueur, retenu par le navigateur pour les parties suivantes.
+      function multiPseudo() {
+        var pseudo = String(multiAppel('brutus_menu_pseudo', [], [], 'string') || '').trim().slice(0, 20);
+        try {
+          localStorage.setItem('brutus-pseudo', pseudo);
+        } catch (e) { /* stockage indisponible : le pseudo vaut pour cette fois */ }
+        return pseudo;
       }
 
       // Actions demandées par la fenêtre du jeu → client.
@@ -559,9 +570,10 @@
           var texte = multiAppel('brutus_menu_action_texte', [], [], 'string');
           var param = multiAppel('brutus_menu_action_parametre', [], [], 'number');
           if (action === 1) {
-            multi.ls.creer(2);
+            // M12 : le paramètre est le nombre de joueurs, le texte la ligne d'information (mode, carte, options)
+            multi.ls.creer(param >= 2 ? param : 2, texte, multiPseudo());
           } else if (action === 2) {
-            multi.ls.rejoindre(texte);
+            multi.ls.rejoindre(texte, multiPseudo());
           } else if (action === 3) {
             multi.ls.quitter();
           } else if (action === 4) {
@@ -587,6 +599,9 @@
       function multiDemarrer() {
         var base = multiBase();
         multiAppel('brutus_menu_disponible', ['number'], [base ? 1 : 0]);
+        try {
+          multiAppel('brutus_menu_pseudo_definir', ['string'], [localStorage.getItem('brutus-pseudo') || '']);
+        } catch (e) { /* stockage indisponible */ }
         if (multi.ls || !base) {
           return;
         }

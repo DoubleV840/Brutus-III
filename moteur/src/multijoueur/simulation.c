@@ -133,6 +133,7 @@ int brutus_resynchroniser(const char *sauvegarde)
     if (game_file_load_saved_game(sauvegarde) != 1) {
         return 0;
     }
+    brutus_versus_apres_chargement(); // M12 : la ville vue (en réseau, celle du joueur local)
     etat.ticks_externes = 0;
     return 1;
 }

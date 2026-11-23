@@ -11,6 +11,7 @@
 #include "map/grid.h"
 #include "map/routing_terrain.h"
 #include "multijoueur/commande.h"
+#include "multijoueur/recap_versus.h"
 #include "multijoueur/versus.h"
 
 #include <stdio.h>
@@ -131,6 +132,7 @@ static void finir(int raison, int gagnant)
     for (int v = 0; v < BRUTUS_VILLES_MAX; v++) {
         etat.scores[v] = v < brutus_versus_villes() ? brutus_victoire_score(v) : (brutus_score_ville) { 0, 0, 0, 0, 0 };
     }
+    brutus_recap_relever(1); // M12 : dernier relevé du récap, au moment de la fin
     log_info("Brutus III (M11) : fin du Versus, raison / gagnant", 0, raison * 10 + gagnant + 1);
 }
 
@@ -143,6 +145,7 @@ void brutus_victoire_nouveau_mois(void)
         etat.mois_ecoules++;
     }
     if (!etat.duree || etat.mois_ecoules < etat.duree) {
+        brutus_recap_relever(0); // M12 : relevé du mois (celui de la fin est fait par finir())
         return;
     }
     int gagnant = -1;
