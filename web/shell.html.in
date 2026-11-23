@@ -735,12 +735,18 @@
 
       // Bouton « plein écran » : toute la page passe en plein écran (le jeu suit la taille de la fenêtre).
       (function () {
+        // Jamais bloquant : sans plein écran (iPhone, test sans navigateur), le bouton est masqué et la page continue.
         var bouton = document.getElementById('pleinEcran');
         var racine = document.documentElement;
-        var demander = racine.requestFullscreen || racine.webkitRequestFullscreen;
+        var demander = racine && (racine.requestFullscreen || racine.webkitRequestFullscreen);
         var sortir = document.exitFullscreen || document.webkitExitFullscreen;
+        if (!bouton || !bouton.addEventListener) {
+          return;
+        }
         if (!demander || !sortir) {
-          bouton.style.display = 'none'; // navigateur sans plein écran (iPhone…)
+          if (bouton.style) {
+            bouton.style.display = 'none';
+          }
           return;
         }
         function actif() {
