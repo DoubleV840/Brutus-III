@@ -57,9 +57,20 @@ bash outils/test-rejouage-wasm.sh   # wasm sous Node (cible séparée) + compara
 
 Méthode, audit et résultats : `docs/determinisme.md`. Les sorties vont dans `build-rejouage/` (ignoré par git).
 
-## Multijoueur : relais local (serveur-multi/)
+## Multijoueur : le relais (serveur-multi/)
 
-Le relais est un Cloudflare Worker + un Durable Object par salon. Il ne fait que transmettre les messages des joueurs, sans logique de jeu. Protocole : `docs/protocole.md`. Il est branché dans la version web (client `web/lockstep.js`, menu « Multijoueur » du jeu), mais pas encore déployé (M13) : tout tourne en local, sans compte Cloudflare.
+Le relais est un Cloudflare Worker + un Durable Object par salon. Il ne fait que transmettre les messages des joueurs, sans logique de jeu. Protocole : `docs/protocole.md`. Il est branché dans la version web (client `web/lockstep.js`, menu « Multijoueur » du jeu).
+
+**En ligne** (depuis M13) : Worker `brutus-relais` sur le compte Cloudflare du fondateur, `wss://brutus-relais.brutus-iii-serveur-multi.workers.dev` (`/sante` répond `ok`). La page de brutus.ivwi.fr l'utilise. Il ne se déploie pas par la CI : après une modification de `serveur-multi/`, le redéployer à la main (le protocole doit rester compatible avec la page publiée, sinon changer `VERSION_PROTOCOLE` des deux côtés) :
+
+```bash
+cd serveur-multi
+npx wrangler login    # une fois
+npm test && npx wrangler deploy
+npm run demo -- wss://brutus-relais.brutus-iii-serveur-multi.workers.dev   # vérification : deux clients sur le relais en ligne
+```
+
+En local, sans compte Cloudflare :
 
 ```bash
 cd serveur-multi
@@ -94,7 +105,7 @@ Tout se fait dans le jeu, par le menu **« Multijoueur »** : un bouton au menu 
 6. Sauvegarder fonctionne chez tous les joueurs. Pour **reprendre une partie multijoueur**, l'hôte charge la sauvegarde (avant de créer la partie, ou après tant que personne n'est arrivé), puis les autres rejoignent.
 7. En partie multijoueur, **« Charger », « Recommencer » et « Quitter la mission » sont désactivés** (ils changeraient la ville d'un seul joueur : divergence). Si tu quittes quand même la ville par le menu principal, la partie se met en attente pour tous et la fenêtre Multijoueur s'ouvre : le bouton **« Revenir dans la partie »** te ramène dans la partie en cours. Chacun garde une copie de la partie en quittant la ville : même si tous les joueurs l'ont quittée, le premier qui clique « Revenir » relance la partie pour tous. Si l'hôte reste bloqué plus de 60 s à récupérer sa partie, il est ramené en solo avec un message.
 
-Le multijoueur ne fonctionne que si la page est servie depuis `localhost` ou `127.0.0.1` (relais en local jusqu'à sa mise en ligne, M13) ; ailleurs, et dans la version native, la fenêtre Multijoueur explique où jouer. Si quelque chose cloche, noter le message affiché dans la fenêtre et la console du navigateur.
+Page servie depuis `localhost` ou `127.0.0.1` : elle utilise le relais local (`ws://127.0.0.1:8787`) ; ajouter `?relais=en-ligne` à l'adresse pour passer par le relais en ligne. Ailleurs (brutus.ivwi.fr), c'est le relais en ligne. Dans la version native, la fenêtre Multijoueur explique où jouer. Si quelque chose cloche, noter le message affiché dans la fenêtre et la console du navigateur.
 
 
 Tests du client réseau, sans navigateur :

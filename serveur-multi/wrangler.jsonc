@@ -1,5 +1,6 @@
 // Brutus III : relais multijoueur. Voir docs/protocole.md.
-// Local uniquement pour l'instant (npm run dev). Déploiement : mission M13, sur le compte du fondateur.
+// En ligne depuis M13 (compte Cloudflare du fondateur) : wss://brutus-relais.brutus-iii-serveur-multi.workers.dev
+// Déploiement à la main : npx wrangler deploy (voir README). En local : npm run dev.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "brutus-relais",

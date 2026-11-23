@@ -638,9 +638,9 @@ static void dessiner_boite(const input_box *b, int active)
 static void dessiner_indisponible(void)
 {
     text_draw_multiline(t(
-        "Le multijoueur se joue dans la version navigateur de Brutus III, une fois le serveur de parties "
-        "en ligne (bientôt sur brutus.ivwi.fr). En attendant, il fonctionne en local : voir le README, "
-        "section « Multijoueur en local »."), X0 + 24, 90, LARGEUR - 48, 0, FONT_NORMAL_BLACK, 0);
+        "Le multijoueur se joue dans la version navigateur de Brutus III, sur brutus.ivwi.fr. "
+        "Pour tester en local : voir le README, section « Multijoueur en local »."),
+        X0 + 24, 90, LARGEUR - 48, 0, FONT_NORMAL_BLACK, 0);
     dessiner_boutons_accueil();
 }
 

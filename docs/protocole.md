@@ -34,7 +34,7 @@ pseudo remplace l'ancien, sans pseudo le joueur garde le sien). Le relais retire
 les espaces et coupe à 20 caractères. Il ne sert qu'à l'affichage : chaque place de `joueurs` (dans `bienvenue` et les
 annonces) porte son `pseudo` (chaîne vide si aucun). Une place libérée puis reprise perd le pseudo de l'ancien joueur.
 
-En local : `ws://127.0.0.1:8787/creer?version=1`. En ligne (M13) : `wss://<adresse du Worker>/creer?version=1`.
+En local : `ws://127.0.0.1:8787/creer?version=1`. En ligne (depuis M13) : `wss://brutus-relais.brutus-iii-serveur-multi.workers.dev/creer?version=1`.
 
 - **Version** : le paramètre `version` est obligatoire et doit valoir `1`. Sinon (absent ou autre), refus `version`.
 - **Code de salon** : 6 caractères parmi `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (ni `0`/`O`, ni `1`/`I`/`L`), soit 31⁶ ≈ 887 millions de codes. Tiré au hasard (`crypto.getRandomValues`, sans biais) ; en cas de collision avec un salon existant, un autre code est tiré.
@@ -230,7 +230,7 @@ Exemple (en-tête, puis les 12 premiers octets du premier morceau) :
 
 Fermeture : tant que le salon existe, une alarme du Durable Object est posée, à « maintenant + délai » à chaque arrivée et à chaque départ. À l'échéance, s'il reste quelqu'un, elle est reposée ; sinon le salon est effacé (stockage compris) et son code devient inconnu. Même si un départ n'a pas été vu par le salon (éviction du runtime, mise à jour du Worker), le salon finit donc fermé. Le salon est oublié avant l'effacement : un retour pendant l'effacement reçoit `salon-inconnu`.
 
-**Pas de limite de débit en version 1**, et la limite de 64 Kio n'est vérifiée qu'une fois le message reçu. Avant d'ouvrir la page au public (M13) : règle de limitation de débit Cloudflare sur `/creer` et `/rejoindre`, et surveiller la consommation du Worker et des Durable Objects.
+**Pas de limite de débit en version 1**, et la limite de 64 Kio n'est vérifiée qu'une fois le message reçu. Le relais est en ligne depuis M13 (23/11/2026) sans limitation de débit : suffisant pour les premières parties entre amis. Avant de faire connaître la page plus largement : règle de limitation de débit Cloudflare sur `/creer` et `/rejoindre`, et surveiller la consommation du Worker et des Durable Objects (offre gratuite).
 
 ## État et hibernation
 
@@ -242,7 +242,7 @@ L'API WebSocket Hibernation est utilisée (`ctx.acceptWebSocket`) : le salon peu
 - Durable Object adossé à SQLite (`new_sqlite_classes`) : c'est le type disponible sur l'offre gratuite de Cloudflare.
 - Concurrence : à l'arrivée, toutes les décisions (place, connexion remplacée, connexion acceptée) se prennent sans `await` ; les écritures du stockage et de l'alarme ne sont attendues qu'ensuite.
 
-Non testé en local : le réveil après une vraie hibernation (le runtime local ne décharge pas l'objet à la demande). À vérifier en ligne en M13.
+Non testé en local : le réveil après une vraie hibernation (le runtime local ne décharge pas l'objet à la demande). En ligne, l'hibernation ne se provoque pas à la demande non plus : à surveiller lors des premières vraies parties (une partie qui reste longtemps en pause, par exemple).
 
 ## Ce qui reste au client (M6b) : cahier des charges, réalisé
 
@@ -254,7 +254,7 @@ Le relais ne fait que transporter. Le lockstep est entièrement côté client. C
 4. **Pause sur déconnexion** : à `joueur-parti`, plus aucun tick n'avance (il manquera ses `TOUR`) ; afficher « en attente de … ». À `joueur-revenu` (avec ou sans `joueur-parti` avant), l'hôte écrit sa sauvegarde et l'envoie, puis tous rechargent.
 5. **Arrivée et resynchronisation** : l'hôte écrit la sauvegarde (`game_file_write_saved_game`, avec l'en-tête de partie de `multijoueur/entete.c`) et l'envoie en `SAUVEGARDE` ; puis **tous, hôte compris**, la rechargent par `brutus_resynchroniser(chemin)`, qui remet aussi à zéro les ticks externes en attente. Les ticks reprennent au tick de la sauvegarde (`tick` de l'en-tête). **Hôte qui a rechargé sa page** : à sa `bienvenue` avec `reconnexion: true` sans partie en mémoire, il envoie `SAUVEGARDE_DEMANDE` au plus petit invité connecté ; cet invité lui envoie sa sauvegarde (`dest = 0`), l'hôte la charge puis la renvoie à tous (resynchronisation normale).
 6. **Détection de divergence** : tous les N ticks, chacun envoie `EMPREINTE` ; si celle d'un invité diffère de celle de l'hôte au même tick, l'hôte lance une resynchronisation (point 5) avec le message « resynchronisation… ». Un invité peut aussi la demander par `SAUVEGARDE_DEMANDE`.
-7. **Fermetures par le serveur** : agir dès le message `erreur` (`remplace`, `expulse`, `message-trop-gros`), sans attendre l'événement `close`. En local (wrangler/workerd), quand le serveur ferme une connexion qui n'a encore rien envoyé, le client reçoit la trame de fermeture mais pas `close` (connexion TCP laissée ouverte). À revérifier en ligne en M13. Après un tel message, le client ferme lui-même sa connexion et ne se reconnecte pas.
+7. **Fermetures par le serveur** : agir dès le message `erreur` (`remplace`, `expulse`, `message-trop-gros`), sans attendre l'événement `close`. En local (wrangler/workerd), quand le serveur ferme une connexion qui n'a encore rien envoyé, le client reçoit la trame de fermeture mais pas `close` (connexion TCP laissée ouverte). En ligne (vérifié en M13), `close` arrive bien (4000 `version`, 4001 `salon-inconnu`, en 200 à 400 ms) : c'est une particularité du runtime local. Après un tel message, le client ferme lui-même sa connexion et ne se reconnecte pas.
 8. **Reconnexion** : garder `code` et `jeton` dans `sessionStorage` **dès la `bienvenue`**, se reconnecter avec `?jeton=` après une coupure ou un rechargement ; ne pas se reconnecter après `remplace` (4005) ni `expulse` (4006). Proposer à l'hôte un bouton « Retirer ce joueur » (`expulser`) sur une place déconnectée.
 9. **Coupure silencieuse** : le serveur ne la voit pas toujours (le `pong` est servi sans réveiller le salon, et un réseau coupé sans fermeture TCP ne produit pas de `joueur-parti` tout de suite). Chaque client envoie donc `ping` toutes les 15 à 30 s, et :
    - sans `pong` depuis ~45 s, il considère sa connexion morte, la ferme et se reconnecte avec son jeton ;
@@ -302,7 +302,7 @@ Code : `web/lockstep.js` (script classique, sans DOM, inséré dans la page par 
 - **Chargement refusé chez l'invité** : il redemande la sauvegarde une fois (avec l'époque de l'hôte) avant d'afficher une erreur.
 - **Divers** : rang des `VITESSE` par compteur croissant ; `TOUR` d'un joueur non attendu ignoré ; l'époque modulo 255 est inchangée (risque négligeable) ; `reserve` et boîte de sortie vidées au début de chaque époque ; une fermeture de connexion n'est comptée qu'une fois (génération `s.gen`).
 - **Onglet masqué** : la page avertit (titre « onglet masqué : partie à deux ralentie ») et fait avancer le client à chaque message reçu (`pomperSurMessage`), car le `setInterval` de 20 ms est ralenti par le navigateur. Garder tout de même les deux onglets visibles. À essayer à la main.
-- **Relais** : l'adresse `ws://127.0.0.1:8787` est écrite en dur dans `web/shell.html.in` (panneau limité à localhost). M13 : passer à `wss://` et à l'adresse publique.
+- **Relais** (M13) : `multiBase()` dans `web/shell.html.in`. Page en ligne : `wss://brutus-relais.brutus-iii-serveur-multi.workers.dev`. Page servie depuis `localhost`/`127.0.0.1` : `ws://127.0.0.1:8787` (relais local), sauf avec `?relais=en-ligne` (le relais en ligne accepte l'origine localhost) ou `?relais=ws://hôte:port`.
 
 ### Test et limites
 
