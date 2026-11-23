@@ -14,6 +14,7 @@
 #include "figure/properties.h"
 #include "figure/route.h"
 #include "multijoueur/combat_versus.h" // Brutus III (M10)
+#include "game/time.h"
 #include "figuretype/missile.h"
 #include "map/figure.h"
 #include "map/grid.h"
@@ -358,6 +359,7 @@ static int soldier_percentage_speed(figure_type type)
 
 void figure_soldier_action(figure *f)
 {
+    int brutus_frappe = 0;
     formation *m = formation_get(f->formation_id);
     city_figures_add_soldier();
     f->terrain_usage = TERRAIN_USAGE_ANY;
@@ -479,8 +481,9 @@ void figure_soldier_action(figure *f)
                 } else if (f->type == FIGURE_FORT_INFANTRY || f->type == FIGURE_FORT_MOUNTED) {
                     legionary_attack_adjacent_enemy(f);
                 }
-                if (f->action_state == FIGURE_ACTION_84_SOLDIER_AT_STANDARD) {
-                    brutus_combat_attaquer_batiment(f); // Brutus III (M10) : bâtiments de l'autre ville
+                if (f->action_state == FIGURE_ACTION_84_SOLDIER_AT_STANDARD && f->attack_image_offset == 0) {
+                    // Brutus III (M10) : bâtiments de l'autre ville (sauf pendant un tir)
+                    brutus_frappe = brutus_combat_attaquer_batiment(f);
                 }
             }
             break;
@@ -552,4 +555,14 @@ void figure_soldier_action(figure *f)
     }
 
     update_image(f, m);
+    if (brutus_frappe) {
+        // Brutus III (M10) : un soldat qui frappe un bâtiment prend ses images d'attaque, sans changer d'état
+        int etat = f->action_state;
+        int offset = f->attack_image_offset;
+        f->action_state = FIGURE_ACTION_150_ATTACK;
+        f->attack_image_offset = 12 + game_time_tick() % 12;
+        update_image(f, m);
+        f->action_state = etat;
+        f->attack_image_offset = offset;
+    }
 }

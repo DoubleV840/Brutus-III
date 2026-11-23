@@ -6,6 +6,7 @@
 #include "figure/formation.h"
 #include "figure/movement.h"
 #include "multijoueur/combat_versus.h" // Brutus III (M10)
+#include "multijoueur/versus.h"
 #include "figure/properties.h"
 #include "figure/sound.h"
 #include "map/figure.h"
@@ -93,7 +94,12 @@ static int is_non_citizen(figure *f)
     if (f->action_state == FIGURE_ACTION_149_CORPSE) {
         return 0;
     }
-    if (figure_is_enemy(f) || brutus_combat_cible(f)) {
+    if (figure_is_enemy(f)) {
+        return f->id;
+    }
+    if (brutus_combat_cible(f)) {
+        // Brutus III (M10) : tir d'une ville (celle du projectile) sur un militaire de l'autre
+        brutus_combat_alerter(f->brutus_proprietaire, brutus_ville_active(), 0);
         return f->id;
     }
     if (f->type == FIGURE_INDIGENOUS_NATIVE && f->action_state == FIGURE_ACTION_159_NATIVE_ATTACKING) {

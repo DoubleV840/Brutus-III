@@ -15,6 +15,8 @@
 #include "map/terrain.h"
 #include "multijoueur/commande.h"
 #include "multijoueur/versus.h"
+#include "core/log.h"
+#include "core/time.h"
 
 #include <stdio.h>
 
@@ -129,6 +131,36 @@ void brutus_combat_noter_mort(const figure *tueur, const figure *victime)
     }
 }
 
+// ------------------------------------------------------------------ avertissement chez la ville attaquée
+
+void brutus_combat_alerter(int victime, int attaquant, int batiments)
+{
+    if (victime < 0 || victime >= BRUTUS_VILLES_MAX || attaquant < 0 || attaquant >= BRUTUS_VILLES_MAX ||
+        victime == attaquant) {
+        return;
+    }
+    // Affichage seulement (rien de la partie ne change) : au plus un avertissement de chaque sorte toutes
+    // les 15 secondes, et seulement chez le joueur de la ville attaquée (city_warning_show_custom)
+    static time_millis dernier[BRUTUS_VILLES_MAX][2];
+    time_millis maintenant = time_get_millis();
+    batiments = batiments ? 1 : 0;
+    if (dernier[victime][batiments] && maintenant - dernier[victime][batiments] < 15000) {
+        return;
+    }
+    int ville = brutus_ville_active();
+    brutus_ville_activer(victime);
+    char ligne[100];
+    snprintf(ligne, sizeof(ligne), "La ville %s attaque vos %s !", attaquant ? "rouge" : "bleue",
+        batiments ? "bâtiments" : "soldats");
+    static uint8_t texte[120];
+    encoding_from_utf8(ligne, texte, sizeof(texte));
+    if (city_warning_show_custom(texte, NEW_WARNING_SLOT)) {
+        dernier[victime][batiments] = maintenant ? maintenant : 1;
+        log_info("Brutus III (M10) : avertissement", ligne, victime + 1);
+    }
+    brutus_ville_activer(ville);
+}
+
 // ------------------------------------------------------------------ bâtiments
 
 // Points de vie d'une case, comme pour les envahisseurs (figure/movement.c, advance_route_tile)
@@ -203,6 +235,7 @@ int brutus_combat_attaquer_batiment(figure *f)
             continue;
         }
         f->attack_direction = dir;
+        brutus_combat_alerter(b->brutus_proprietaire, f->brutus_proprietaire, 1);
         if (!(game_time_tick() & 3)) {
             // Ce que la destruction change (note de paix, ruines…) concerne la ville du bâtiment
             int ville = brutus_ville_active();

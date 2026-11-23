@@ -457,6 +457,7 @@ void figure_combat_attack_figure_at(figure *f, int grid_offset)
             attack = 0;
         } else if (brutus_combat_ennemis(f, opponent)) {
             attack = 1; // Brutus III (M10) : militaire de l'autre ville
+            brutus_combat_alerter(opponent->brutus_proprietaire, f->brutus_proprietaire, 0);
         } else if (category & FIGURE_CATEGORY_ARMED && opponent_category & FIGURE_CATEGORY_NATIVE) {
             if (opponent->action_state == FIGURE_ACTION_159_NATIVE_ATTACKING) {
                 attack = 1;

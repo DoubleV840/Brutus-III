@@ -76,7 +76,8 @@ journal() {
   echo "5000 1 legion-rentrer 2"                         # la ville 2 rentre ce qui reste
   echo "5000 0 legion-rentrer 1"
   echo "5600 0 triche 106 0 0 0 0"                       # la ville 1 refait sa légion
-  echo "5700 0 legion-deplacer 1 75 22"                  # contre les puits et le mur de la ville 2
+  echo "5700 0 legion-deplacer 1 75 22"                  # contre le mur de la ville 2
+  echo "8500 0 legion-deplacer 1 75 18"                  # puis contre ses puits
 }
 journal 1 > "$SORTIE/journal.txt"
 journal 0 > "$SORTIE/journal-sans.txt"
@@ -118,8 +119,8 @@ tues1=$(valeur "$SORTIE/rejouage-1.log" 1 tues)
 tues2=$(valeur "$SORTIE/rejouage-1.log" 2 tues)
 detruits=$(valeur "$SORTIE/rejouage-1.log" 2 detruits)
 detruits_sans=$(valeur "$SORTIE/rejouage-sans.log" 2 detruits)
-if [ "${detruits:-0}" -le 0 ]; then
-  echo "ÉCHEC : combat activé, aucun bâtiment de la ville 2 n'a été détruit."
+if [ "${detruits:-0}" -le 8 ]; then  # le mur (8 cases) puis au moins un puits
+  echo "ÉCHEC : combat activé, le mur et les puits de la ville 2 auraient dû tomber (${detruits:-0} détruits)."
   echec=1
 fi
 if [ "${detruits_sans:-1}" -ne 0 ]; then
@@ -127,8 +128,8 @@ if [ "${detruits_sans:-1}" -ne 0 ]; then
   echec=1
 fi
 refus=$(sed -n 's/^# bilan legion-deplacer appliquees \([0-9]*\) refusees \([0-9]*\)$/\1 \2/p' "$SORTIE/empreintes-1.txt")
-if [ "$refus" != "4 1" ]; then  # « appliquees » compte toutes les commandes du type, refusées comprises
-  echo "ÉCHEC : legion-deplacer : 4 commandes dont 1 refusée attendues (lu : ${refus:-rien})."
+if [ "$refus" != "5 1" ]; then  # « appliquees » compte toutes les commandes du type, refusées comprises
+  echo "ÉCHEC : legion-deplacer : 5 commandes dont 1 refusée attendues (lu : ${refus:-rien})."
   echec=1
 fi
 [ "$echec" = 0 ] || exit 1

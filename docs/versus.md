@@ -145,21 +145,25 @@ après rechargement.
   refusée. Le moral lié au mess (nourriture des soldats) est celui du mess de la ville de la légion ; il faut un mess
   dans sa ville pour poser un fort.
 - **Affichage.** Les soldats, les étendards et les sentinelles de l'autre ville prennent sa teinte (comme ses
-  bâtiments depuis M8).
+  bâtiments depuis M8). Un soldat qui frappe un bâtiment prend ses images d'attaque (corps à corps) ; il ne frappe
+  pas pendant qu'il tire.
+- **Avertissement.** Chez le joueur de la ville attaquée seulement : « La ville rouge attaque vos soldats ! »
+  (corps à corps ou tir) ou « … vos bâtiments ! », au plus toutes les 15 secondes pour chaque sorte. C'est de
+  l'affichage : la partie (et l'empreinte) n'en dépend pas.
 - **Test** : `bash outils/test-combat.sh [ticks]` (12 000 par défaut), sur « Brutus - Deux rives ». Journal écrit à
   la main : un fort de légionnaires pour la ville 1, un fort de javeliniers, quatre puits et un mur pour la ville 2,
   soldats tout de suite (`triche` 106, pour les tests : chaque fort de la ville du joueur reçoit ses soldats), bataille
-  au gué, puis la ville 1 refait sa légion et attaque les bâtiments de la ville 2. Le bilan du rejouage donne, pour
+  au gué, puis la ville 1 refait sa légion et attaque le mur, puis les puits de la ville 2. Le bilan du rejouage donne, pour
   chaque ville, les soldats créés, vivants, tués par l'autre ville, et ses bâtiments détruits par l'autre ville.
   Résultat du 23/11 : 4 soldats de la ville 1 et 8 de la ville 2 tués (bataille entre les ticks 700 et 1 300),
-  7 bâtiments de la ville 2 détruits ; combat éteint : aucun mort ni bâtiment détruit entre les villes (3 soldats par
+  11 bâtiments de la ville 2 détruits (le mur, puis les puits) ; combat éteint : aucun mort ni bâtiment détruit entre les villes (3 soldats par
   ville désertent quand même : légion loin du fort sans nourriture, règle d'Augustus) ; empreintes identiques,
   rechargement en pleine bataille (tick 1 000) identique ; la commande du joueur 2 pour la légion 1 est refusée.
 
 ## Laissé aux missions suivantes
 
-- **Combat** : pas d'animation de frappe quand un soldat attaque un bâtiment (il reste en position) ; pas de
-  message « l'ennemi attaque » chez la ville attaquée ; les forts adverses ne se détruisent pas.
+- **Combat** : les forts adverses ne se détruisent pas (comme pour les envahisseurs). L'option « combat » dans le
+  menu Multijoueur vient avec le Versus en réseau (M12) ; en local, c'est Alt+G.
 - **Envahisseurs** : créés hors passe de ville, donc à la ville 1 (ce qui ne change rien au combat : ils attaquent et
   sont attaqués par tous). Nos cartes n'ont pas de point d'invasion.
 - **Victoire** (`city_victory_check`) : vérifiée pour la ville 1 seulement ; M11.

@@ -54,6 +54,12 @@ int brutus_combat_nombre_cibles(int ville);
  */
 int brutus_combat_attaquer_batiment(figure *f);
 
+/**
+ * Avertissement « La ville rouge attaque vos soldats / vos bâtiments ! », affiché seulement chez le joueur de
+ * la ville attaquée, au plus toutes les 15 secondes pour chaque sorte. N'a aucun effet sur la partie.
+ */
+void brutus_combat_alerter(int victime, int attaquant, int batiments);
+
 /** Bilan : un militaire est mort sous les coups (ou les tirs) d'un personnage (tir : le projectile). */
 void brutus_combat_noter_mort(const figure *tueur, const figure *victime);
 
