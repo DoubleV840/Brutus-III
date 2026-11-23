@@ -248,7 +248,8 @@ static void draw_selection_rectangle(const map_tile *current_tile, const map_til
 static void draw_bridge_preview(const map_tile *tile, int x, int y, int is_ship_bridge)
 {
     int length, direction;
-    grid_slice blocked = { .size = 0 };
+    static grid_slice blocked; // Brutus III : statique, pas sur la pile (105 Ko)
+    blocked.size = 0;
     int end_offset = map_bridge_calculate_length_direction(tile->x, tile->y,
         &length, &direction, &blocked);
     int min_length = is_ship_bridge ? 5 : 2;

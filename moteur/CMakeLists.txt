@@ -998,6 +998,11 @@ if(${TARGET_PLATFORM} STREQUAL "emscripten")
     if("${CMAKE_BUILD_TYPE}" MATCHES "Debug")
         set(EMSCRIPTEN_LINK_FLAGS "${EMSCRIPTEN_LINK_FLAGS} -s ASSERTIONS=1")
     endif()
+    # Brutus III : pile de 8 Mo comme en natif (Emscripten n'en donne que 64 Ko par défaut). Le moteur
+    # d'Augustus met parfois plus de 100 Ko sur la pile (grid_slice) : la pile débordait sur les données du
+    # jeu, sans erreur (jeu figé en choisissant un pont). STACK_OVERFLOW_CHECK=1 : un débordement arrête le
+    # jeu avec un message au lieu de corrompre la partie (vérification à chaque image, coût négligeable).
+    set(EMSCRIPTEN_LINK_FLAGS "${EMSCRIPTEN_LINK_FLAGS} -s STACK_SIZE=8388608 -s STACK_OVERFLOW_CHECK=1")
     set_target_properties(${SHORT_NAME} PROPERTIES LINK_FLAGS "${EMSCRIPTEN_LINK_FLAGS}")
 endif()
 

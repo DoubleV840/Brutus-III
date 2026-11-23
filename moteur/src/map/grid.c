@@ -173,7 +173,8 @@ grid_slice *map_grid_get_grid_slice_rectangle(int start_grid_offset, int width, 
     int x = map_grid_offset_to_x(start_grid_offset);
     int y = map_grid_offset_to_y(start_grid_offset);
 
-    int tmp[MAX_SLICE_SIZE];
+    // Brutus III : statique, pas sur la pile (105 Ko : la pile du navigateur, 64 Ko par défaut, débordait)
+    static int tmp[MAX_SLICE_SIZE];
     int count = 0;
 
     for (int i = 0; i < height; i++) {
@@ -194,7 +195,8 @@ grid_slice *map_grid_get_grid_slice_rectangle(int start_grid_offset, int width, 
 
 grid_slice *map_grid_get_grid_slice_house(unsigned int building_id, int check_rubble)
 {
-    int tmp[MAX_SLICE_SIZE];
+    // Brutus III : statique, pas sur la pile (105 Ko : la pile du navigateur, 64 Ko par défaut, débordait)
+    static int tmp[MAX_SLICE_SIZE];
     int count = 0;
 
     building *b = building_get(building_id);
@@ -226,7 +228,8 @@ grid_slice *map_grid_get_grid_slice_ring(int center_grid_offset, int inner_radiu
 {
     int center_x = map_grid_offset_to_x(center_grid_offset);
     int center_y = map_grid_offset_to_y(center_grid_offset);
-    int tmp[MAX_SLICE_SIZE];
+    // Brutus III : statique, pas sur la pile (105 Ko : la pile du navigateur, 64 Ko par défaut, débordait)
+    static int tmp[MAX_SLICE_SIZE];
     int count = 0;
 
     for (int dy = -outer_radius; dy <= outer_radius; dy++) {
