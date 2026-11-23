@@ -15,10 +15,13 @@
 #include "map/terrain.h"
 #include "multijoueur/commande.h"
 #include "multijoueur/versus.h"
+#include "multijoueur/victoire_versus.h"
 #include "core/log.h"
 #include "core/time.h"
 
 #include <stdio.h>
+
+#define SENAT_HP 200 // M11 : comme un mur (WALL_HP), au lieu de 10 pour un bâtiment
 
 static int option = 1;
 
@@ -173,6 +176,8 @@ static int degats_max(int grid_offset, const building *b)
                 case BUILDING_PALISADE_GATE:
                 case BUILDING_WATCHTOWER:
                     return PALISADE_HP;
+                case BUILDING_SENATE:
+                    return SENAT_HP; // M11 : le bâtiment central du Versus résiste plus longtemps
                 default:
                     return BUILDING_HP;
             }
@@ -240,6 +245,7 @@ int brutus_combat_attaquer_batiment(figure *f)
             // Ce que la destruction change (note de paix, ruines…) concerne la ville du bâtiment
             int ville = brutus_ville_active();
             int victime = b->brutus_proprietaire;
+            building_type type = b->type;
             brutus_ville_activer(victime);
             building_destroy_increase_enemy_damage(grid_offset, max);
             brutus_ville_activer(ville);
@@ -247,6 +253,9 @@ int brutus_combat_attaquer_batiment(figure *f)
                 (b->state != BUILDING_STATE_IN_USE && b->state != BUILDING_STATE_MOTHBALLED)) {
                 if (victime < BRUTUS_VILLES_MAX) {
                     bilan.batiments_detruits[victime]++;
+                }
+                if (type == BUILDING_SENATE) { // M11 : le bâtiment central est tombé
+                    brutus_victoire_senat_detruit(victime, f->brutus_proprietaire);
                 }
             }
         }

@@ -66,6 +66,7 @@
 #include "sound/music.h"
 #include "widget/minimap.h"
 #include "multijoueur/versus.h" // Brutus III (M8)
+#include "multijoueur/victoire_versus.h" // Brutus III (M11)
 
 // Brutus III (M8) : en Versus, ces appels se font une fois par ville, la ville active étant celle qui
 // travaille (city_data et listes de bâtiments par type). Une seule ville : un seul appel, comme avant.
@@ -131,6 +132,7 @@ static void advance_month(void)
     PAR_VILLE(city_festival_update());
     PAR_VILLE(city_games_decrement_month_counts());
     PAR_VILLE(city_gods_update_blessings());
+    brutus_victoire_nouveau_mois(); // Brutus III (M11) : fin de la durée du Versus (victoire économique)
     tutorial_on_month_tick();
     if (setting_monthly_autosave()) {
         game_file_write_saved_game(dir_append_location("autosave.svx", PATH_LOCATION_SAVEGAME));

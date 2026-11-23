@@ -1,4 +1,5 @@
 // Brutus III : rythme des ticks et frontière simulation / interface (voir simulation.h)
+#include "multijoueur/fin_versus.h"
 #include "multijoueur/simulation.h"
 #include "multijoueur/versus.h"
 
@@ -90,6 +91,7 @@ void brutus_simulation_image(void)
 {
     // Messages publiés hors tick et hors commande (interface, chargement) : affichés maintenant.
     city_message_brutus_afficher();
+    brutus_fin_versus_verifier(); // M11 : la partie Versus vient de finir : écran de fin
     if (brutus_multijoueur_actif()) {
         // Le lockstep décide : ni l'écran, ni la vitesse locale, ni la pause locale.
         int n = etat.ticks_externes;

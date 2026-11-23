@@ -1,4 +1,6 @@
 // Brutus III : mode rejouage sans affichage (voir rejouage.h)
+#include "multijoueur/fin_versus.h"
+#include "multijoueur/victoire_versus.h"
 #include "multijoueur/rejouage.h"
 #include "multijoueur/combat_versus.h"
 #include "city/ratings.h"
@@ -530,6 +532,7 @@ static int rejouer(void)
     }
     brutus_ville_activer(0);
     brutus_combat_bilan(); // M10
+    brutus_victoire_bilan(); // M11
 
     if (options.capture) {
         // Vue de la ville du joueur local (ville 1) : les bâtiments de l'autre ville ont sa teinte
@@ -540,6 +543,11 @@ static int rejouer(void)
         }
         graphics_save_screenshot(SCREENSHOT_FULL_CITY);
         graphics_save_screenshot(SCREENSHOT_MINIMAP);
+        if (brutus_victoire_fin() != BRUTUS_FIN_AUCUNE) { // M11 : l'écran de fin, sur la ville
+            window_brutus_fin_versus_show();
+            window_draw(1);
+            graphics_save_screenshot(SCREENSHOT_DISPLAY);
+        }
     }
 
     if (options.sauvegarde_finale && !game_file_write_saved_game(options.sauvegarde_finale)) {

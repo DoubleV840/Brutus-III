@@ -1,8 +1,9 @@
-# Mode Versus : deux villes sur la même carte (M8, M9, M10)
+# Mode Versus : deux villes sur la même carte (M8 à M11)
 
-État au 23/11/2026 : **M8, M9 et M10 terminées, en local** (un seul écran, une touche pour changer de joueur) :
-deux villes séparées, trois cartes à deux créées par nous, avec une entrée et une sortie par joueur, et le
-combat entre les deux villes. Le réseau du Versus est la mission M12 ; la victoire, M11.
+État au 23/11/2026 : **M8 à M11 terminées, en local** (un seul écran, une touche pour changer de joueur) :
+deux villes séparées, trois cartes à deux créées par nous, avec une entrée et une sortie par joueur, le
+combat entre les deux villes, et la fin de partie (victoire militaire ou économique, écran des scores).
+Le réseau du Versus est la mission M12.
 
 ## Principe
 
@@ -160,13 +161,49 @@ après rechargement.
   ville désertent quand même : légion loin du fort sans nourriture, règle d'Augustus) ; empreintes identiques,
   rechargement en pleine bataille (tick 1 000) identique ; la commande du joueur 2 pour la légion 1 est refusée.
 
+## Victoire (M11)
+
+- **Victoire militaire.** Le bâtiment central d'une ville est son **Sénat** (un seul par ville, comme dans
+  Augustus). Quand les soldats de l'autre ville le détruisent, la partie est finie : l'attaquant a gagné. Le Sénat a
+  200 points de vie face aux soldats de l'autre ville (comme un mur ; 10 pour un bâtiment ordinaire), pour laisser le
+  temps de le défendre. Un Sénat perdu autrement (incendie, effondrement, démoli par son joueur) ne compte pas.
+  Sans combat (option éteinte), il n'y a pas de victoire militaire.
+- **Victoire économique.** La partie a une **durée** en mois, comptée depuis le passage en Versus : 10 ans par
+  défaut. Au premier mois où elle est atteinte, la ville au meilleur score gagne (égalité possible) :
+  `score = population + trésor / 10 + 25 × (prospérité + culture)` (notes de 0 à 100, celles du conseiller).
+  En Versus local, **Alt+T** change la durée (5 ans, 10 ans, 20 ans, sans limite) : commande `triche` 107
+  (valeur ≥ 0 : durée en mois, valeur < 0 : durée suivante), donc rejouable et déterministe. Une durée déjà
+  dépassée finit la partie au mois suivant. Le choix dans le menu Multijoueur viendra avec M12.
+- **Une seule fin.** La première des deux décide ; la partie continue ensuite si les joueurs le veulent, sans autre
+  fin. En Versus, la victoire du scénario d'Augustus (objectifs, renvoi par César) ne s'applique pas
+  (`city_victory_check`).
+- **Écran de fin** (`multijoueur/fin_versus.c`) : chez chaque joueur, dès que la ville est à l'écran : « Victoire ! »,
+  « Défaite » ou « Égalité », la raison, et les scores des deux villes au moment de la fin (population, trésor,
+  prospérité, culture, score), avec « Continuer à jouer » et « Menu principal ». L'écran est de l'interface : la
+  fin est décidée par la simulation, et l'écran s'ouvre hors simulation (une fois par fin, et de nouveau au
+  chargement d'une partie finie).
+- **Sauvegarde** : bloc `BR3V` version 6 : durée, mois écoulés, fin (raison, gagnant, tick) et scores de la fin.
+  Un bloc plus ancien se lit « 10 ans depuis le chargement, pas de fin ».
+- **Test** : `bash outils/test-victoire.sh [ticks]` (6 000 par défaut), sur « Brutus - Deux rives ». Journal écrit à la
+  main : la ville 2 pose un Sénat, la ville 1 envoie sa légion contre lui ; puis une durée de 2 mois, avec et sans
+  dépense de la ville 2. Le bilan du rejouage donne la fin (`Brutus III : victoire : fin … gagnant … tick …`) et le score
+  de chaque ville. `--capture` enregistre aussi l'écran de fin.
+
+Résultat du 23/11 : la légion de la ville 1 (16 soldats) détruit le Sénat de la ville 2 au tick 1 550 (« fin militaire,
+gagnant 1 ») ; combat éteint : pas de fin ; empreintes identiques ; rechargement en plein siège (tick 750) : même
+suite et même fin ; partie finie, sauvegardée puis rechargée : toujours finie, même gagnant et même tick. Durée de
+2 mois : fin économique au tick 1 600, ville 1 gagnante (600 contre 598 : la ville 2 a payé quatre puits) ; sans
+dépense : égalité. Le solo reste identique au bit près (Lugdunum, Tarraco, Carthago) ; les tests Versus et combat
+passent.
+
 ## Laissé aux missions suivantes
 
 - **Combat** : les forts adverses ne se détruisent pas (comme pour les envahisseurs). L'option « combat » dans le
   menu Multijoueur vient avec le Versus en réseau (M12) ; en local, c'est Alt+G.
 - **Envahisseurs** : créés hors passe de ville, donc à la ville 1 (ce qui ne change rien au combat : ils attaquent et
   sont attaqués par tous). Nos cartes n'ont pas de point d'invasion.
-- **Victoire** (`city_victory_check`) : vérifiée pour la ville 1 seulement ; M11.
+- **Victoire** : la durée et le combat se choisissent dans le menu Multijoueur avec M12 (en local : Alt+T, Alt+G).
+  Une ville qui ne construit pas de Sénat ne peut pas être battue militairement.
 - **Empire** (routes ouvertes, prix), **événements du scénario**, bataille lointaine : communs. Sur « Rivage »,
   l'entrée et la sortie des navires sont communes.
 - Les jalons de population (« 500 habitants »…) sont comptés une fois pour toute la partie.

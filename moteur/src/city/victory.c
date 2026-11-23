@@ -13,6 +13,7 @@
 #include "sound/speech.h"
 #include "window/mission_end.h"
 #include "window/victory_dialog.h"
+#include "multijoueur/versus.h" // Brutus III (M11)
 
 static struct {
     int state;
@@ -121,6 +122,9 @@ static int determine_victory_state(void)
 
 void city_victory_check(void)
 {
+    if (brutus_versus_actif()) {
+        return; // Brutus III (M11) : en Versus, la fin vient de multijoueur/victoire_versus.c
+    }
     if (scenario_is_open_play() && !data.force_win && !data.force_lose) {
         return;
     }

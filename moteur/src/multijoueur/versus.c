@@ -11,13 +11,15 @@
 #include "multijoueur/combat_versus.h"
 #include "multijoueur/empreinte.h"
 #include "multijoueur/simulation.h"
+#include "multijoueur/victoire_versus.h"
 #include "scenario/request.h"
 #include "widget/minimap.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#define VERSION_BLOC 5 // 2 : ville de chaque message ; 3 : demandes de César ; 4 : points de la carte ; 5 : combat
+#define VERSION_BLOC 6 // 2 : ville de chaque message ; 3 : demandes de César ; 4 : points de la carte ; 5 : combat ;
+                       // 6 : durée et fin de la partie (M11)
 #define TAILLE_VILLE_MAX 65536
 
 static const char MARQUE[4] = { 'B', 'R', '3', 'V' };
@@ -135,6 +137,7 @@ uint32_t brutus_versus_teinte(int ville)
 static void remettre_une_ville(void)
 {
     brutus_combat_definir_option(1); // M10 : combat activé par défaut au passage en Versus
+    brutus_victoire_remettre(); // M11 : durée par défaut, aucune fin
     etat.villes = 1;
     etat.vue = 0;
     brutus_ville_activer(0);
@@ -183,7 +186,7 @@ static uint32_t composer(uint8_t **sortie)
     unsigned int nb_batiments = (unsigned int) building_count();
     unsigned int nb_figures = figure_count();
     unsigned int nb_messages = (unsigned int) city_message_brutus_cases();
-    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures + 4 + nb_messages + BRUTUS_CARTE_VERSUS_TAILLE + 1;
+    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures + 4 + nb_messages + BRUTUS_CARTE_VERSUS_TAILLE + 1 + BRUTUS_VICTOIRE_TAILLE;
     taille += (uint32_t) (etat.villes - 1) * (4 + TAILLE_VILLE_MAX);
     int active_avant = etat.active;
     for (int v = 1; v < etat.villes; v++) {
@@ -221,6 +224,8 @@ static uint32_t composer(uint8_t **sortie)
         p += BRUTUS_CARTE_VERSUS_TAILLE;
     }
     d[p++] = (uint8_t) brutus_combat_option(); // M10 (version 5) : options du Versus (bit 0 : combat)
+    brutus_victoire_ecrire(d + p); // M11 (version 6) : durée, mois écoulés, fin et scores
+    p += BRUTUS_VICTOIRE_TAILLE;
     int avant = etat.active;
     for (int v = 1; v < etat.villes; v++) {
         buffer b;
@@ -381,6 +386,14 @@ void brutus_versus_appliquer_lu(void)
         if (ok) {
             brutus_combat_definir_option(d[p] & 1);
             p++;
+        }
+    }
+    brutus_victoire_remettre(); // avant la version 6 : durée par défaut depuis le chargement, aucune fin
+    if (ok && version >= 6) {
+        ok = p + BRUTUS_VICTOIRE_TAILLE <= taille;
+        if (ok) {
+            brutus_victoire_lire(d + p);
+            p += BRUTUS_VICTOIRE_TAILLE;
         }
     }
     if (!ok) {
