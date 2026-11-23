@@ -15,6 +15,7 @@
 #include "map/terrain.h"
 #include "multijoueur/commande.h"
 #include "multijoueur/versus.h"
+#include "multijoueur/victoire_versus.h"
 #include "core/log.h"
 #include "core/time.h"
 
@@ -248,6 +249,7 @@ int brutus_combat_attaquer_batiment(figure *f)
                 if (victime < BRUTUS_VILLES_MAX) {
                     bilan.batiments_detruits[victime]++;
                 }
+                brutus_victoire_batiment_detruit(victime, f->brutus_proprietaire); // M11
             }
         }
         return 1;

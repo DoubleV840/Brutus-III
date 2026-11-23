@@ -102,7 +102,8 @@ typedef enum {
     WINDOW_TEXT_INPUT,
     WINDOW_USER_PATH_SETUP,
     WINDOW_EDITOR_SELECT_CITY_RESOURCES_FOR_ROUTE,
-    WINDOW_BRUTUS_MULTIJOUEUR // Brutus III : fenêtre « Multijoueur » (multijoueur/menu.c)
+    WINDOW_BRUTUS_MULTIJOUEUR, // Brutus III : fenêtre « Multijoueur » (multijoueur/menu.c)
+    WINDOW_BRUTUS_FIN_VERSUS // Brutus III (M11) : écran de fin du Versus (multijoueur/fin_versus.c)
 } window_id;
 
 typedef struct {
