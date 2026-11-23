@@ -248,7 +248,8 @@
             <li><b>Avoir le jeu original</b> : Caesar III, acheté sur GOG ou Steam (quelques euros).
               Installe-le, puis repère son dossier d'installation.</li>
             <li><b>Glisser son dossier</b> sur cette page (ou « Choisir le dossier du jeu ») :
-              le dossier qui contient C3.sg2 et c3.eng. Une seule fois par navigateur.</li>
+              le dossier qui contient C3.sg2 et c3.eng. Une seule fois par navigateur : ensuite,
+              le jeu démarre tout seul en ouvrant la page.</li>
             <li><b>Jouer à plusieurs</b> : « Jouer », puis le menu <b>Multijoueur</b>. L'un crée une
               partie (Coop ou Versus) et donne le code du salon ; les autres le rejoignent avec ce code.
               Chacun utilise ses propres fichiers du jeu.</li>
@@ -515,6 +516,14 @@
 
       function browserCanLoadFolder() {
         return typeof FileReader !== 'undefined' && 'webkitdirectory' in dirElement;
+      }
+
+      function accueilDemande() {
+        try {
+          return new URLSearchParams(window.location.search || '').has('accueil');
+        } catch (e) {
+          return false;
+        }
       }
 
       function gameIsInstalled() {
@@ -883,6 +892,13 @@
             FS.syncfs(true, function(err) {
               if (err) {
                 Module.handleFSError(err);
+                return;
+              }
+              // Démarrage direct : si les fichiers du jeu sont déjà dans ce navigateur, le jeu se
+              // lance sans passer par l'accueil. « Quitter » dans le jeu ramène à l'accueil (changer
+              // de dossier, tout effacer) ; ?accueil dans l'adresse l'affiche aussi.
+              if (gameIsInstalled() && !accueilDemande()) {
+                Module.startGame();
                 return;
               }
               Module.showFirstScreen();

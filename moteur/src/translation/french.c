@@ -2400,6 +2400,7 @@ static translation_string all_strings[] = {
     {TR_BRUTUS_MULTIJOUEUR, "Multijoueur"}, // Brutus III
     {TR_BRUTUS_EDITEUR_ENTREE_2, "Entrée joueur 2"}, // Brutus III (M9)
     {TR_BRUTUS_EDITEUR_SORTIE_2, "Sortie joueur 2"}, // Brutus III (M9)
+    {TR_BRUTUS_EDITEUR_MISSIONS, "Éditeur de missions"}, // Brutus III
 };
 
 void translation_french(const translation_string **strings, int *num_strings)

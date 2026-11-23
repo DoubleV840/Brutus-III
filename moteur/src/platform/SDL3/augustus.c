@@ -33,6 +33,7 @@
 #include "platform/switch/switch.h"
 #include "platform/vita/vita.h"
 #include "window/asset_previewer.h"
+#include "multijoueur/nom_jeu.h" // Brutus III
 
 #include <signal.h>
 #include <stdio.h>
@@ -615,7 +616,7 @@ static int pre_init(const char *custom_data_dir)
             SDL_Log("%s: directory not found", custom_data_dir);
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
                 "Error",
-                "Augustus requires the original files from Caesar 3.\n\n"
+                BRUTUS_NOM_JEU " requires the original files from Caesar 3.\n\n"
                 "Please enter the proper directory or copy the files to the selected directory.",
                 NULL);
             return 0;
@@ -666,8 +667,8 @@ static int pre_init(const char *custom_data_dir)
         }
     } else {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
-            "Augustus requires the original files from Caesar 3 to run.",
-            "Please move the Augustus executable to the directory containing an existing "
+            BRUTUS_NOM_JEU " requires the original files from Caesar 3 to run.",
+            "Please move the " BRUTUS_NOM_JEU " executable to the directory containing an existing "
             "Caesar 3 installation, or run:\naugustus path-to-c3-directory",
             NULL);
     }
@@ -725,7 +726,7 @@ static void setup(const augustus_args *args)
     }
 
     char title[100];
-    encoding_to_utf8(lang_get_string(9, 0), title, 100, 0);
+    snprintf(title, sizeof(title), "%s", BRUTUS_NOM_JEU); // Brutus III : au lieu de « Caesar III »
     if (!platform_screen_create(title, config_get(CONFIG_SCREEN_DISPLAY_SCALE), args->display_id)) {
         SDL_Log("Exiting: SDL create window failed");
         exit_with_status(-2);

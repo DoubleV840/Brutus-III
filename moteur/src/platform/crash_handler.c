@@ -1,6 +1,7 @@
 #include "game/system.h"
 
 #include "core/log.h"
+#include "multijoueur/nom_jeu.h" // Brutus III
 #include "platform/platform.h"
 
 #if (defined(__GNUC__) && !defined(__MINGW32__) && !defined(__OpenBSD__) && \
@@ -12,13 +13,13 @@
 
 static void display_crash_message(void)
 {
-    system_show_error_message_box("Augustus has crashed :(",
-        "There was an unrecoverable error in Augustus, which will now close.\n\n"
+    system_show_error_message_box(BRUTUS_NOM_JEU " has crashed :(",
+        "There was an unrecoverable error in " BRUTUS_NOM_JEU ", which will now close.\n\n"
 #ifdef HAS_STACK_TRACE
         "The piece of code that caused the crash has been saved to augustus-log.txt.\n\n"
 #endif
         "If you can, please create an issue by going to:\n\n"
-        "https://github.com/Keriew/augustus/issues/new \n\n"
+        "https://github.com/DoubleV840/Brutus-III/issues/new \n\n" // Brutus III
         "Please attach "
 #ifdef HAS_STACK_TRACE
         "augustus-log.txt and "
@@ -27,7 +28,7 @@ static void display_crash_message(void)
         "Also, please describe what you were doing when the game crashed.\n\n"
         "With your help, we can avoid this crash in the future.\n\n"
         "Thanks!\n\n"
-        "- The Augustus dev team");
+        "- The " BRUTUS_NOM_JEU " team");
 }
 
 #if defined(__GNUC__) && !defined(_WIN32)

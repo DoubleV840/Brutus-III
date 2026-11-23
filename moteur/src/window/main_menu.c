@@ -22,6 +22,7 @@
 #include "graphics/weather.h"
 #include "graphics/window.h"
 #include "multijoueur/menu.h"
+#include "multijoueur/nom_jeu.h"
 #include "multijoueur/reseau.h"
 #include "sound/music.h"
 #include "window/cck_selection.h"
@@ -55,10 +56,10 @@ static generic_button buttons[] = {
 
 static void draw_version_string(void)
 {
-    // Brutus III : « Brutus III <commit> - Augustus v4.0.0 »
+    // Brutus III : « Brutus III <commit> (Augustus v4.0.0) » : le moteur reste crédité (AGPL).
     char ascii[100];
     const char *revision = brutus_revision();
-    snprintf(ascii, sizeof(ascii), "Brutus III%s%s - Augustus v%s",
+    snprintf(ascii, sizeof(ascii), BRUTUS_NOM_JEU "%s%s (Augustus v%s)",
         revision[0] ? " " : "", revision, system_version());
     uint8_t version_string[100];
     int text_y = screen_height() - 54;
@@ -82,7 +83,7 @@ static void draw_background(void)
         graphics_in_dialog();
         outer_panel_draw(162, 32, 20, 22);
         if (!data.logo_image_id) {
-            data.logo_image_id = assets_get_image_id("UI", "Main Menu Banner");
+            data.logo_image_id = assets_get_image_id("Brutus", "Banniere Menu"); // Brutus III
         }
         image_draw(data.logo_image_id, 176, 50, COLOR_MASK_NONE, SCALE_NONE);
         graphics_reset_dialog();
@@ -106,7 +107,7 @@ static void draw_foreground(void)
     lang_text_draw_centered(CUSTOM_TRANSLATION, TR_BRUTUS_MULTIJOUEUR, 192, 169, 256, FONT_NORMAL_GREEN);
     lang_text_draw_centered(30, 2, 192, 205, 256, FONT_NORMAL_GREEN);
     lang_text_draw_centered(30, 3, 192, 241, 256, FONT_NORMAL_GREEN);
-    lang_text_draw_centered(9, 8, 192, 277, 256, FONT_NORMAL_GREEN);
+    lang_text_draw_centered(CUSTOM_TRANSLATION, TR_BRUTUS_EDITEUR_MISSIONS, 192, 277, 256, FONT_NORMAL_GREEN); // Brutus III
     lang_text_draw_centered(2, 0, 192, 313, 256, FONT_NORMAL_GREEN);
     lang_text_draw_centered(30, 5, 192, 349, 256, FONT_NORMAL_GREEN);
 

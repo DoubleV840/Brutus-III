@@ -2401,6 +2401,7 @@ typedef enum {
     TR_BRUTUS_MULTIJOUEUR, // Brutus III : menu « Multijoueur »
     TR_BRUTUS_EDITEUR_ENTREE_2, // Brutus III (M9) : éditeur, entrée du joueur 2
     TR_BRUTUS_EDITEUR_SORTIE_2, // Brutus III (M9) : éditeur, sortie du joueur 2
+    TR_BRUTUS_EDITEUR_MISSIONS, // Brutus III : bouton du menu principal, sans « Caesar III »
     TRANSLATION_MAX_KEY
 } translation_key;
 

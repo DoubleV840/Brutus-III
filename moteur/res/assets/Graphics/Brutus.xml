@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!DOCTYPE assetlist>
+<!-- Brutus III : bannière du menu principal et logo de l'écran de démarrage
+     (générés par outils/generer-banniere.py, CC BY-SA 3.0) -->
+<assetlist name="Brutus">
+	<image id="Banniere Menu" src="Banniere_Menu"/>
+	<image id="Logo Demarrage" src="Logo_Demarrage"/>
+</assetlist>
