@@ -75,6 +75,7 @@ static struct {
     int mode;   // MODE_COOP ou MODE_VERSUS
     int combat; // option du Versus
     int duree;  // mois (0 : sans limite)
+    int places; // Coop : nombre de joueurs du salon, de 2 à BRUTUS_JOUEURS_MAX (le Versus reste à 2)
     struct {
         int voulu;
         int combat;
@@ -89,7 +90,7 @@ static struct {
     int saisie; // 0 aucune, 1 code, 2 chat, 3 pseudo
     int saisie_choisie; // M12 : à l'accueil, le champ choisi d'un clic (1 code, 3 pseudo ; 0 : pas encore)
     char pseudos[BRUTUS_JOUEURS_MAX][64]; // M12 : pseudo de chaque joueur du salon (UTF-8, donné par le relais)
-} etat = { .combat = 1, .duree = BRUTUS_VICTOIRE_DUREE_DEFAUT };
+} etat = { .combat = 1, .duree = BRUTUS_VICTOIRE_DUREE_DEFAUT, .places = 2 };
 
 static uint8_t saisie_code[CODE_MAX];
 static uint8_t saisie_chat[200];
@@ -306,14 +307,15 @@ static void demander_creation(void)
     if (versus) {
         char d[40];
         texte_duree(etat.duree, d, sizeof(d));
-        snprintf(info, sizeof(info), "Versus%s%s%s, combat %s, %s", carte[0] ? ", carte « " : "", carte,
-            carte[0] ? " »" : "", etat.combat ? "activé" : "désactivé", d);
+        // Sans guillemets « » : la police du jeu ne les a pas
+        snprintf(info, sizeof(info), "Versus%s%s, combat %s, %s", carte[0] ? ", carte " : "", carte,
+            etat.combat ? "activé" : "désactivé", d);
         game_state_pause(); // pas d'avance gratuite : la partie démarre pour tous à l'arrivée de l'autre
     } else {
-        snprintf(info, sizeof(info), "Coop%s%s%s", carte[0] ? ", carte « " : "", carte, carte[0] ? " »" : "");
+        snprintf(info, sizeof(info), "Coop à %d%s%s", etat.places, carte[0] ? ", carte " : "", carte);
     }
     etat.action = BRUTUS_MENU_CREER;
-    etat.action_parametre = versus ? 2 : 2; // joueurs du salon (Versus : 2, une ville chacun)
+    etat.action_parametre = versus ? 2 : etat.places; // joueurs du salon (Versus : 2, une ville chacun)
     snprintf(etat.action_texte, sizeof(etat.action_texte), "%s", info);
 }
 
@@ -348,6 +350,11 @@ BRUTUS_RESEAU_EXPORT void brutus_menu_definir_partie(int versus, int combat, int
     etat.mode = versus ? MODE_VERSUS : MODE_COOP;
     etat.combat = combat ? 1 : 0;
     etat.duree = duree < 0 ? 0 : duree;
+}
+
+BRUTUS_RESEAU_EXPORT void brutus_menu_definir_places(int places)
+{
+    etat.places = places < 2 ? 2 : places > BRUTUS_JOUEURS_MAX ? BRUTUS_JOUEURS_MAX : places;
 }
 
 BRUTUS_RESEAU_EXPORT int brutus_menu_creer(void)
@@ -433,6 +440,9 @@ void brutus_menu_retour_menu_principal(void)
 #define LARGEUR 544
 #define HAUTEUR 432
 #define BAS (Y0 + HAUTEUR - 44)
+// Salon : une ligne de 18 px par joueur (4 au plus), puis les messages, une ligne de 16 px chacun.
+#define LIGNE_JOUEUR(i) (126 + (i) * 18)
+#define LIGNE_CHAT(i) (226 + (i) * 16)
 
 enum {
     B_RETOUR = 1,
@@ -448,7 +458,8 @@ enum {
     B_MODE_COOP,
     B_MODE_VERSUS,
     B_COMBAT,
-    B_DUREE
+    B_DUREE,
+    B_PLACES
 };
 
 static void clic(const generic_button *b);
@@ -538,6 +549,8 @@ static void preparer_boutons_accueil(void)
         if (versus_choisi()) {
             ajouter_accueil(X0 + 96, 182, 150, 24, B_COMBAT);
             ajouter_accueil(X0 + 352, 182, 150, 24, B_DUREE);
+        } else {
+            ajouter_accueil(X0 + 96, 182, 150, 24, B_PLACES);
         }
         if (etat.depuis_ville) {
             ajouter_accueil(X0 + 24, 214, 240, 26, B_CREER_ICI);
@@ -557,6 +570,7 @@ static const char *libelle_accueil(int p, char *tampon, size_t taille)
         case B_MODE_VERSUS: return "Versus";
         case B_COMBAT: return etat.combat ? "Activé" : "Désactivé";
         case B_DUREE: texte_duree(etat.duree, tampon, taille); return etat.duree ? tampon : "Sans limite";
+        case B_PLACES: snprintf(tampon, taille, "%d joueurs", etat.places); return tampon;
         case B_CREER_ICI: return "Créer avec cette ville";
         case B_NOUVELLE: return "Nouvelle partie";
         case B_CHARGER: return "Charger une sauvegarde";
@@ -628,24 +642,27 @@ static void dessiner_accueil(void)
         aide = "Versus : chacun sa ville sur la même carte (2 joueurs). Victoire : détruire la ville de l'autre, "
             "ou le meilleur score à la fin de la durée.";
     } else {
-        aide = "Coop : vous gérez la même ville à plusieurs, avec les mêmes pouvoirs.";
+        aide = "Coop : vous gérez la même ville à plusieurs (2 à 4 joueurs), avec les mêmes pouvoirs.";
     }
     text_draw_multiline(t(aide), X0 + 24, 152, LARGEUR - 48, 0, FONT_SMALL_PLAIN, COLOR_BLACK);
     if (versus_choisi()) {
         text_draw(t("Combat :"), X0 + 24, 188, FONT_NORMAL_BLACK, 0);
         text_draw(t("Durée :"), X0 + 284, 188, FONT_NORMAL_BLACK, 0);
+    } else {
+        text_draw(t("Places :"), X0 + 24, 188, FONT_NORMAL_BLACK, 0);
+        text_draw(t("Nombre de joueurs, toi compris."), X0 + 256, 190, FONT_SMALL_PLAIN, COLOR_BLACK);
     }
     if (etat.creer_quand_ville) {
         text_draw(t("La partie multijoueur sera créée dès que la ville sera à l'écran."), X0 + 24, 246, FONT_SMALL_PLAIN, COLOR_BLACK);
     } else if (!etat.depuis_ville && versus_choisi()) {
         text_draw(t("Nouvelle partie : les cartes à deux joueurs sont en tête de liste."), X0 + 24, 246, FONT_SMALL_PLAIN, COLOR_BLACK);
     } else if (etat.depuis_ville) {
-        text_draw(t("La ville à l'écran devient la partie multijoueur. Tu recevras un code à donner à l'autre joueur."),
+        text_draw(t("La ville à l'écran devient la partie. Tu recevras un code à partager."),
             X0 + 24, 246, FONT_SMALL_PLAIN, COLOR_BLACK);
     }
 
     text_draw(t("Rejoindre une partie"), X0 + 24, 268, FONT_NORMAL_BLACK, 0);
-    text_draw_multiline(t("Entre le code de 6 caractères donné par l'autre joueur. Tu peux rester au menu : tu recevras sa ville."),
+    text_draw_multiline(t("Entre le code de 6 caractères donné par l'hôte. Tu peux rester au menu : tu recevras sa ville."),
         X0 + 24, 288, LARGEUR - 48, 0, FONT_SMALL_PLAIN, COLOR_BLACK);
     text_draw(t("Code :"), X0 + 112, 325, FONT_NORMAL_BLACK, 0);
 
@@ -662,7 +679,7 @@ static void ajouter_session(int x, int y, int w, int parametre, int parametre2)
     b->x = x;
     b->y = y;
     b->width = w;
-    b->height = parametre == B_RETIRER || parametre == B_VOIR ? 20 : 26;
+    b->height = parametre == B_RETIRER ? 17 : parametre == B_VOIR ? 20 : 26;
     b->left_click_handler = clic;
     b->right_click_handler = 0;
     b->parameter1 = parametre;
@@ -674,13 +691,13 @@ static void preparer_boutons_session(void)
     nb_session = 0;
     for (int i = 0; i < etat.nb_joueurs; i++) {
         if (etat.hote && etat.joueurs[i].numero != etat.joueur_local) {
-            ajouter_session(X0 + LARGEUR - 120, 130 + i * 22, 88, B_RETIRER, etat.joueurs[i].numero);
+            ajouter_session(X0 + LARGEUR - 120, LIGNE_JOUEUR(i), 88, B_RETIRER, etat.joueurs[i].numero);
         }
     }
     int premier = etat.nb_chat > CHAT_LIGNES ? etat.nb_chat - CHAT_LIGNES : 0;
     for (int i = premier; i < etat.nb_chat; i++) {
         if (etat.chat[i].signal >= 0) {
-            ajouter_session(X0 + LARGEUR - 88, 222 + (i - premier) * 16 - 3, 56, B_VOIR, etat.chat[i].signal);
+            ajouter_session(X0 + LARGEUR - 88, LIGNE_CHAT(i - premier) - 3, 56, B_VOIR, etat.chat[i].signal);
         }
     }
     ajouter_session(X0 + LARGEUR - 152, 340, 120, B_ENVOYER, 0);
@@ -708,19 +725,21 @@ static void dessiner_session(void)
     char ligne[TEXTE_MAX];
     snprintf(ligne, sizeof(ligne), "Code de la partie : ");
     int x = text_draw(t(ligne), X0 + 24, 70, FONT_NORMAL_BLACK, 0);
-    text_draw(etat.code[0] ? etat.code : t("..."), X0 + 24 + x, 66, FONT_LARGE_BLACK, 0);
+    x += text_draw(etat.code[0] ? etat.code : t("..."), X0 + 24 + x, 66, FONT_LARGE_BLACK, 0);
+    // La ligne d'information (mode, carte) suit le code, dont la largeur dépend des lettres
+    int x_info = X0 + 24 + x + 16;
     if (etat.info[0]) {
-        text_draw_ellipsized(etat.info, X0 + 250, 72, LARGEUR - 274, FONT_SMALL_PLAIN, COLOR_BLACK);
+        text_draw_ellipsized(etat.info, x_info, 72, X0 + LARGEUR - 24 - x_info, FONT_SMALL_PLAIN, COLOR_BLACK);
     } else if (etat.nb_joueurs < 2 && etat.code[0]) {
-        text_draw(t("Donne ce code à l'autre joueur."), X0 + 300, 70, FONT_SMALL_PLAIN, COLOR_BLACK);
+        text_draw(t("Donne ce code aux autres joueurs."), x_info, 72, FONT_SMALL_PLAIN, COLOR_BLACK);
     }
     text_draw_multiline(etat.texte[0] ? etat.texte : t(" "), X0 + 24, 96, LARGEUR - 48, 0, FONT_NORMAL_BLACK, 0);
 
-    // Joueurs du salon
-    inner_panel_draw(X0 + 16, 122, (LARGEUR - 32) / 16, 6);
+    // Joueurs du salon (jusqu'à BRUTUS_JOUEURS_MAX lignes)
+    inner_panel_draw(X0 + 16, 120, (LARGEUR - 32) / 16, 5);
     for (int i = 0; i < etat.nb_joueurs; i++) {
         const joueur_salon *j = &etat.joueurs[i];
-        int y = 130 + i * 22;
+        int y = LIGNE_JOUEUR(i);
         graphics_fill_rect(X0 + 28, y + 2, 12, 12, brutus_coop_couleur(j->numero));
         const char *qui = brutus_menu_nom(j->numero);
         const char *moi = j->numero == etat.joueur_local ? " (toi)" : "";
@@ -736,12 +755,12 @@ static void dessiner_session(void)
     }
 
     // Chat
-    text_draw(t("Messages (touche G dans la ville : signaler un endroit)"), X0 + 24, 200, FONT_SMALL_PLAIN, COLOR_BLACK);
-    inner_panel_draw(X0 + 16, 214, (LARGEUR - 32) / 16, 7);
+    text_draw(t("Messages (touche G dans la ville : signaler un endroit)"), X0 + 24, 204, FONT_SMALL_PLAIN, COLOR_BLACK);
+    inner_panel_draw(X0 + 16, 218, (LARGEUR - 32) / 16, 7);
     int premier = etat.nb_chat > CHAT_LIGNES ? etat.nb_chat - CHAT_LIGNES : 0;
     for (int i = premier; i < etat.nb_chat; i++) {
         const ligne_chat *l = &etat.chat[i];
-        int y = 222 + (i - premier) * 16;
+        int y = LIGNE_CHAT(i - premier);
         if (l->joueur == etat.joueur_local) {
             snprintf(ligne, sizeof(ligne), "Toi :");
         } else {
@@ -752,7 +771,7 @@ static void dessiner_session(void)
             FONT_NORMAL_WHITE, 0);
     }
     if (!etat.nb_chat) {
-        text_draw(t("Aucun message pour l'instant."), X0 + 28, 222, FONT_NORMAL_PLAIN, COLOR_FONT_LIGHT_GRAY);
+        text_draw(t("Aucun message pour l'instant."), X0 + 28, LIGNE_CHAT(0), FONT_NORMAL_PLAIN, COLOR_FONT_LIGHT_GRAY);
     }
     input_box_draw(&boite_chat);
 
@@ -764,7 +783,7 @@ static void dessiner_session(void)
         const generic_button *b = &boutons_session[i];
         if (b->parameter1 == B_RETIRER || b->parameter1 == B_VOIR) {
             button_border_draw(b->x, b->y, b->width, b->height, etat.focus == i + 1);
-            text_draw_centered(t(libelle_session(b->parameter1)), b->x, b->y + 5, b->width, FONT_SMALL_PLAIN,
+            text_draw_centered(t(libelle_session(b->parameter1)), b->x, b->y + (b->height - 10) / 2, b->width, FONT_SMALL_PLAIN,
                 COLOR_WHITE);
         } else {
             bouton(b, libelle_session(b->parameter1), etat.focus == i + 1);
@@ -843,6 +862,9 @@ static void clic(const generic_button *b)
             break;
         case B_DUREE:
             etat.duree = duree_suivante(etat.duree);
+            break;
+        case B_PLACES:
+            etat.places = etat.places >= BRUTUS_JOUEURS_MAX ? 2 : etat.places + 1;
             break;
         case B_CREER_ICI:
             demander_creation();

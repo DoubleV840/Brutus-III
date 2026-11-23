@@ -213,8 +213,8 @@ passent.
 - **Cartes à deux en tête** : en Versus, la liste des cartes commence par celles qui ont une entrée pour le joueur 2
   (bloc `BR3C` : nos trois cartes et celles faites dans l'éditeur), dans l'ordre d'origine ; les autres suivent (les deux
   villes partent alors de la même entrée). `brutus_carte_versus_fichier_a_deux()` lit les 25 derniers octets du fichier.
-- **Ce que voient les invités** : l'hôte donne au relais une ligne d'information (« Versus, carte « Brutus - Deux rives »,
-  combat activé, 10 ans ») ; le relais la renvoie à chacun dans `bienvenue` (docs/protocole.md) et la fenêtre
+- **Ce que voient les invités** : l'hôte donne au relais une ligne d'information (« Versus, carte Brutus - Deux rives,
+  combat activé, 10 ans », sans guillemets autour du nom : la police du jeu ne les a pas) ; le relais la renvoie à chacun dans `bienvenue` (docs/protocole.md) et la fenêtre
   Multijoueur l'affiche à côté du code, avant le départ comme pendant la partie.
 - **Départ** : en Versus, l'hôte est mis en pause tant que l'autre joueur n'est pas là (pas d'avance gratuite). Au
   premier tour du lockstep, l'hôte envoie trois commandes, appliquées par tous au même tick : `triche` 103 (passage en

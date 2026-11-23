@@ -649,7 +649,7 @@
         texte = s.joueur === 0 ? "En attente d'un autre joueur. Code de la partie : " + s.code : "Connecté. En attente de la partie de l'hôte…";
       } else if (villeQuittee()) {
         phase = "hors-ville";
-        texte = "Vous avez quitté la ville : la partie multijoueur est en pause pour vous deux. Revenez dans la partie ou quittez-la.";
+        texte = "Vous avez quitté la ville : la partie multijoueur est en pause pour " + (s.joueursMax > 2 ? "tous les joueurs" : "vous deux") + ". Revenez dans la partie ou quittez-la.";
       } else if (att.length) {
         phase = "attente";
         var n = [];
@@ -1140,7 +1140,7 @@
       var n = moteur.coopConflits();
       if (n > 0) {
         stats.conflits += n;
-        s.avis = "L'autre joueur a agi au même moment : ton ordre n'a pas abouti.";
+        s.avis = "Un autre joueur a agi au même moment : ton ordre n'a pas abouti.";
         s.avisJusqua = t + 6000;
       }
     }

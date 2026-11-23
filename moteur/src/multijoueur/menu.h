@@ -84,6 +84,11 @@ BRUTUS_RESEAU_EXPORT int brutus_menu_saisie_en_cours(void);
  */
 BRUTUS_RESEAU_EXPORT void brutus_menu_definir_partie(int versus, int combat, int duree);
 /**
+ * Coop jusqu'à 4 (tests, et ce que fait le bouton « Places ») : nombre de joueurs du salon en Coop, borné à
+ * 2…BRUTUS_JOUEURS_MAX. Le Versus reste à 2 (une ville par joueur).
+ */
+BRUTUS_RESEAU_EXPORT void brutus_menu_definir_places(int places);
+/**
  * M12 (tests) : fait comme le bouton « Créer avec cette ville » : prépare la partie choisie et met l'action
  * CREER en file (son texte est la ligne d'information). Retourne le nombre de joueurs du salon.
  */

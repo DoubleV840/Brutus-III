@@ -117,7 +117,7 @@ async function recevoirSauvegarde(c) {
 const attendreMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
 before(async () => {
-  // Délai de fermeture court pour tester l'alarme ; 4 joueurs permis (2 en production).
+  // Délai de fermeture court pour tester l'alarme ; 4 joueurs permis (comme en production).
   relais = await demarrerRelais({ DELAI_FERMETURE_S: 1, JOUEURS_MAX: 4 });
 });
 

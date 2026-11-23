@@ -163,10 +163,16 @@ void brutus_coop_signaler_conflit(void)
 {
     static uint8_t texte[200];
     if (!texte[0]) {
-        encoding_from_utf8("L'autre joueur a agi au même moment : ton ordre n'a pas abouti.", texte, sizeof(texte));
+        encoding_from_utf8("Un autre joueur a agi au même moment : ton ordre n'a pas abouti.", texte, sizeof(texte));
     }
     etat.conflits++;
     city_warning_show_custom(texte, NEW_WARNING_SLOT);
+}
+
+BRUTUS_RESEAU_EXPORT int brutus_coop_test_presence(int joueur)
+{
+    // Vrai si la vue de ce joueur est connue (cadre de couleur sur la mini-carte, curseur dans la ville).
+    return joueur >= 0 && joueur < BRUTUS_JOUEURS_MAX && joueur != brutus_joueur_local() && etat.autres[joueur].connue;
 }
 
 BRUTUS_RESEAU_EXPORT int brutus_coop_test_case_libre(int n)

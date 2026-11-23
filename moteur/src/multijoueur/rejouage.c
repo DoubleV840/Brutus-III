@@ -5,6 +5,8 @@
 #include "multijoueur/victoire_versus.h"
 #include "multijoueur/rejouage.h"
 #include "multijoueur/combat_versus.h"
+#include "multijoueur/coop.h"
+#include "multijoueur/reseau.h"
 #include "city/ratings.h"
 #include "city/warning.h"
 #include "city/view.h"
@@ -77,6 +79,7 @@ static struct {
     int multijoueur;
     int interface_test;
     int capture; // M8 : à la fin, image de toute la ville et de la mini-carte (dossier des captures)
+    int capture_salon; // Coop jusqu'à 4 : à la fin, la fenêtre Multijoueur (accueil, salon à 4) et la ville vue par l'hôte
     long ticks_par_image;
     long resync_au_tick[64];
     int joueur_local;
@@ -135,6 +138,8 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
             options.joueur_local = strtol(argv[++i], 0, 10);
         } else if (strcmp(a, "--capture") == 0) {
             options.capture = 1;
+        } else if (strcmp(a, "--capture-salon") == 0) {
+            options.capture_salon = 1;
         } else if (strcmp(a, "--interface-test") == 0) {
             options.multijoueur = 1;
             options.interface_test = 1;
@@ -364,6 +369,67 @@ static void capturer_ecran(void)
     SDL_Delay(1100);
 }
 
+// Coop jusqu'à 4 : ce que voit l'hôte d'une partie à 4 (état poussé comme le ferait la page) : l'accueil de la
+// fenêtre Multijoueur (Coop, 4 places), le salon (4 joueurs, pseudos, couleurs, latences, un déconnecté, chat avec
+// un signal), puis la ville avec la vue des trois autres sur la mini-carte et leurs curseurs.
+static void capturer_salon(void)
+{
+    for (int essai = 0; essai < 50 && (essai == 0 || window_get_id() != WINDOW_CITY); essai++) {
+        window_city_show();
+        window_draw(1);
+    }
+    brutus_reseau_activer(0);
+    // Vues des autres joueurs : la nôtre, décalée
+    static const int decalage[BRUTUS_JOUEURS_MAX][2] = { { 0, 0 }, { -14, -20 }, { 16, 22 }, { 22, -30 } };
+    uint8_t *tampon = brutus_reseau_tampon();
+    int signal = -1;
+    for (int j = 1; j < BRUTUS_JOUEURS_MAX; j++) {
+        if (!brutus_coop_ma_presence()) {
+            break;
+        }
+        int32_t v[6];
+        memcpy(v, tampon, sizeof(v));
+        v[0] += decalage[j][0];
+        v[1] += decalage[j][1];
+        int g = brutus_coop_test_case_libre(j * 5);
+        v[5] = g;
+        if (j == 2) {
+            signal = g;
+        }
+        memcpy(tampon, v, sizeof(v));
+        brutus_coop_presence(j, BRUTUS_COOP_PRESENCE);
+    }
+    brutus_menu_disponible(1);
+    brutus_menu_definir_partie(0, 1, BRUTUS_VICTOIRE_DUREE_DEFAUT);
+    brutus_menu_definir_places(BRUTUS_JOUEURS_MAX);
+    brutus_menu_pseudo_definir("Léa");
+    window_brutus_multijoueur_show(1);
+    capturer_ecran();
+
+    static const char *pseudos[BRUTUS_JOUEURS_MAX] = { "Léa", "Marcus", "Julia", "Quintus" };
+    static const int latences[BRUTUS_JOUEURS_MAX] = { -1, 42, 87, -1 };
+    brutus_menu_etat(BRUTUS_MENU_JEU, "K7MPQ2", "", "", 0, 1);
+    brutus_menu_info("Coop à 4, carte Lugdunum");
+    brutus_menu_joueurs_vider();
+    for (int j = 0; j < BRUTUS_JOUEURS_MAX; j++) {
+        brutus_menu_joueur(j, j != 3, latences[j]);
+        brutus_menu_joueur_pseudo(j, pseudos[j]);
+    }
+    brutus_menu_chat(0, 0, "", -1);
+    brutus_menu_chat(1, 0, "On pose le forum près du marché ?", -1);
+    brutus_menu_chat(2, 1, "D'accord, je m'occupe des routes.", -1);
+    if (signal >= 0) {
+        brutus_coop_signal(2, signal);
+        brutus_menu_chat(3, 2, "a signalé un endroit (touche G).", signal);
+    }
+    brutus_menu_chat(4, 3, "Je reviens dans une minute.", -1);
+    window_brutus_multijoueur_show(1);
+    capturer_ecran();
+
+    window_city_show();
+    capturer_ecran();
+}
+
 static int rejouer(void)
 {
     if (!options.empreintes) {
@@ -584,6 +650,10 @@ static int rejouer(void)
             window_brutus_multijoueur_show(0);
             capturer_ecran();
         }
+    }
+
+    if (options.capture_salon) {
+        capturer_salon();
     }
 
     if (options.sauvegarde_finale && !game_file_write_saved_game(options.sauvegarde_finale)) {

@@ -82,7 +82,7 @@ Exemple :
 
 ```json
 {"type":"bienvenue","version":1,"code":"K7QXM3","joueur":1,"jeton":"9f2c…(32 car.)","joueursMax":2,
- "info":"Versus, carte « Brutus - Deux rives », combat activé, 10 ans",
+ "info":"Versus, carte Brutus - Deux rives, combat activé, 10 ans",
  "reconnexion":false,"joueurs":[{"joueur":0,"connecte":true,"pseudo":"Léa"},{"joueur":1,"connecte":true,"pseudo":""}]}
 ```
 
@@ -222,7 +222,7 @@ Exemple (en-tête, puis les 12 premiers octets du premier morceau) :
 | Limite | Valeur | Réglage |
 |---|---|---|
 | Taille d'un message (en-tête compris) | 65 536 octets | `TAILLE_MAX_MESSAGE` (`src/index.js`) |
-| Joueurs par salon | 2 (PLAN.md : 2, prévoir jusqu'à 4) | `JOUEURS_MAX` (`wrangler.jsonc`) : mettre `"4"` pour permettre au créateur de demander 3 ou 4 places |
+| Joueurs par salon | 4 au plus (le créateur demande 2, 3 ou 4 places : Coop de 2 à 4, Versus à 2) | `JOUEURS_MAX` (`wrangler.jsonc`, `"4"`) |
 | Fermeture d'un salon vide | 600 s après le départ du dernier joueur | `DELAI_FERMETURE_S` (`wrangler.jsonc`) |
 | Sauvegarde | 8 Mo | règle côté client (le serveur ne limite que chaque message) |
 
