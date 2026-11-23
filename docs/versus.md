@@ -163,11 +163,14 @@ après rechargement.
 
 ## Victoire (M11)
 
-- **Victoire militaire.** Le bâtiment central d'une ville est son **Sénat** (un seul par ville, comme dans
-  Augustus). Quand les soldats de l'autre ville le détruisent, la partie est finie : l'attaquant a gagné. Le Sénat a
-  200 points de vie face aux soldats de l'autre ville (comme un mur ; 10 pour un bâtiment ordinaire), pour laisser le
-  temps de le défendre. Un Sénat perdu autrement (incendie, effondrement, démoli par son joueur) ne compte pas.
-  Sans combat (option éteinte), il n'y a pas de victoire militaire.
+- **Victoire militaire** (choix du fondateur, 23/11) : on gagne en **détruisant entièrement la ville de l'autre**.
+  Une ville a perdu quand les soldats de l'autre ville lui ont détruit au moins un bâtiment et qu'il ne lui reste
+  plus aucun bâtiment que des soldats peuvent détruire (vérifié à chaque tick). Ne comptent pas, puisqu'ils ne
+  tombent pas : les forts et leur terrain, les portes, les ponts, les barrages, les places (une case au moins du
+  bâtiment doit être destructible, `map_routing_is_destroyable`). Les légions n'ont pas à être tuées. Une ville
+  encore vide (jamais attaquée) ne perd pas. Ce qui disparaît autrement après la première attaque (incendie,
+  démolition par son joueur) compte aussi. Deux villes détruites au même tick : égalité. Sans combat (option
+  éteinte), il n'y a pas de victoire militaire.
 - **Victoire économique.** La partie a une **durée** en mois, comptée depuis le passage en Versus : 10 ans par
   défaut. Au premier mois où elle est atteinte, la ville au meilleur score gagne (égalité possible) :
   `score = population + trésor / 10 + 25 × (prospérité + culture)` (notes de 0 à 100, celles du conseiller).
@@ -182,16 +185,18 @@ après rechargement.
   prospérité, culture, score), avec « Continuer à jouer » et « Menu principal ». L'écran est de l'interface : la
   fin est décidée par la simulation, et l'écran s'ouvre hors simulation (une fois par fin, et de nouveau au
   chargement d'une partie finie).
-- **Sauvegarde** : bloc `BR3V` version 6 : durée, mois écoulés, fin (raison, gagnant, tick) et scores de la fin.
+- **Sauvegarde** : bloc `BR3V` version 6 : durée, mois écoulés, fin (raison, gagnant, tick), scores de la fin, et
+  pour chaque ville la dernière ville qui lui a détruit un bâtiment.
   Un bloc plus ancien se lit « 10 ans depuis le chargement, pas de fin ».
 - **Test** : `bash outils/test-victoire.sh [ticks]` (6 000 par défaut), sur « Brutus - Deux rives ». Journal écrit à la
-  main : la ville 2 pose un Sénat, la ville 1 envoie sa légion contre lui ; puis une durée de 2 mois, avec et sans
-  dépense de la ville 2. Le bilan du rejouage donne la fin (`Brutus III : victoire : fin … gagnant … tick …`) et le score
-  de chaque ville. `--capture` enregistre aussi l'écran de fin.
+  main : la ville 2 pose deux puits, la ville 1 envoie sa légion contre eux (et une variante avec un troisième puits
+  hors d'atteinte) ; puis une durée de 2 mois, avec et sans dépense de la ville 2. Le bilan du rejouage donne la fin
+  (`Brutus III : victoire : fin … gagnant … tick …`), et pour chaque ville son score et ses bâtiments restants. `--capture` enregistre aussi l'écran de fin.
 
-Résultat du 23/11 : la légion de la ville 1 (16 soldats) détruit le Sénat de la ville 2 au tick 1 550 (« fin militaire,
-gagnant 1 ») ; combat éteint : pas de fin ; empreintes identiques ; rechargement en plein siège (tick 750) : même
-suite et même fin ; partie finie, sauvegardée puis rechargée : toujours finie, même gagnant et même tick. Durée de
+Résultat du 23/11 : la légion de la ville 1 (16 soldats) détruit les deux puits de la ville 2, qui n'a plus rien, au tick
+1 220 (« fin militaire, gagnant 1 ») ; le fort de la ville 1 n'est pas compté dans ses bâtiments ; combat éteint : pas de
+fin ; un puits hors d'atteinte : pas de fin (1 bâtiment restant) ; empreintes identiques ; rechargement en plein
+siège (tick 500) : même suite et même fin ; partie finie, sauvegardée puis rechargée : toujours finie, même gagnant et même tick. Durée de
 2 mois : fin économique au tick 1 600, ville 1 gagnante (600 contre 598 : la ville 2 a payé quatre puits) ; sans
 dépense : égalité. Le solo reste identique au bit près (Lugdunum, Tarraco, Carthago) ; les tests Versus et combat
 passent.
@@ -203,7 +208,8 @@ passent.
 - **Envahisseurs** : créés hors passe de ville, donc à la ville 1 (ce qui ne change rien au combat : ils attaquent et
   sont attaqués par tous). Nos cartes n'ont pas de point d'invasion.
 - **Victoire** : la durée et le combat se choisissent dans le menu Multijoueur avec M12 (en local : Alt+T, Alt+G).
-  Une ville qui ne construit pas de Sénat ne peut pas être battue militairement.
+  Une ville qui ne garde qu'un bâtiment hors d'atteinte (une île, derrière l'eau) ne peut pas être battue
+  militairement.
 - **Empire** (routes ouvertes, prix), **événements du scénario**, bataille lointaine : communs. Sur « Rivage »,
   l'entrée et la sortie des navires sont communes.
 - Les jalons de population (« 500 habitants »…) sont comptés une fois pour toute la partie.

@@ -4,7 +4,9 @@
 /*
  * Brutus III (M11) : fin d'une partie Versus (docs/versus.md, « Victoire »).
  *
- *  - Victoire militaire : la ville dont le Sénat est détruit par les soldats de l'autre ville a perdu.
+ *  - Victoire militaire : une ville a perdu quand l'autre l'a entièrement détruite : les soldats de l'autre
+ *    ville lui ont détruit au moins un bâtiment, et il ne lui reste aucun bâtiment que des soldats peuvent
+ *    détruire (les forts, les portes, les ponts ne comptent pas : ils ne tombent pas).
  *  - Victoire économique : à la fin de la durée choisie (en mois depuis le passage en Versus), la ville
  *    au meilleur score gagne (égalité possible) :
  *        score = population + trésor / 10 + 25 × (prospérité + culture).
@@ -18,7 +20,7 @@
 #include <stdint.h>
 
 #define BRUTUS_VICTOIRE_DUREE_DEFAUT 120 // 10 ans
-#define BRUTUS_VICTOIRE_TAILLE 50 // octets dans le bloc BR3V (version 6)
+#define BRUTUS_VICTOIRE_TAILLE 52 // octets dans le bloc BR3V (version 6)
 
 enum {
     BRUTUS_FIN_AUCUNE = 0,
@@ -52,8 +54,12 @@ brutus_score_ville brutus_victoire_score(int ville);
 
 /** Simulation, chaque mois (game/tick.c, après les notes) : fin de la durée → victoire économique. */
 void brutus_victoire_nouveau_mois(void);
-/** Combat : le Sénat de la ville `victime` vient d'être détruit par un soldat de la ville `attaquant`. */
-void brutus_victoire_senat_detruit(int victime, int attaquant);
+/** Combat : un bâtiment de la ville `victime` vient d'être détruit par un soldat de la ville `attaquant`. */
+void brutus_victoire_batiment_detruit(int victime, int attaquant);
+/** Simulation, chaque tick (game/tick.c) : une ville attaquée qui n'a plus de bâtiment a perdu. */
+void brutus_victoire_verifier(void);
+/** Bâtiments d'une ville que des soldats peuvent détruire (s'arrête à `max` ; 0 : tous). */
+int brutus_victoire_batiments_restants(int ville, int max);
 
 /** Fin de la partie : BRUTUS_FIN_AUCUNE tant qu'elle n'est pas décidée. */
 int brutus_victoire_fin(void);

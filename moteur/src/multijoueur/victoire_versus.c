@@ -1,12 +1,15 @@
 // Brutus III (M11) : fin d'une partie Versus (voir victoire_versus.h et docs/versus.md).
 #include "multijoueur/victoire_versus.h"
 
+#include "building/building.h"
 #include "city/data_private.h"
 #include "city/warning.h"
 #include "core/encoding.h"
 #include "core/log.h"
 #include "game/cheats.h"
 #include "graphics/window.h"
+#include "map/grid.h"
+#include "map/routing_terrain.h"
 #include "multijoueur/commande.h"
 #include "multijoueur/versus.h"
 
@@ -20,7 +23,8 @@ static struct {
     int gagnant;
     uint32_t tick_fin;
     brutus_score_ville scores[BRUTUS_VILLES_MAX];
-} etat = { BRUTUS_VICTOIRE_DUREE_DEFAUT, 0, BRUTUS_FIN_AUCUNE, -1, 0, { { 0 } } };
+    int attaquee[BRUTUS_VILLES_MAX]; // 1 + ville qui lui a détruit un bâtiment en dernier (0 : jamais)
+} etat = { BRUTUS_VICTOIRE_DUREE_DEFAUT, 0, BRUTUS_FIN_AUCUNE, -1, 0, { { 0 } }, { 0 } };
 
 // ------------------------------------------------------------------ options
 
@@ -155,13 +159,72 @@ void brutus_victoire_nouveau_mois(void)
     finir(BRUTUS_FIN_ECONOMIQUE, gagnant);
 }
 
-void brutus_victoire_senat_detruit(int victime, int attaquant)
+void brutus_victoire_batiment_detruit(int victime, int attaquant)
 {
     if (!brutus_versus_actif() || etat.fin != BRUTUS_FIN_AUCUNE || victime == attaquant ||
-        attaquant < 0 || attaquant >= brutus_versus_villes()) {
+        victime < 0 || victime >= brutus_versus_villes() || attaquant < 0 || attaquant >= brutus_versus_villes()) {
         return;
     }
-    finir(BRUTUS_FIN_MILITAIRE, attaquant);
+    etat.attaquee[victime] = attaquant + 1;
+}
+
+// Vrai si des soldats peuvent détruire ce bâtiment : une de ses cases au moins est destructible
+// (les forts, leur terrain, les portes, les ponts, les barrages ne le sont pas).
+static int destructible(const building *b)
+{
+    int taille = b->size > 0 ? b->size : 1;
+    for (int dy = 0; dy < taille; dy++) {
+        for (int dx = 0; dx < taille; dx++) {
+            int grid_offset = map_grid_offset(b->x + dx, b->y + dy);
+            if (map_grid_is_valid_offset(grid_offset) && map_routing_is_destroyable(grid_offset)) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int brutus_victoire_batiments_restants(int ville, int max)
+{
+    int n = 0;
+    for (int i = 1; i < building_count(); i++) {
+        building *b = building_get(i);
+        if (b->brutus_proprietaire != ville) {
+            continue;
+        }
+        if (b->state != BUILDING_STATE_IN_USE && b->state != BUILDING_STATE_MOTHBALLED &&
+            b->state != BUILDING_STATE_CREATED) {
+            continue;
+        }
+        // Un bâtiment tout juste posé n'est peut-être pas encore dans la carte des passages : il compte
+        if (b->state == BUILDING_STATE_CREATED || destructible(b)) {
+            n++;
+            if (max && n >= max) {
+                break;
+            }
+        }
+    }
+    return n;
+}
+
+void brutus_victoire_verifier(void)
+{
+    if (!brutus_versus_actif() || etat.fin != BRUTUS_FIN_AUCUNE) {
+        return;
+    }
+    int perdantes = 0;
+    int gagnant = -1;
+    for (int v = 0; v < brutus_versus_villes(); v++) {
+        if (etat.attaquee[v] && !brutus_victoire_batiments_restants(v, 1)) {
+            perdantes++;
+            gagnant = etat.attaquee[v] - 1;
+        }
+    }
+    if (perdantes == 1) {
+        finir(BRUTUS_FIN_MILITAIRE, gagnant);
+    } else if (perdantes > 1) {
+        finir(BRUTUS_FIN_MILITAIRE, -1); // les deux villes détruites au même tick : égalité
+    }
 }
 
 int brutus_victoire_fin(void)
@@ -227,6 +290,9 @@ void brutus_victoire_ecrire(uint8_t *d)
         ecrire_32(d + p + 16, (uint32_t) s->score);
         p += 20;
     }
+    for (int v = 0; v < BRUTUS_VILLES_MAX; v++) {
+        d[p++] = (uint8_t) etat.attaquee[v];
+    }
 }
 
 void brutus_victoire_lire(const uint8_t *d)
@@ -250,6 +316,9 @@ void brutus_victoire_lire(const uint8_t *d)
         s->score = (int32_t) lire_32(d + p + 16);
         p += 20;
     }
+    for (int v = 0; v < BRUTUS_VILLES_MAX; v++) {
+        etat.attaquee[v] = d[p++] <= BRUTUS_VILLES_MAX ? d[p - 1] : 0;
+    }
 }
 
 // ------------------------------------------------------------------ bilan (rejouage)
@@ -264,7 +333,8 @@ void brutus_victoire_bilan(void)
         etat.fin ? etat.gagnant + 1 : 0, (unsigned int) etat.tick_fin, etat.duree, etat.mois_ecoules);
     for (int v = 0; v < brutus_versus_villes(); v++) {
         brutus_score_ville s = etat.fin ? etat.scores[v] : brutus_victoire_score(v);
-        printf("Brutus III : score ville %d : population %d tresor %d prosperite %d culture %d score %d\n", v + 1,
-            s.population, s.tresor, s.prosperite, s.culture, s.score);
+        printf("Brutus III : score ville %d : population %d tresor %d prosperite %d culture %d score %d "
+            "restants %d attaquee %d\n", v + 1, s.population, s.tresor, s.prosperite, s.culture, s.score,
+            brutus_victoire_batiments_restants(v, 0), etat.attaquee[v]);
     }
 }

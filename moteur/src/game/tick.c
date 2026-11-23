@@ -234,6 +234,7 @@ void game_tick_run(void)
     scenario_gladiator_revolt_process();
     scenario_emperor_change_process();
     city_victory_check();
+    brutus_victoire_verifier(); // Brutus III (M11) : une ville entièrement détruite a perdu
     brutus_simulation_fin(); // Brutus III
 }
 

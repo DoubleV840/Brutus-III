@@ -4,9 +4,10 @@
 #   bash outils/test-victoire.sh [ticks]
 #
 # Sur « Brutus - Deux rives » (ville 1 en bas à gauche, ville 2 en haut à droite) :
-# 1. militaire : la ville 2 pose un Sénat, la ville 1 un fort de légionnaires (soldats tout de suite,
-#    triche 106) et envoie sa légion contre le Sénat ; quand il tombe, la ville 1 a gagné. Rejoué deux
-#    fois : empreintes identiques. Même journal, combat désactivé : pas de fin.
+# 1. militaire : la ville 2 pose deux puits, la ville 1 un fort de légionnaires (soldats tout de suite,
+#    triche 106) et envoie sa légion contre eux ; quand la ville 2 n'a plus rien, la ville 1 a gagné
+#    (son fort ne compte pas : il ne tombe pas). Rejoué deux fois : empreintes identiques.
+#    Même journal, combat désactivé : pas de fin. Avec un troisième puits hors d'atteinte : pas de fin.
 #    Sauvegarde en plein siège, rechargement par un lancement neuf : suite identique, même fin.
 #    Sauvegarde après la fin, rechargée : la partie reste finie (même gagnant, même tick).
 # 2. économique : durée de 2 mois (triche 107) ; la ville 2 dépense (quatre puits), la ville 1 non :
@@ -67,15 +68,17 @@ lancer "$SORTIE/creer.log" --creer-sauvegarde "$CARTE" "$DEPART"
 
 # construire : type x0 y0 x1 y1 rotation rotation_extra orientation_route orientation_vue
 militaire() {
-  local combat="$1"
+  local combat="$1" loin="${2:-0}"
   echo "# brutus-journal 1"
   echo "1 0 triche 103 0 0 0 0"
   [ "$combat" = 1 ] || echo "2 0 triche 105 0 0 0 0"
   echo "3 0 construire 154 16 90 16 90 0 0 1 0"          # ville 1 : un mess (il en faut un pour un fort)
   echo "4 0 construire 40 12 84 12 84 0 0 1 0"           # ville 1 : fort de légionnaires
-  echo "5 1 construire 85 74 16 74 16 0 0 1 0"           # ville 2 : le Sénat
+  echo "5 1 construire 92 74 20 74 20 0 0 1 0"           # ville 2 : deux puits
+  echo "5 1 construire 92 76 20 76 20 0 0 1 0"
+  [ "$loin" = 0 ] || echo "5 1 construire 92 86 14 86 14 0 0 1 0"  # et un troisième, hors d'atteinte
   echo "10 0 triche 106 0 0 0 0"                         # soldats tout de suite
-  echo "200 0 legion-deplacer 1 74 21"                   # contre le Sénat de la ville 2
+  echo "200 0 legion-deplacer 1 75 18"                   # contre les puits de la ville 2
 }
 economique() {
   local depense="$1"
@@ -90,6 +93,7 @@ economique() {
 }
 militaire 1 > "$SORTIE/journal-militaire.txt"
 militaire 0 > "$SORTIE/journal-militaire-sans.txt"
+militaire 1 1 > "$SORTIE/journal-militaire-partiel.txt"
 economique 1 > "$SORTIE/journal-economique.txt"
 economique 0 > "$SORTIE/journal-egalite.txt"
 
@@ -106,7 +110,7 @@ if ! cmp -s "$SORTIE/militaire-1.txt" "$SORTIE/militaire-2.txt"; then
   exit 1
 fi
 echo "OK : empreintes identiques ($(grep -vc '^#' "$SORTIE/militaire-1.txt") empreintes)."
-attendre "$SORTIE/militaire-1.log" fin militaire "le Sénat de la ville 2 aurait dû tomber"
+attendre "$SORTIE/militaire-1.log" fin militaire "la ville 2 aurait dû être entièrement détruite"
 attendre "$SORTIE/militaire-1.log" gagnant 1 "la ville 1 aurait dû gagner"
 TICK_FIN=$(champ "$SORTIE/militaire-1.log" tick)
 
@@ -114,6 +118,16 @@ echo "== Militaire, combat désactivé"
 lancer "$SORTIE/militaire-sans.log" --rejouer "$DEPART" "$SORTIE/journal-militaire-sans.txt" \
   --empreintes "$SORTIE/militaire-sans.txt" --ticks "$TICKS" --tous-les "$TOUS_LES"
 attendre "$SORTIE/militaire-sans.log" fin aucune "combat désactivé, la partie n'aurait pas dû finir"
+
+echo "== Militaire, un puits de la ville 2 hors d'atteinte"
+lancer "$SORTIE/militaire-partiel.log" --rejouer "$DEPART" "$SORTIE/journal-militaire-partiel.txt" \
+  --empreintes "$SORTIE/militaire-partiel.txt" --ticks "$TICKS" --tous-les "$TOUS_LES"
+attendre "$SORTIE/militaire-partiel.log" fin aucune "il reste un bâtiment à la ville 2, la partie n'aurait pas dû finir"
+restants=$(grep "Brutus III : score ville 2 :" "$SORTIE/militaire-partiel.log" | sed -n 's/.* restants \([0-9]*\).*/\1/p')
+if [ "${restants:-0}" != 1 ]; then
+  echo "ÉCHEC : un seul bâtiment de la ville 2 devait rester (lu : ${restants:-rien})."
+  echec=1
+fi
 
 if [ "$echec" = 0 ]; then
   P=$(( (TICK_FIN / 2) / TOUS_LES * TOUS_LES ))
@@ -163,6 +177,7 @@ attendre "$SORTIE/egalite.log" fin economique "la durée de 2 mois aurait dû fi
 attendre "$SORTIE/egalite.log" gagnant 0 "deux villes identiques : égalité attendue"
 
 [ "$echec" = 0 ] || exit 1
-echo "OK : victoire militaire de la ville 1 au tick $TICK_FIN (Sénat de la ville 2 détruit), rien sans combat ;"
+echo "OK : victoire militaire de la ville 1 au tick $TICK_FIN (ville 2 entièrement détruite), rien sans combat"
+echo "     ni quand il reste un bâtiment ;"
 echo "     victoire économique de la ville 1 après 2 mois, égalité sans dépense ; rechargements identiques."
 echo "######## Victoire Versus : OK ($CARTE, $TICKS ticks)"

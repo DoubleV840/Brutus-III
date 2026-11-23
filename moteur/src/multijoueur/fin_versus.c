@@ -81,11 +81,12 @@ static void draw_foreground(void)
 
     char ligne[TEXTE_MAX];
     if (fin == BRUTUS_FIN_MILITAIRE) {
-        if (gagnant == moi) {
-            snprintf(ligne, sizeof(ligne), "Vos soldats ont détruit le Sénat de la ville %s.",
-                nom_ville(1 - moi));
+        if (gagnant < 0) {
+            snprintf(ligne, sizeof(ligne), "Les deux villes ont été entièrement détruites.");
+        } else if (gagnant == moi) {
+            snprintf(ligne, sizeof(ligne), "Vos soldats ont entièrement détruit la ville %s.", nom_ville(1 - moi));
         } else {
-            snprintf(ligne, sizeof(ligne), "Les soldats de la ville %s ont détruit votre Sénat.",
+            snprintf(ligne, sizeof(ligne), "Les soldats de la ville %s ont entièrement détruit votre ville.",
                 nom_ville(gagnant));
         }
     } else {
