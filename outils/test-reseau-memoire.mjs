@@ -507,7 +507,11 @@ const transportReel = {
 // Coupures du scénario : côté relais en mémoire, ou côté client avec le vrai relais.
 function coupurePropre(client, dureeMs) {
   if (REEL) {
+    // Reconnexion repoussée de dureeMs, comme relais.bloquer en mémoire : sinon, avec le relais en ligne (M13),
+    // la coupure ne dure que la poignée de main TLS (~200 ms), souvent couverte par les tours reçus d'avance,
+    // et « en attente de … » n'a pas le temps de s'afficher.
     client.lock.couperConnexion();
+    client.lock.interne.prochainEssai += dureeMs;
   } else {
     relais.bloquer(client.lock.interne.code, client.joueurAttendu, performance.now() + dureeMs);
     relais.couper(client.s().conn._c);
@@ -1425,8 +1429,14 @@ async function principal() {
   }
 
   // Comparaison finale directe : on avance jusqu'à ce que les deux soient au même tick et à la même époque.
+  // Avec un relais distant (M13 : relais en ligne, ~50 ms), la partie qui tourne encore ne met pas toujours les
+  // moteurs au même tick au moment où on regarde : après 500 essais, pause partagée (même tick chez tous).
   let direct = { comparees: false };
   for (let i = 0; i < 5000; i++) {
+    if (i === 500 && REEL && !hote.moteur.enPause()) {
+      dire('  comparaison finale : ticks toujours différents, pause partagée pour les figer');
+      M_pause(hote);
+    }
     pomperTout();
     await respirer();
     if (clients().every((c) => c.tick() === hote.tick() && c.s().epoque === hote.s().epoque && c.s().actif)) {

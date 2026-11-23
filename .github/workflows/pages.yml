@@ -102,7 +102,8 @@ jobs:
           BRUTUS_PAGE: ${{ github.workspace }}/build-pages/index.html
 
   # Relais multijoueur (serveur-multi/) : tests sur le runtime local de wrangler,
-  # sans compte Cloudflare. Rien n'est déployé ici (déploiement du Worker : M13).
+  # sans compte Cloudflare. Rien n'est déployé ici : le Worker se déploie à la main
+  # (cd serveur-multi && npx wrangler deploy, voir README).
   # Volontairement absent des « needs » de deploy : le site (solo) ne dépend pas du relais,
   # un test du relais rouge ne doit pas bloquer sa publication.
   relais:

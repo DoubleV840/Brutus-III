@@ -108,6 +108,25 @@
         text-align: center;
       }
 
+      div#infoLocation div.comment-jouer {
+        max-width: 650px;
+        text-align: left;
+        font-size: 11pt;
+        line-height: 1.5;
+      }
+
+      div#infoLocation div.comment-jouer h2 {
+        text-align: center;
+        font-size: 14pt;
+        margin: 0 0 4px 0;
+        color: rgb(140, 40, 30);
+      }
+
+      div#infoLocation div.comment-jouer ol {
+        margin: 0;
+        padding-left: 24px;
+      }
+
       div#middleElement {
         max-width: 650px;
       }
@@ -223,6 +242,18 @@
           C3.sg2, c3.eng…). Ils ne sont pas fournis ici. Ils sont copiés une seule fois dans
           le stockage de ton navigateur et ne quittent jamais ton ordinateur.
         </p>
+        <div class="comment-jouer">
+          <h2>Comment jouer</h2>
+          <ol>
+            <li><b>Avoir le jeu original</b> : Caesar III, acheté sur GOG ou Steam (quelques euros).
+              Installe-le, puis repère son dossier d'installation.</li>
+            <li><b>Glisser son dossier</b> sur cette page (ou « Choisir le dossier du jeu ») :
+              le dossier qui contient C3.sg2 et c3.eng. Une seule fois par navigateur.</li>
+            <li><b>Jouer à plusieurs</b> : « Jouer », puis le menu <b>Multijoueur</b>. L'un crée une
+              partie (Coop ou Versus) et donne le code du salon ; les autres le rejoignent avec ce code.
+              Chacun utilise ses propres fichiers du jeu.</li>
+          </ol>
+        </div>
       </div>
       <div id="middleElement">
         <div id="loadStatus">
@@ -516,11 +547,23 @@
       var MULTI_PHASES = ['inactif', 'connexion', 'salon', 'resync', 'jeu', 'attente', 'deconnecte',
         'recuperation', 'hors-ville', 'erreur'];
 
-      // Adresse du relais : seulement en local pour l'instant (mise en ligne : mission M13). Ailleurs,
-      // la fenêtre « Multijoueur » du jeu explique que le multijoueur arrive bientôt.
+      // Adresse du relais (M13). En ligne : le Worker « brutus-relais » du compte Cloudflare du fondateur.
+      // Page servie en local : le relais local (npm run dev dans serveur-multi), sauf avec ?relais=en-ligne
+      // (le relais en ligne accepte aussi l'origine localhost) ou ?relais=ws://… pour un autre relais.
+      var RELAIS_EN_LIGNE = 'wss://brutus-relais.brutus-iii-serveur-multi.workers.dev';
       function multiBase() {
+        var choix = null;
+        try {
+          choix = new URLSearchParams(window.location.search).get('relais');
+        } catch (e) { /* navigateur ancien */ }
+        if (choix === 'en-ligne') {
+          return RELAIS_EN_LIGNE;
+        }
+        if (choix && /^wss?:\/\/[^\s\/]+$/.test(choix)) {
+          return choix;
+        }
         var h = window.location.hostname;
-        return h === 'localhost' || h === '127.0.0.1' ? 'ws://127.0.0.1:8787' : '';
+        return h === 'localhost' || h === '127.0.0.1' ? 'ws://127.0.0.1:8787' : RELAIS_EN_LIGNE;
       }
 
       function multiAppel(nom, types, valeurs, retour) {
