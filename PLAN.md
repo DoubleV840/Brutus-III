@@ -139,6 +139,15 @@ C'est le plus gros chantier côté jeu : le moteur suppose **une seule ville par
   - économique : score à la fin d'une durée choisie (population, trésor, prospérité, culture) ;
   - écran de fin avec le détail des scores.
 - **4e. Réseau** : brancher le mode sur la couche de la phase 2. Les sauvegardes versus ont un format versionné.
+  - **Choix du mode dans le menu « Multijoueur »** (demandé par le fondateur le 23/11/2026) : à la création d'une
+    partie, l'hôte choisit d'abord le mode, **Coop** (la même ville à plusieurs) ou **Versus** (chacun sa ville sur
+    la même carte), puis la carte. En Versus, les cartes à deux (les nôtres et celles faites dans l'éditeur avec
+    une entrée « joueur 2 ») apparaissent en premier ; une carte ordinaire reste possible (les deux villes partent
+    alors de la même entrée).
+  - **Options du Versus** dans le même écran : combat activé ou non (4c), durée de la partie pour la victoire
+    économique (4d).
+  - Les invités voient le mode, la carte et les options dans le salon avant le départ. Le passage en Versus se fait
+    par une commande au premier tick, comme Alt+W en local, pour que tous démarrent sur la même partie.
 - **Terminé quand** : une partie versus complète a été jouée à deux en ligne, et les deux fins (militaire et économique) ont été testées.
 - Niveau conseillé : **approfondi**, une mission par sous-phase.
 
