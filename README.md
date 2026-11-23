@@ -114,7 +114,7 @@ Le premier lance une compilation wasm pour Node (`build-reseau-wasm/`, quelques 
 
 Deux villes sur la même carte, sur un seul écran : en ville, **Alt+W** fait passer la partie en Versus, puis chaque **Alt+W** fait jouer l'autre ville (trésor, population, bâtiments, messages et demandes de César à elle ; les bâtiments de l'autre ville sont teintés de sa couleur : 1 bleue, 2 rouge). Principe, limites et ce qui reste : `docs/versus.md`. Test automatique : `bash outils/test-versus.sh` (deux bots, déterminisme, sauvegarde et rechargement).
 
-Trois cartes à deux, créées par nous et installées au démarrage dans le dossier des cartes : **Brutus - Deux rives**, **Brutus - Lac central**, **Brutus - Rivage** (symétriques, une entrée et une sortie par joueur). L'éditeur de cartes place l'entrée et la sortie du joueur 2 (menu « Points des personnes »). Les cartes se refont avec `bash outils/creer-cartes-versus.sh`.
+Cinq cartes à deux, créées par nous et installées au démarrage dans le dossier des cartes : **Brutus - Deux rives**, **Brutus - Lac central**, **Brutus - Rivage**, **Brutus - Collines**, **Brutus - Marais** (symétriques, une entrée et une sortie par joueur). Au départ d'un Versus, chaque joueur arrive au centre de sa zone. L'éditeur de cartes place l'entrée et la sortie du joueur 2 (menu « Points des personnes »). Les cartes se refont avec `bash outils/creer-cartes-versus.sh`.
 
 ## Publication
 

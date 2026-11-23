@@ -100,15 +100,29 @@ se lisent encore.
 - **Éditeur de cartes.** Menu « Points des personnes » : « Entrée joueur 2 » et « Sortie joueur 2 » (même règle que
   l'entrée et la sortie : sur le bord, terrain dégagé). Leur drapeau porte le numéro 2. Ils sont enregistrés avec
   la carte. Une nouvelle carte n'en a pas.
-- **Nos trois cartes** (100 × 100, symétriques : même terrain, mêmes ressources, même route de Rome pour les deux
+- **Nos cinq cartes** (100 × 100, symétriques : même terrain, mêmes ressources, même route de Rome pour les deux
   joueurs ; jeu libre, la victoire du Versus viendra en M11 ; 4 000 deniers au départ) :
   - **Brutus - Deux rives** : un fleuve en diagonale, un gué au centre ;
   - **Brutus - Lac central** : une plaine, un lac au centre, une forêt en arc entre les deux villes ;
-  - **Brutus - Rivage** : une côte au sud ouverte aux navires, des collines entre les deux villes, deux passages.
+  - **Brutus - Rivage** : une côte au sud ouverte aux navires, des collines entre les deux villes, deux passages ;
+  - **Brutus - Collines** (23/11) : une ville à gauche, l'autre à droite, une crête rocheuse au milieu (carrières et
+    mines) qu'on ne passe que par deux cols, un étang (pêche) et des prés de chaque côté ;
+  - **Brutus - Marais** (23/11) : un fleuve en diagonale bordé de roseaux et de prés humides, trois gués.
+  Le générateur affiche un bilan par joueur (prés, terrain libre, arbres, rochers, eau). Le 23/11, à la demande du
+  fondateur, le Lac central a reçu des prés sur les rives du lac et une couronne de champs autour de chaque ville :
+  37 cases de prés par joueur avant, 822 après (Deux rives : 484, Rivage : 322, Collines : 779, Marais : 642).
   Elles sont créées par programme (`multijoueur/generateur_cartes.c`, aucune donnée du jeu d'origine) :
   `bash outils/creer-cartes-versus.sh` les refait dans `moteur/res/assets/Brutus/cartes/`. Elles sont embarquées
   avec les assets (application et page web) ; au démarrage, le jeu copie celles qui manquent dans le dossier des
-  cartes (une carte déjà présente, peut-être retouchée, n'est pas écrasée).
+  cartes (une carte déjà présente, peut-être retouchée, n'est pas écrasée). Exception : une carte refaite depuis
+  (champ `version` du modèle, plus grand que le numéro noté dans `brutus-cartes-version.txt` du dossier des cartes)
+  remplace l'ancienne copie une seule fois ; le Lac central est en version 2. Si tu refais une carte, augmente sa
+  version. Une partie déjà commencée garde son terrain (il est dans la sauvegarde).
+- **Caméra au départ** (23/11) : au passage en Versus en réseau, chaque joueur, ville bleue comprise, part du
+  centre de sa zone (`centre_zone`, `multijoueur/versus.c`) : le milieu de ses maisons si sa ville en a (partie
+  créée depuis une ville en cours), sinon la zone la plus dégagée de son côté, près de son entrée (la clairière
+  préparée pour sa ville sur nos cartes). Avant, la ville bleue gardait la vue de l'hôte et la rouge partait de son
+  point d'entrée, au bord de la carte.
 - **Versus local** : Alt+W garde la vue de chaque ville ; la première fois, la vue part de l'entrée de la ville.
 - **Tests** : `bash outils/test-versus.sh 60000 "Brutus - Deux rives"` (de même « Brutus - Lac central »,
   « Brutus - Rivage ») : le bot du joueur 2 part de l'entrée du joueur 2 (`entree2` dans `--info-carte`). Le bilan du

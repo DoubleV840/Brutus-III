@@ -34,7 +34,8 @@ typedef enum {
     T_BUISSON,
     T_ROCHER,
     T_PRE,
-    T_ROUTE
+    T_ROUTE,
+    T_MARAIS
 } type_case;
 
 typedef struct {
@@ -57,6 +58,7 @@ typedef struct {
     int a_fleuve; // entrée et sortie des navires
     point fleuve_entree;
     point fleuve_sortie;
+    int version; // refaite depuis la première installation : remplace l'ancienne copie (voir l'installation)
 } modele_carte;
 
 static const modele_carte MODELES[BRUTUS_CARTE_NOMBRE] = {
@@ -67,7 +69,7 @@ static const modele_carte MODELES[BRUTUS_CARTE_NOMBRE] = {
         { 0, 70 }, { 28, 70 }, { 28, 99 }, { 18, 84 }, 13,
         { { 30, 26 }, { 18, 15 } },
         { { 6, 45 }, { 44, 92 } },
-        0, { 0, 0 }, { 0, 0 }
+        0, { 0, 0 }, { 0, 0 }, 1
     },
     {
         "lac", "Brutus - Lac central.mapx",
@@ -76,7 +78,7 @@ static const modele_carte MODELES[BRUTUS_CARTE_NOMBRE] = {
         { 0, 30 }, { 25, 30 }, { 25, 99 }, { 16, 52 }, 14,
         { { 42, 50 }, { 44, 42 } },
         { { 8, 90 }, { 40, 12 } },
-        0, { 0, 0 }, { 0, 0 }
+        0, { 0, 0 }, { 0, 0 }, 2 // 2 : plus de prés (23/11/2026)
     },
     {
         "rivage", "Brutus - Rivage.mapx",
@@ -85,7 +87,25 @@ static const modele_carte MODELES[BRUTUS_CARTE_NOMBRE] = {
         { 0, 58 }, { 26, 58 }, { 26, 0 }, { 20, 64 }, 14,
         { { 18, 90 }, { 34, 92 } },
         { { 6, 12 }, { 38, 20 } },
-        1, { 0, 95 }, { 99, 95 }
+        1, { 0, 95 }, { 99, 95 }, 1
+    },
+    {
+        "collines", "Brutus - Collines.mapx",
+        "Versus : une crête rocheuse entre les deux villes, deux cols pour passer, un étang et des prés de chaque côté.",
+        1,
+        { 0, 22 }, { 18, 22 }, { 18, 99 }, { 30, 56 }, 14,
+        { { 9, 84 }, { 10, 85 } },
+        { { 34, 12 }, { 32, 90 } },
+        0, { 0, 0 }, { 0, 0 }, 2
+    },
+    {
+        "marais", "Brutus - Marais.mapx",
+        "Versus : un fleuve en diagonale bordé de marais et de prés humides, trois gués pour le traverser.",
+        0,
+        { 0, 45 }, { 22, 45 }, { 22, 0 }, { 30, 25 }, 13,
+        { { 37, 57 }, { 34, 65 } },
+        { { 12, 70 }, { 45, 8 } },
+        0, { 0, 0 }, { 0, 0 }, 2
     },
 };
 
@@ -185,10 +205,45 @@ static int eau_lac(int x, int y)
     return r <= 10 + 2 * sin(2 * angle); // sin(2a) : même valeur à l'opposé, le lac reste symétrique
 }
 
+// Rive du lac : terres fertiles (prés) sur 6 cases autour de l'eau
+static int rive_lac(int x, int y)
+{
+    double cx = (gen.largeur - 1) / 2.0;
+    double cy = (gen.hauteur - 1) / 2.0;
+    double r = sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+    double angle = atan2(y - cy, x - cx);
+    return r <= 16 + 2 * sin(2 * angle);
+}
+
 static int eau_cote(int x, int y)
 {
     double vague = 2 * cos((x - (gen.largeur - 1) / 2.0) * 2 * PI / 30);
     return y >= 82 + vague;
+}
+
+// Collines : un étang de chaque côté (le symétrique est calculé avec la case)
+static int eau_collines(int x, int y)
+{
+    point p = { x, y };
+    point s = symetrique(p);
+    point etang = { 9, 84 };
+    return distance(x, y, etang) <= 5 || distance(s.x, s.y, etang) <= 5;
+}
+
+// Marais : fleuve le long de la diagonale x + y = 99, qui serpente (fonction impaire : la carte reste symétrique
+// par rapport au centre). c : écart à la diagonale ; d : position le long du fleuve.
+static double ecart_fleuve_marais(int x, int y)
+{
+    double c = x + y - (gen.largeur - 1);
+    double d = x - y;
+    return c - 5 * sin(d * 2 * PI / 60);
+}
+
+static int eau_marais(int x, int y)
+{
+    double d = x - y;
+    int gue = fabs(d) <= 4 || fabs(fabs(d) - 44) <= 3; // trois gués : au centre et de part et d'autre
+    return fabs(ecart_fleuve_marais(x, y)) <= 2.2 && !gue;
 }
 
 static int eau(int x, int y)
@@ -196,6 +251,8 @@ static int eau(int x, int y)
     switch ((int) (gen.m - MODELES)) {
         case BRUTUS_CARTE_DEUX_RIVES: return eau_deux_rives(x, y);
         case BRUTUS_CARTE_LAC: return eau_lac(x, y);
+        case BRUTUS_CARTE_COLLINES: return eau_collines(x, y);
+        case BRUTUS_CARTE_MARAIS: return eau_marais(x, y);
         default: return eau_cote(x, y);
     }
 }
@@ -211,6 +268,14 @@ static int crete(int x, int y, int *rocher)
         int passage = (y >= 30 && y <= 35) || (y >= 58 && y <= 63);
         if (ecart <= 5 && !passage && y < 80) {
             *rocher = ecart <= 2 && bruit(x, y, 6, 11) > 0.35;
+            return 1;
+        }
+    } else if (modele == BRUTUS_CARTE_COLLINES) {
+        // crête au milieu, rochers au centre, forêt sur les flancs ; deux cols dégagés
+        double ecart = fabs(x - (gen.largeur - 1) / 2.0);
+        int col = (y >= 38 && y <= 44) || (y >= 70 && y <= 76);
+        if (ecart <= 8 && !col) {
+            *rocher = ecart <= 3.5 || (ecart <= 5.5 && bruit(x, y, 4, 13) > 0.45);
             return 1;
         }
     } else if (modele == BRUTUS_CARTE_LAC) {
@@ -258,14 +323,37 @@ static type_case choisir(int x, int y)
         return T_EAU;
     }
     double dv = distance_ville(x, y);
+    int modele = (int) (gen.m - MODELES);
+    if (modele == BRUTUS_CARTE_MARAIS) {
+        double e = fabs(ecart_fleuve_marais(x, y));
+        if (e <= 6.5) {
+            return bruit(x, y, 4, 14) > 0.42 ? T_MARAIS : T_PRE; // berges : roseaux et prés humides
+        }
+        if (e <= 13 && dv > gen.m->rayon_degage) {
+            return bruit(x, y, 6, 15) > 0.4 ? T_PRE : T_HERBE; // plaine fertile du fleuve
+        }
+    }
+    if (modele == BRUTUS_CARTE_COLLINES && dv > gen.m->rayon_degage) {
+        point p = { x, y };
+        point s = symetrique(p);
+        point etang = { 9, 84 };
+        if (distance(x, y, etang) <= 13 || distance(s.x, s.y, etang) <= 13) {
+            return bruit(x, y, 5, 16) > 0.35 ? T_PRE : T_HERBE; // prés autour de l'étang
+        }
+        if (y >= 58 && y <= 96 && fabs(x - (gen.largeur - 1) / 2.0) > 8 && bruit(x, y, 7, 17) > 0.5) {
+            return T_PRE; // vallée fertile au sud (la crête reste entière, sauf ses deux cols)
+        }
+    }
+    if (modele == BRUTUS_CARTE_LAC && rive_lac(x, y)) {
+        return bruit(x, y, 5, 9) > 0.3 ? T_PRE : T_HERBE; // rives fertiles du lac (demande du fondateur : plus de champs)
+    }
     int rocher = 0;
     if (crete(x, y, &rocher) && dv > gen.m->rayon_degage) {
         return rocher ? T_ROCHER : T_ARBRE;
     }
-    int modele = (int) (gen.m - MODELES);
     if (dv <= gen.m->rayon_degage) {
-        // le cœur de la ville : dégagé, quelques prés pour les fermes
-        return bruit(x, y, 7, 3) > 0.7 ? T_PRE : T_HERBE;
+        // le cœur de la ville : dégagé, quelques prés pour les fermes (plus au lac, qui n'a pas de rive de fleuve)
+        return bruit(x, y, 7, 3) > (modele == BRUTUS_CARTE_LAC ? 0.6 : 0.7) ? T_PRE : T_HERBE;
     }
     if (modele == BRUTUS_CARTE_DEUX_RIVES && rive_deux_rives(x, y)) {
         return bruit(x, y, 6, 4) > 0.35 ? T_PRE : T_HERBE;
@@ -278,6 +366,10 @@ static type_case choisir(int x, int y)
     // carrières et mines : petits massifs, entre 18 et 35 cases du centre de la ville
     if (pierre > 0.72 && dv > 17 && dv < 36) {
         return T_ROCHER;
+    }
+    if (modele == BRUTUS_CARTE_LAC && dv <= gen.m->rayon_degage + 9) {
+        // couronne de champs autour de la ville, avant la forêt (les rochers des carrières restent)
+        return bruit(x, y, 6, 8) > 0.48 ? T_PRE : T_HERBE;
     }
     if (foret > 0.6) {
         return T_ARBRE;
@@ -302,6 +394,7 @@ static int bits_terrain(type_case t)
         case T_ROCHER: return TERRAIN_ROCK;
         case T_PRE: return TERRAIN_MEADOW;
         case T_ROUTE: return TERRAIN_ROAD;
+        case T_MARAIS: return TERRAIN_MARSHLAND;
         default: return TERRAIN_CLEAR;
     }
 }
@@ -379,6 +472,34 @@ static int verifier(void)
     return ok;
 }
 
+// Bilan par joueur (le 2 est le symétrique) : prés (terres des fermes) près de la ville et dans sa moitié,
+// terrain constructible près de la ville, arbres et rochers de sa moitié.
+static void afficher_bilan(void)
+{
+    int pres_proches = 0, pres = 0, libres_proches = 0, arbres = 0, rochers = 0, eau = 0;
+    for (int y = 0; y < gen.hauteur; y++) {
+        for (int x = 0; x < gen.largeur; x++) {
+            point p = { x, y };
+            point q = symetrique(p);
+            double d1 = distance(x, y, gen.m->centre1);
+            double d2 = distance(x, y, symetrique(gen.m->centre1));
+            if (d1 > d2 || (d1 == d2 && (p.x > q.x || (p.x == q.x && p.y > q.y)))) {
+                continue; // moitié du joueur 2
+            }
+            int t = gen.cases[y * gen.largeur + x];
+            int proche = d1 <= 25;
+            pres += t == T_PRE;
+            pres_proches += proche && t == T_PRE;
+            libres_proches += proche && (t == T_HERBE || t == T_PRE);
+            arbres += t == T_ARBRE;
+            rochers += t == T_ROCHER;
+            eau += t == T_EAU;
+        }
+    }
+    printf("Brutus III : bilan par joueur : prés %d (dont %d à moins de 25 cases de la ville), terrain libre près de "
+        "la ville %d, arbres %d, rochers %d, eau %d\n", pres, pres_proches, libres_proches, arbres, rochers, eau);
+}
+
 const char *brutus_carte_versus_nom_fichier(int modele)
 {
     return modele >= 0 && modele < BRUTUS_CARTE_NOMBRE ? MODELES[modele].fichier : 0;
@@ -441,15 +562,40 @@ int brutus_generer_carte_versus(int modele, const char *fichier)
         return 0;
     }
     printf("Brutus III : carte Versus « %s » écrite : %s\n", gen.m->nom_court, fichier);
+    afficher_bilan();
     return 1;
+}
+
+#define FICHIER_VERSION "brutus-cartes-version.txt"
+
+// Version des cartes déjà installées (1 : installation d'avant le fichier de version, M9 à M12).
+static int version_installee(void)
+{
+    const char *chemin = dir_get_file_at_location(FICHIER_VERSION, PATH_LOCATION_SCENARIO);
+    FILE *fp = chemin ? file_open(chemin, "rb") : 0;
+    int version = 1;
+    if (fp) {
+        if (fscanf(fp, "%d", &version) != 1) {
+            version = 1;
+        }
+        file_close(fp);
+    }
+    return version;
 }
 
 void brutus_cartes_versus_installer(void)
 {
+    int installee = version_installee();
+    int derniere = installee;
     for (int i = 0; i < BRUTUS_CARTE_NOMBRE; i++) {
         const char *nom = MODELES[i].fichier;
-        if (dir_get_file_at_location(nom, PATH_LOCATION_SCENARIO)) {
-            continue; // déjà là (peut-être retouchée dans l'éditeur : on n'y touche pas)
+        if (MODELES[i].version > derniere) {
+            derniere = MODELES[i].version;
+        }
+        // Déjà là : on n'y touche pas (peut-être retouchée dans l'éditeur), sauf si nous l'avons refaite depuis
+        // (une seule fois : la version installée est notée ensuite).
+        if (dir_get_file_at_location(nom, PATH_LOCATION_SCENARIO) && MODELES[i].version <= installee) {
+            continue;
         }
         char asset[256];
         snprintf(asset, sizeof(asset), "Brutus/cartes/%s", nom);
@@ -471,5 +617,14 @@ void brutus_cartes_versus_installer(void)
             log_info("Brutus III (M9) : carte Versus installée :", destination, 0);
         }
         file_close(source);
+    }
+    if (derniere > installee) {
+        char chemin[FILE_NAME_MAX];
+        snprintf(chemin, sizeof(chemin), "%s", dir_append_location(FICHIER_VERSION, PATH_LOCATION_SCENARIO));
+        FILE *fp = file_open(chemin, "wb");
+        if (fp) {
+            fprintf(fp, "%d\n", derniere);
+            file_close(fp);
+        }
     }
 }
