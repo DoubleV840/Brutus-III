@@ -106,6 +106,9 @@ static void button_accept(const generic_button *button)
 static void button_continue_governing(const generic_button *button)
 {
     int months = button->parameter1;
+    if (brutus_multijoueur_actif()) {
+        city_victory_brutus_continuer_demande(); // Brutus III : pas d'écran de fin avant que la commande soit jouée
+    }
     brutus_commande_1(BRUTUS_CMD_VICTOIRE_CONTINUER, months); // Brutus III (+ city_victory_reset)
     window_city_show();
     sound_music_update(1);

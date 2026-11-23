@@ -13,18 +13,50 @@
 #include "sound/speech.h"
 #include "window/mission_end.h"
 #include "window/victory_dialog.h"
+#include "graphics/window.h"
+#include "multijoueur/commande.h" // Brutus III
 #include "multijoueur/versus.h" // Brutus III (M11)
 
 static struct {
     int state;
     int force_win;
     int force_lose;
+    // Brutus III : en multijoueur, données locales (chaque joueur a ses fenêtres), hors simulation.
+    int dialogue_a_montrer; // la victoire est arrivée pendant que ce joueur n'était pas dans la ville
+    int continuer_demande; // ce joueur a choisi « continuer à gouverner » : la commande n'est pas encore jouée
 } data;
 
 void city_victory_reset(void)
 {
     data.state = VICTORY_STATE_NONE;
     data.force_win = 0;
+    data.continuer_demande = 0;
+}
+
+void city_victory_brutus_continuer_demande(void)
+{
+    data.continuer_demande = 1;
+}
+
+int city_victory_brutus_victoire_annoncee(void)
+{
+    return city_data.mission.victory_message_shown;
+}
+
+/*
+ * Brutus III : en solo, les ticks s'arrêtent dès qu'une fenêtre de fin (victoire, vidéo, intermède, fin de
+ * mission) remplace la ville. En multijoueur, le lockstep impose les ticks : sans ce garde-fou, chaque tick
+ * rouvrait la vidéo de victoire (ou l'intermède), et le jeu restait figé sur la fin de mission.
+ * Une fenêtre de fin ne s'ouvre donc que si ce joueur est dans la ville (ou ses fenêtres), et pas pendant
+ * qu'il attend sa commande « continuer à gouverner ».
+ */
+static int ecran_fin_possible(void)
+{
+    if (!brutus_multijoueur_actif()) {
+        return 1;
+    }
+    window_id id = window_get_id();
+    return id >= WINDOW_CITY && id <= WINDOW_TRADE_LEDGER && !data.continuer_demande;
 }
 
 void city_victory_force_win(void)
@@ -138,29 +170,51 @@ void city_victory_check(void)
     } else if (data.force_lose) {
         data.state = VICTORY_STATE_LOST;
     }
-    if (data.state != VICTORY_STATE_NONE) {
+    if (data.state == VICTORY_STATE_NONE) {
+        // Brutus III : plus de victoire en cours (commande « continuer » jouée, chez ce joueur ou un autre)
+        data.dialogue_a_montrer = 0;
+        data.continuer_demande = 0;
+        return;
+    }
+    int ecran = ecran_fin_possible(); // Brutus III : toujours 1 en solo
+    if (ecran) {
         building_construction_clear_type();
-        if (data.state == VICTORY_STATE_LOST) {
-            if (city_data.mission.fired_message_shown) {
+    }
+    if (data.state == VICTORY_STATE_LOST) {
+        if (city_data.mission.fired_message_shown) {
+            if (ecran) { // Brutus III
                 window_mission_end_show_fired();
                 data.force_lose = 0;
-            } else {
-                city_data.mission.fired_message_shown = 1;
-                city_message_post(1, MESSAGE_FIRED, 0, 0);
             }
-            data.force_win = 0;
-        } else if (data.state == VICTORY_STATE_WON) {
-            sound_music_stop();
-            if (city_data.mission.victory_message_shown) {
-                window_mission_end_show_won();
-                data.force_win = 0;
-            } else {
-                city_data.mission.victory_message_shown = 1;
-                sound_speech_play_file("wavs/fanfare_nu2.wav");
-                window_victory_dialog_show();
-            }
-            data.force_lose = 0;
+        } else {
+            city_data.mission.fired_message_shown = 1;
+            city_message_post(1, MESSAGE_FIRED, 0, 0);
         }
+        data.force_win = 0;
+    } else if (data.state == VICTORY_STATE_WON) {
+        if (city_data.mission.victory_message_shown) {
+            if (ecran) { // Brutus III
+                sound_music_stop();
+                if (data.dialogue_a_montrer) {
+                    data.dialogue_a_montrer = 0;
+                    window_victory_dialog_show();
+                } else {
+                    window_mission_end_show_won();
+                    data.force_win = 0;
+                }
+            }
+        } else {
+            sound_music_stop();
+            city_data.mission.victory_message_shown = 1;
+            data.continuer_demande = 0;
+            sound_speech_play_file("wavs/fanfare_nu2.wav");
+            if (ecran) {
+                window_victory_dialog_show();
+            } else {
+                data.dialogue_a_montrer = 1; // Brutus III : montré dès que ce joueur revient dans la ville
+            }
+        }
+        data.force_lose = 0;
     }
 }
 

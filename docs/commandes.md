@@ -52,7 +52,7 @@ Une commande arrive d'un pair : elle est revérifiée avant d'agir. Une commande
 | `jeux` | id 1 à `MAX_GAMES` (vérifié avant la recherche dans `ALL_GAMES`) ; mêmes conditions que la fenêtre (lieu, épargne, marchandises, accès à l'eau), et pas de jeux déjà prévus ou en cours (deux joueurs ne paient pas deux fois) |
 | `don-ville` | montant positif, borné par l'épargne (pari en cours déduit) |
 | `legions-bataille` | une bataille lointaine est demandée (`city_request_has_troop_request`) |
-| `victoire-continuer` | mission gagnée ; 1 à 10 mois |
+| `victoire-continuer` | victoire annoncée et pas encore de choix (`victory_message_shown`) ; 1 à 10 mois. Un 2e « continuer » d'un autre joueur est refusé |
 | `triche` | numéro de la console (hors triches d'affichage) ou 100 argent, 101 victoire, 102 invasion, 103 Versus (M8), 104 demande de César de 100 deniers (tests, M8) |
 | autres | bornes, bâtiment ou légion existants, argent (`fete`), victoire (`salaire-gouverneur`) |
 

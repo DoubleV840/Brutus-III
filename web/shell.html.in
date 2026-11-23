@@ -217,6 +217,28 @@
         color: white;
       }
 
+      /* Bouton « plein écran » : petit, discret, au-dessus du jeu (coin bas gauche, loin des menus du jeu). */
+      #pleinEcran {
+        position: fixed;
+        left: 8px;
+        bottom: 8px;
+        z-index: 3;
+        cursor: pointer;
+        font: 11pt Georgia, "Times New Roman", serif;
+        color: rgb(245, 238, 222);
+        background-color: rgba(90, 20, 15, 0.55);
+        border: 1px solid rgba(245, 238, 222, 0.5);
+        border-radius: 4px;
+        padding: 3px 8px;
+        opacity: 0.6;
+      }
+
+      #pleinEcran:hover,
+      #pleinEcran:focus-visible {
+        opacity: 1;
+        background-color: rgb(140, 40, 30);
+      }
+
       #OSD {
         display: none;
         position: absolute;
@@ -296,6 +318,7 @@
       <span id="OSDStatus"></span>
     </div>
     <input type="file" id="loaddir" name="fileList" webkitdirectory multiple>
+    <button type="button" id="pleinEcran" title="Plein écran (Échap pour en sortir)">&#x26F6; Plein écran</button>
     <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
     <script type='text/javascript'>@BRUTUS_LOCKSTEP_JS@</script>
     <script type='text/javascript'>
@@ -709,6 +732,39 @@
         multi.ls.quitter();
         multi.ls = null;
       }
+
+      // Bouton « plein écran » : toute la page passe en plein écran (le jeu suit la taille de la fenêtre).
+      (function () {
+        var bouton = document.getElementById('pleinEcran');
+        var racine = document.documentElement;
+        var demander = racine.requestFullscreen || racine.webkitRequestFullscreen;
+        var sortir = document.exitFullscreen || document.webkitExitFullscreen;
+        if (!demander || !sortir) {
+          bouton.style.display = 'none'; // navigateur sans plein écran (iPhone…)
+          return;
+        }
+        function actif() {
+          return !!(document.fullscreenElement || document.webkitFullscreenElement);
+        }
+        function majBouton() {
+          bouton.innerHTML = actif() ? '&#x26F6; Quitter le plein écran' : '&#x26F6; Plein écran';
+        }
+        bouton.addEventListener('click', function () {
+          try {
+            var r = actif() ? sortir.call(document) : demander.call(racine);
+            if (r && r.catch) {
+              r.catch(function () { /* refusé par le navigateur : rien à faire */ });
+            }
+          } catch (e) { /* idem */ }
+          bouton.blur();
+          var c = document.getElementById('canvas');
+          if (c) {
+            c.focus(); // le clavier revient au jeu
+          }
+        });
+        document.addEventListener('fullscreenchange', majBouton);
+        document.addEventListener('webkitfullscreenchange', majBouton);
+      })();
 
       // Touche G (M7) : signal sur la case sous la souris, pendant une partie multijoueur, sauf quand un
       // champ de texte du jeu a le clavier (chat, nom de sauvegarde…). Cet écouteur est posé avant le

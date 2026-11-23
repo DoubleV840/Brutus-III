@@ -696,7 +696,9 @@ static int executer(const brutus_commande *c)
             city_military_clear_empire_service_legions();
             break;
         case BRUTUS_CMD_VICTOIRE_CONTINUER:
-            if (!city_victory_has_won() || p[0] <= 0 || p[0] > 10) {
+            // Victoire annoncée et pas encore de choix (has_won n'est mis qu'en continuant : le tester refusait
+            // « continuer à gouverner » à la première victoire). Un 2e « continuer » d'un autre joueur est refusé.
+            if (!city_victory_brutus_victoire_annoncee() || p[0] <= 0 || p[0] > 10) {
                 return 0;
             }
             city_victory_continue_governing(p[0]);
