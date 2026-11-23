@@ -52,6 +52,10 @@ BRUTUS_RESEAU_EXPORT void brutus_menu_etat(int phase, const char *code, const ch
 BRUTUS_RESEAU_EXPORT void brutus_menu_joueurs_vider(void);
 /** M12 : ligne d'information de la partie, donnée par l'hôte et transmise par le relais (mode, carte, options). */
 BRUTUS_RESEAU_EXPORT void brutus_menu_info(const char *info);
+/** M12 : pseudo d'un joueur du salon (UTF-8, chaîne vide si aucun), après brutus_menu_joueur. */
+BRUTUS_RESEAU_EXPORT void brutus_menu_joueur_pseudo(int numero, const char *pseudo);
+/** M12 : pseudo du joueur local, retenu par la page (mis dans le champ « Pseudo »). */
+BRUTUS_RESEAU_EXPORT void brutus_menu_pseudo_definir(const char *pseudo);
 /** Ajoute un joueur du salon (latence en ms, -1 si inconnue). */
 BRUTUS_RESEAU_EXPORT void brutus_menu_joueur(int numero, int connecte, int latence);
 /** Ajoute une ligne de chat (identifiant croissant ; signal = case ou -1). Vide le chat si id = 0. */
@@ -61,6 +65,12 @@ BRUTUS_RESEAU_EXPORT void brutus_menu_chat(int id, int joueur, const char *texte
 
 /** Action en attente (brutus_menu_action_type), retirée de la file. */
 BRUTUS_RESEAU_EXPORT int brutus_menu_action(void);
+/** M12 : pseudo saisi par le joueur local (UTF-8), envoyé au relais en créant ou en rejoignant. */
+BRUTUS_RESEAU_EXPORT const char *brutus_menu_pseudo(void);
+/** M12 : nom d'un joueur (UTF-8) : son pseudo, sinon « Joueur N ». */
+BRUTUS_RESEAU_EXPORT const char *brutus_menu_nom(int joueur);
+/** M12 : pseudo du joueur d'une ville en Versus réseau (UTF-8), ou 0 (Versus local, pas de pseudo). */
+const char *brutus_versus_pseudo_ville(int ville);
 /** Texte de la dernière action lue (UTF-8). */
 BRUTUS_RESEAU_EXPORT const char *brutus_menu_action_texte(void);
 /** Paramètre de la dernière action lue. */

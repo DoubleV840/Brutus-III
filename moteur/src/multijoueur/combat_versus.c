@@ -14,6 +14,7 @@
 #include "map/routing_terrain.h"
 #include "map/terrain.h"
 #include "multijoueur/commande.h"
+#include "multijoueur/menu.h"
 #include "multijoueur/recap_versus.h"
 #include "multijoueur/versus.h"
 #include "multijoueur/victoire_versus.h"
@@ -152,10 +153,16 @@ void brutus_combat_alerter(int victime, int attaquant, int batiments)
     }
     int ville = brutus_ville_active();
     brutus_ville_activer(victime);
-    char ligne[100];
-    snprintf(ligne, sizeof(ligne), "La ville %s attaque vos %s !", attaquant ? "rouge" : "bleue",
-        batiments ? "bâtiments" : "soldats");
-    static uint8_t texte[120];
+    char ligne[160];
+    const char *pseudo = brutus_versus_pseudo_ville(attaquant); // M12 : « Marcus (rouge) attaque… » en réseau
+    if (pseudo) {
+        snprintf(ligne, sizeof(ligne), "%s (%s) attaque vos %s !", pseudo, attaquant ? "rouge" : "bleue",
+            batiments ? "bâtiments" : "soldats");
+    } else {
+        snprintf(ligne, sizeof(ligne), "La ville %s attaque vos %s !", attaquant ? "rouge" : "bleue",
+            batiments ? "bâtiments" : "soldats");
+    }
+    static uint8_t texte[180];
     encoding_from_utf8(ligne, texte, sizeof(texte));
     if (city_warning_show_custom(texte, NEW_WARNING_SLOT)) {
         dernier[victime][batiments] = maintenant ? maintenant : 1;

@@ -86,13 +86,17 @@ static struct {
     // fenêtre
     int depuis_ville;
     unsigned int focus;
-    int saisie; // 0 aucune, 1 code, 2 chat
+    int saisie; // 0 aucune, 1 code, 2 chat, 3 pseudo
+    int saisie_choisie; // M12 : à l'accueil, le champ choisi d'un clic (1 code, 3 pseudo ; 0 : pas encore)
+    char pseudos[BRUTUS_JOUEURS_MAX][64]; // M12 : pseudo de chaque joueur du salon (UTF-8, donné par le relais)
 } etat = { .combat = 1, .duree = BRUTUS_VICTOIRE_DUREE_DEFAUT };
 
 static uint8_t saisie_code[CODE_MAX];
 static uint8_t saisie_chat[200];
+static uint8_t saisie_pseudo[24]; // M12 : pseudo du joueur local (encodage du jeu)
 static input_box boite_code = { 224, 316, 10, 2, FONT_NORMAL_WHITE, 0, saisie_code, 7 };
 static input_box boite_chat = { 72, 340, 22, 2, FONT_NORMAL_WHITE, 1, saisie_chat, 120 };
+static input_box boite_pseudo = { 160, 64, 14, 2, FONT_NORMAL_WHITE, 1, saisie_pseudo, 21 };
 
 // ------------------------------------------------------------------ textes
 
@@ -171,6 +175,53 @@ BRUTUS_RESEAU_EXPORT void brutus_menu_info(const char *info)
 BRUTUS_RESEAU_EXPORT void brutus_menu_joueurs_vider(void)
 {
     etat.nb_joueurs = 0;
+    memset(etat.pseudos, 0, sizeof(etat.pseudos));
+}
+
+// ------------------------------------------------------------------ M12 : pseudos
+
+BRUTUS_RESEAU_EXPORT void brutus_menu_joueur_pseudo(int numero, const char *pseudo)
+{
+    if (numero >= 0 && numero < BRUTUS_JOUEURS_MAX) {
+        snprintf(etat.pseudos[numero], sizeof(etat.pseudos[numero]), "%s", pseudo ? pseudo : "");
+    }
+}
+
+BRUTUS_RESEAU_EXPORT void brutus_menu_pseudo_definir(const char *pseudo)
+{
+    copier_utf8(pseudo, saisie_pseudo, sizeof(saisie_pseudo));
+    if (etat.saisie == 3) {
+        input_box_refresh_text(&boite_pseudo);
+    }
+}
+
+BRUTUS_RESEAU_EXPORT const char *brutus_menu_pseudo(void)
+{
+    static char utf8[64];
+    encoding_to_utf8(saisie_pseudo, utf8, sizeof(utf8), 0);
+    return utf8;
+}
+
+BRUTUS_RESEAU_EXPORT const char *brutus_menu_nom(int joueur)
+{
+    static char noms[4][64];
+    static int prochain;
+    if (joueur >= 0 && joueur < BRUTUS_JOUEURS_MAX && etat.pseudos[joueur][0]) {
+        return etat.pseudos[joueur];
+    }
+    char *n = noms[prochain];
+    prochain = (prochain + 1) % 4;
+    snprintf(n, 64, "Joueur %d", joueur + 1);
+    return n;
+}
+
+const char *brutus_versus_pseudo_ville(int ville)
+{
+    // En Versus réseau, la ville n est au joueur n ; en local, pas de pseudo (on dit « la ville bleue »).
+    if (!brutus_versus_actif() || !brutus_reseau_actif() || ville < 0 || ville >= BRUTUS_JOUEURS_MAX) {
+        return 0;
+    }
+    return etat.pseudos[ville][0] ? etat.pseudos[ville] : 0;
 }
 
 BRUTUS_RESEAU_EXPORT void brutus_menu_joueur(int numero, int connecte, int latence)
@@ -206,7 +257,7 @@ BRUTUS_RESEAU_EXPORT void brutus_menu_chat(int id, int joueur, const char *texte
     // Fenêtre fermée : le message de l'autre joueur s'affiche en haut de la ville.
     if (joueur != etat.joueur_local && !ouverte() && window_is(WINDOW_CITY)) {
         char ligne[TEXTE_MAX + 32];
-        snprintf(ligne, sizeof(ligne), "Joueur %d : %s", joueur + 1, texte ? texte : "");
+        snprintf(ligne, sizeof(ligne), "%s : %s", brutus_menu_nom(joueur), texte ? texte : "");
         city_warning_show_custom(t(ligne), NEW_WARNING_SLOT);
     }
     window_invalidate();
@@ -415,6 +466,8 @@ static void arreter_saisie(void)
         input_box_stop(&boite_code);
     } else if (etat.saisie == 2) {
         input_box_stop(&boite_chat);
+    } else if (etat.saisie == 3) {
+        input_box_stop(&boite_pseudo);
     }
     etat.saisie = 0;
 }
@@ -423,7 +476,8 @@ static void choisir_saisie(void)
 {
     int voulue = 0;
     if (etat.disponible) {
-        voulue = en_session() ? 2 : 1;
+        // Accueil : le pseudo d'abord s'il est vide, sinon le code ; un clic choisit l'un ou l'autre.
+        voulue = en_session() ? 2 : etat.saisie_choisie ? etat.saisie_choisie : saisie_pseudo[0] ? 1 : 3;
     }
     if (voulue == etat.saisie) {
         return;
@@ -433,6 +487,8 @@ static void choisir_saisie(void)
         input_box_start(&boite_code);
     } else if (voulue == 2) {
         input_box_start(&boite_chat);
+    } else if (voulue == 3) {
+        input_box_start(&boite_pseudo);
     }
     etat.saisie = voulue;
 }
@@ -532,6 +588,18 @@ static void dessiner_boutons_accueil(void)
     }
 }
 
+// Deux champs dans la même fenêtre : seul celui qui reçoit le clavier passe par input_box_draw (curseur,
+// défilement du texte) ; l'autre est dessiné en entier, sans curseur.
+static void dessiner_boite(const input_box *b, int active)
+{
+    if (active) {
+        input_box_draw(b);
+        return;
+    }
+    inner_panel_draw(b->x, b->y, b->width_blocks, b->height_blocks);
+    text_draw_ellipsized(b->text, b->x + 16, b->y + 10, b->width_blocks * 16 - 32, b->font, 0);
+}
+
 static void dessiner_indisponible(void)
 {
     text_draw_multiline(t(
@@ -543,9 +611,13 @@ static void dessiner_indisponible(void)
 
 static void dessiner_accueil(void)
 {
-    text_draw_multiline(t(
-        "Jouez à plusieurs en ligne. Chacun a besoin de ses propres fichiers du jeu et garde son onglet "
-        "visible (un onglet masqué ralentit tout le monde)."), X0 + 24, 62, LARGEUR - 48, 0, FONT_NORMAL_BLACK, 0);
+    text_draw(t("Pseudo :"), X0 + 24, 74, FONT_NORMAL_BLACK, 0);
+    dessiner_boite(&boite_code, etat.saisie == 1);
+    dessiner_boite(&boite_pseudo, etat.saisie == 3);
+    text_draw_multiline(t("Ton nom pour les autres joueurs (20 caractères)."), X0 + 352, 68, LARGEUR - 376, 0,
+        FONT_SMALL_PLAIN, COLOR_BLACK);
+    text_draw_multiline(t("Chacun a besoin de ses propres fichiers du jeu et garde son onglet visible (un onglet masqué "
+        "ralentit tout le monde)."), X0 + 24, 398, LARGEUR - 220, 0, FONT_SMALL_PLAIN, COLOR_BLACK);
 
     text_draw(t("Créer une partie"), X0 + 24, 102, FONT_NORMAL_BLACK, 0);
     text_draw(t("Mode :"), X0 + 24, 128, FONT_NORMAL_BLACK, 0);
@@ -553,8 +625,8 @@ static void dessiner_accueil(void)
     if (mode_impose()) {
         aide = "Cette ville est déjà en Versus : la partie sera un Versus, chacun sa ville (2 joueurs).";
     } else if (versus_choisi()) {
-        aide = "Versus : chacun sa ville sur la même carte (2 joueurs). On gagne en détruisant entièrement la "
-            "ville de l'autre, ou par le meilleur score à la fin de la durée.";
+        aide = "Versus : chacun sa ville sur la même carte (2 joueurs). Victoire : détruire la ville de l'autre, "
+            "ou le meilleur score à la fin de la durée.";
     } else {
         aide = "Coop : vous gérez la même ville à plusieurs, avec les mêmes pouvoirs.";
     }
@@ -576,7 +648,6 @@ static void dessiner_accueil(void)
     text_draw_multiline(t("Entre le code de 6 caractères donné par l'autre joueur. Tu peux rester au menu : tu recevras sa ville."),
         X0 + 24, 288, LARGEUR - 48, 0, FONT_SMALL_PLAIN, COLOR_BLACK);
     text_draw(t("Code :"), X0 + 112, 325, FONT_NORMAL_BLACK, 0);
-    input_box_draw(&boite_code);
 
     if (etat.texte[0]) {
         text_draw_multiline(etat.texte, X0 + 24, 360, LARGEUR - 48, 0, FONT_NORMAL_PLAIN,
@@ -651,15 +722,15 @@ static void dessiner_session(void)
         const joueur_salon *j = &etat.joueurs[i];
         int y = 130 + i * 22;
         graphics_fill_rect(X0 + 28, y + 2, 12, 12, brutus_coop_couleur(j->numero));
+        const char *qui = brutus_menu_nom(j->numero);
+        const char *moi = j->numero == etat.joueur_local ? " (toi)" : "";
+        const char *hote = j->numero == 0 ? ", hôte" : "";
         if (!j->connecte) {
-            snprintf(ligne, sizeof(ligne), "Joueur %d%s%s : déconnecté", j->numero + 1,
-                j->numero == etat.joueur_local ? " (toi)" : "", j->numero == 0 ? ", hôte" : "");
+            snprintf(ligne, sizeof(ligne), "%s%s%s : déconnecté", qui, moi, hote);
         } else if (j->latence >= 0) {
-            snprintf(ligne, sizeof(ligne), "Joueur %d%s%s : %d ms", j->numero + 1,
-                j->numero == etat.joueur_local ? " (toi)" : "", j->numero == 0 ? ", hôte" : "", j->latence);
+            snprintf(ligne, sizeof(ligne), "%s%s%s : %d ms", qui, moi, hote, j->latence);
         } else {
-            snprintf(ligne, sizeof(ligne), "Joueur %d%s%s", j->numero + 1,
-                j->numero == etat.joueur_local ? " (toi)" : "", j->numero == 0 ? ", hôte" : "");
+            snprintf(ligne, sizeof(ligne), "%s%s%s", qui, moi, hote);
         }
         text_draw(t(ligne), X0 + 48, y + 3, FONT_NORMAL_WHITE, 0);
     }
@@ -674,7 +745,7 @@ static void dessiner_session(void)
         if (l->joueur == etat.joueur_local) {
             snprintf(ligne, sizeof(ligne), "Toi :");
         } else {
-            snprintf(ligne, sizeof(ligne), "Joueur %d :", l->joueur + 1);
+            snprintf(ligne, sizeof(ligne), "%s :", brutus_menu_nom(l->joueur));
         }
         int w = text_draw(t(ligne), X0 + 28, y, FONT_NORMAL_PLAIN, brutus_coop_couleur(l->joueur));
         text_draw_ellipsized(l->texte, X0 + 32 + w, y, LARGEUR - 72 - w - (l->signal >= 0 ? 64 : 0),
@@ -706,7 +777,7 @@ static void draw_foreground(void)
     choisir_saisie();
     graphics_in_dialog();
     outer_panel_draw(X0, Y0, LARGEUR / 16, HAUTEUR / 16);
-    text_draw_centered(t("Multijoueur"), X0, Y0 + 16, LARGEUR, FONT_LARGE_BLACK, 0);
+    text_draw_centered(t("Multijoueur"), X0, Y0 + 12, LARGEUR, FONT_LARGE_BLACK, 0);
     if (!etat.disponible) {
         preparer_boutons_accueil();
         dessiner_indisponible();
@@ -831,12 +902,23 @@ static void handle_input(const mouse *m, const hotkeys *h)
         }
     } else {
         preparer_boutons_accueil();
-        if (input_box_handle_mouse(m_dialog, &boite_code) ||
-            generic_buttons_handle_mouse(m_dialog, 0, 0, boutons_accueil, nb_accueil, &etat.focus)) {
+        if (input_box_handle_mouse(m_dialog, &boite_pseudo)) {
+            etat.saisie_choisie = 3;
+            return;
+        }
+        if (input_box_handle_mouse(m_dialog, &boite_code)) {
+            etat.saisie_choisie = 1;
+            return;
+        }
+        if (generic_buttons_handle_mouse(m_dialog, 0, 0, boutons_accueil, nb_accueil, &etat.focus)) {
             return;
         }
         if (input_box_is_accepted()) {
-            rejoindre();
+            if (etat.saisie == 3) {
+                etat.saisie_choisie = 1; // Entrée dans le pseudo : on passe au code
+            } else {
+                rejoindre();
+            }
             return;
         }
     }

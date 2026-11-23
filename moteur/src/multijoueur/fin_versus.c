@@ -15,6 +15,7 @@
 #include "graphics/window.h"
 #include "input/input.h"
 #include "multijoueur/combat_versus.h"
+#include "multijoueur/menu.h"
 #include "multijoueur/recap_versus.h"
 #include "multijoueur/reseau.h"
 #include "multijoueur/versus.h"
@@ -113,6 +114,45 @@ static const uint8_t *t(const char *utf8)
 static const char *nom_ville(int ville)
 {
     return ville == 0 ? "bleue" : "rouge";
+}
+
+// M12 : en réseau, les villes portent le pseudo de leur joueur (« la ville de Léa »), sinon leur couleur.
+static const char *tampon_nom(void)
+{
+    static char tampons[8][96];
+    static int prochain;
+    prochain = (prochain + 1) % 8;
+    return tampons[prochain];
+}
+
+static const char *la_ville(int ville)
+{
+    char *n = (char *) tampon_nom();
+    const char *pseudo = brutus_versus_pseudo_ville(ville);
+    if (pseudo) {
+        snprintf(n, 96, "la ville de %s", pseudo);
+    } else {
+        snprintf(n, 96, "la ville %s", nom_ville(ville));
+    }
+    return n;
+}
+
+static const char *etiquette(int ville)
+{
+    char *n = (char *) tampon_nom();
+    const char *pseudo = brutus_versus_pseudo_ville(ville);
+    if (pseudo) {
+        snprintf(n, 96, "%s", pseudo);
+    } else {
+        snprintf(n, 96, "Ville %s", nom_ville(ville));
+    }
+    return n;
+}
+
+static const char *nom_court(int ville)
+{
+    const char *pseudo = brutus_versus_pseudo_ville(ville);
+    return pseudo ? pseudo : nom_ville(ville);
 }
 
 // 12345 -> « 12 345 »
@@ -224,7 +264,7 @@ static void fait_pic_population(char *s, size_t taille)
         char nb[24], d[40];
         nombre(meilleur < 0 ? 0 : meilleur, nb, sizeof(nb));
         date_courte_releve(quand, d, sizeof(d));
-        snprintf(parties[v], sizeof(parties[v]), "%s %s en %s", v ? "rouge" : "bleue", nb, d);
+        snprintf(parties[v], sizeof(parties[v]), "%s %s en %s", nom_court(v), nb, d);
     }
     snprintf(s, taille, "%s ; %s", parties[0], parties[1]);
 }
@@ -276,7 +316,7 @@ static void fait_premier_detruit(char *s, size_t taille)
     }
     char d[40];
     date_courte(brutus_recap_premier_detruit_annee(), brutus_recap_premier_detruit_mois(), d, sizeof(d));
-    snprintf(s, taille, "%s de la ville %s, en %s", nom, nom_ville(ville), d);
+    snprintf(s, taille, "%s de %s, en %s", nom, la_ville(ville), d);
 }
 
 static int en_tete(int i)
@@ -306,11 +346,11 @@ static void fait_bascule(char *s, size_t taille)
     if (tete < 0) {
         snprintf(s, taille, "jamais : égalité tout au long de la partie");
     } else if (bascule < 0) {
-        snprintf(s, taille, "jamais : la ville %s a mené du début à la fin", nom_ville(tete));
+        snprintf(s, taille, "jamais : %s a mené du début à la fin", la_ville(tete));
     } else {
         char d[40];
         date_courte_releve(bascule, d, sizeof(d));
-        snprintf(s, taille, "en %s, la ville %s passe devant %s", d, nom_ville(tete),
+        snprintf(s, taille, "en %s, %s passe devant %s", d, la_ville(tete),
             changements > 1 ? "pour de bon" : "et y reste");
     }
 }
@@ -393,8 +433,8 @@ static void dessiner_legende(int moi)
 {
     int x = CADRE_X + CADRE_L - 12;
     for (int v = 1; v >= 0; v--) {
-        char l[40];
-        snprintf(l, sizeof(l), "Ville %s%s", nom_ville(v), v == moi ? " (vous)" : "");
+        char l[80];
+        snprintf(l, sizeof(l), "%s%s", etiquette(v), v == moi ? " (vous)" : "");
         int w = text_get_width(t(l), FONT_SMALL_PLAIN);
         x -= w;
         text_draw(t(l), x, CADRE_Y + 9, FONT_SMALL_PLAIN, ENCRE);
@@ -505,12 +545,12 @@ static void dessiner_courbes(int moi)
         graphics_fill_rect(x - 4, y - 4, 8, 8, FOND_COURBES);
         graphics_fill_rect(x - 3, y - 3, 6, 6, COULEUR_VILLE[v]);
     }
-    char lignes[3][60];
+    char lignes[3][100];
     date_releve(i, d, sizeof(d));
     snprintf(lignes[0], sizeof(lignes[0]), "%s%s", d, brutus_recap_est_fin(i) ? " (fin)" : "");
     for (int v = 0; v < 2; v++) {
         nombre(brutus_recap_valeur(i, v, o->stat), nb, sizeof(nb));
-        snprintf(lignes[v + 1], sizeof(lignes[v + 1]), "Ville %s : %s", nom_ville(v), nb);
+        snprintf(lignes[v + 1], sizeof(lignes[v + 1]), "%s : %s", etiquette(v), nb);
     }
     int largeur = 0;
     for (int l = 0; l < 3; l++) {
@@ -549,8 +589,8 @@ static void dessiner_tableau(int moi)
     const brutus_score_ville *s1 = brutus_victoire_scores_fin(0);
     const brutus_score_ville *s2 = brutus_victoire_scores_fin(1);
     for (int v = 0; v < 2; v++) {
-        char tete[40];
-        snprintf(tete, sizeof(tete), "Ville %s%s", nom_ville(v), v == moi ? " (vous)" : "");
+        char tete[80];
+        snprintf(tete, sizeof(tete), "%s%s", etiquette(v), v == moi ? " (vous)" : "");
         int x = CADRE_X + 250 + v * 160;
         int w = text_get_width(t(tete), FONT_NORMAL_BLACK);
         graphics_fill_rect(x + 120 - w - 14, CADRE_Y + 13, 10, 10, COULEUR_VILLE[v]);
@@ -613,10 +653,10 @@ static void draw_foreground(void)
         if (gagnant < 0) {
             snprintf(ligne, sizeof(ligne), "Les deux villes ont été entièrement détruites.");
         } else if (gagnant == moi) {
-            snprintf(ligne, sizeof(ligne), "Vos soldats ont entièrement détruit la ville %s.", nom_ville(1 - moi));
+            snprintf(ligne, sizeof(ligne), "Vos soldats ont entièrement détruit %s.", la_ville(1 - moi));
         } else {
-            snprintf(ligne, sizeof(ligne), "Les soldats de la ville %s ont entièrement détruit votre ville.",
-                nom_ville(gagnant));
+            snprintf(ligne, sizeof(ligne), "Les soldats de %s ont entièrement détruit votre ville.",
+                la_ville(gagnant));
         }
     } else {
         int mois = brutus_victoire_duree();
@@ -629,8 +669,8 @@ static void draw_foreground(void)
         if (gagnant < 0) {
             snprintf(ligne, sizeof(ligne), "Fin du temps imparti (%s) : les deux villes ont le même score.", duree);
         } else {
-            snprintf(ligne, sizeof(ligne), "Fin du temps imparti (%s) : la ville %s a la meilleure économie.", duree,
-                nom_ville(gagnant));
+            snprintf(ligne, sizeof(ligne), "Fin du temps imparti (%s) : %s a la meilleure économie.", duree,
+                la_ville(gagnant));
         }
     }
     text_draw_multiline(t(ligne), X0 + 32, Y0 + 48, LARGEUR - 64, 0, FONT_NORMAL_BLACK, 0);

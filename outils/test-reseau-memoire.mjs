@@ -215,7 +215,7 @@ class Relais {
     const etat = [];
     salon.jetons.forEach((jeton, joueur) => {
       if (jeton !== null) {
-        etat.push({ joueur, connecte: connectes.has(joueur) });
+        etat.push({ joueur, connecte: connectes.has(joueur), pseudo: (salon.pseudos || [])[joueur] || '' }); // M12
       }
     });
     return etat;
@@ -271,6 +271,7 @@ class Relais {
     if (u.searchParams.get('version') !== '1') {
       return this.refuser(c, 'version');
     }
+    const pseudo = (u.searchParams.get('pseudo') || '').slice(0, 20); // M12 : comme le relais (nettoyage en moins)
     if (u.pathname === '/creer') {
       const demande = u.searchParams.get('joueurs');
       const joueurs = demande === null ? 2 : Number(demande);
@@ -285,7 +286,7 @@ class Relais {
           code += ALPHABET[entier(0, ALPHABET.length - 1)];
         }
       } while (this.salons.has(code));
-      const salon = { code, joueursMax: joueurs, info, jetons: [this.jeton()], conns: new Set() };
+      const salon = { code, joueursMax: joueurs, info, jetons: [this.jeton()], pseudos: [pseudo], conns: new Set() };
       this.salons.set(code, salon);
       return this.accepterJoueur(c, salon, 0, false);
     }
@@ -319,6 +320,7 @@ class Relais {
           ancienne.fermeRelais = true;
         }
       }
+      if (pseudo) salon.pseudos[joueur] = pseudo;
       return this.accepterJoueur(c, salon, joueur, true);
     }
     let joueur = salon.jetons.indexOf(null);
@@ -329,6 +331,7 @@ class Relais {
       joueur = salon.jetons.length;
     }
     salon.jetons[joueur] = this.jeton();
+    salon.pseudos[joueur] = pseudo;
     return this.accepterJoueur(c, salon, joueur, false);
   }
 
@@ -734,7 +737,7 @@ async function principal() {
     hote.M.ccall('brutus_menu_action', 'number', [], []);
     const info = hote.M.ccall('brutus_menu_action_texte', 'string', [], []);
     dire(`Versus : salon de ${joueurs} joueurs, info « ${info} ».`);
-    hote.lock.creer(joueurs, info);
+    hote.lock.creer(joueurs, info, 'Léa');
   } else {
     hote.lock.creer(2);
   }
@@ -756,7 +759,7 @@ async function principal() {
   if (!hote.s().code) {
     throw new Error('Le salon n’a pas été créé.');
   }
-  invite.lock.rejoindre(hote.s().code);
+  invite.lock.rejoindre(hote.s().code, VERSUS ? 'Marcus' : undefined);
   dire(`Salon ${hote.s().code} : l'invité rejoint.`);
   while ((!hote.s().actif || !invite.s().actif) && it < 20000) {
     pomperTout();
@@ -1264,7 +1267,14 @@ async function principal() {
       direct = { comparees: true, tick: hote.tick(), a, b, identiques: a === b };
       if (VERSUS) {
         const etatVersus = (c) => Array.from({ length: 11 }, (_, q) => c.versus(q));
-        direct.versus = { hote: etatVersus(hote), invite: etatVersus(invite), infoInvite: invite.s().info };
+        const pseudos = (c) => Object.fromEntries((c.s().salon || []).map((p) => [p.joueur, p.pseudo]));
+        // Ce que fait la page : les pseudos du salon vont au moteur, qui les rend par brutus_menu_nom
+        for (const c of [hote, invite]) {
+          for (const p of c.s().salon || []) c.M.ccall('brutus_menu_joueur_pseudo', null, ['number', 'string'], [p.joueur, p.pseudo || '']);
+        }
+        const nom = (c, j) => c.M.ccall('brutus_menu_nom', 'string', ['number'], [j]);
+        direct.versus = { hote: etatVersus(hote), invite: etatVersus(invite), infoInvite: invite.s().info,
+          pseudos: { hote: pseudos(hote), invite: pseudos(invite) }, noms: { hote: nom(hote, 1), invite: nom(invite, 0) } };
       }
       break;
     }
@@ -1295,6 +1305,8 @@ function criteresVersus(direct) {
     'versus : chaque ville a ses bâtiments': !!(v && h[9] > 0 && h[10] > 0 && memes(9) && memes(10)),
     'versus : même fin chez les deux (économique, même gagnant, même tick)': !!(v && h[4] === 2 && memes(4) && memes(5) && memes(6)),
     'versus : même récap chez les deux': !!(v && h[7] >= 2 && memes(7) && memes(8)),
+    'pseudos : chacun voit celui de l\'autre (Léa, Marcus), aussi après les coupures': !!(v && v.pseudos.hote[1] === 'Marcus' &&
+      v.pseudos.invite[0] === 'Léa' && v.noms.hote === 'Marcus' && v.noms.invite === 'Léa'),
   };
 }
 
@@ -1339,6 +1351,7 @@ function rapport(r, erreur) {
       L.push(`  Comparaison finale directe au tick ${direct.tick} : ${direct.identiques ? 'identiques' : 'DIFFÉRENTES'} (${direct.a} / ${direct.b}).`);
       if (direct.versus) {
         L.push(`  Versus (villes, vue, combat, durée, fin, gagnant, tick de fin, relevés, empreinte du récap, bâtiments 1, bâtiments 2) : hôte ${JSON.stringify(direct.versus.hote)}, invité ${JSON.stringify(direct.versus.invite)}.`);
+        L.push(`  Pseudos vus par l'hôte ${JSON.stringify(direct.versus.pseudos.hote)}, par l'invité ${JSON.stringify(direct.versus.pseudos.invite)} ; noms rendus par le moteur : ${JSON.stringify(direct.versus.noms)}.`);
       }
     } else {
       L.push('  Comparaison finale directe : impossible (ticks différents).');

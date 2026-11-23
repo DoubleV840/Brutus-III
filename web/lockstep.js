@@ -573,6 +573,7 @@
       presenceEnvoyee: "",
       signalesNonLus: 0,
       info: "", // M12 : mode, carte et options de la partie (donnés par l'hôte, transmis par le relais)
+      pseudo: "", // M12 : pseudo du joueur local
     };
 
     function villeQuittee() {
@@ -802,29 +803,36 @@
     }
 
     function enregistrerSession() {
-      stockage.ecrire({ code: s.code, jeton: s.jeton, joueur: s.joueur });
+      stockage.ecrire({ code: s.code, jeton: s.jeton, joueur: s.joueur, pseudo: s.pseudo });
+    }
+
+    // M12 : pseudo du joueur local, envoyé au relais à chaque connexion (il le donne à tous dans « joueurs »).
+    function paramPseudo() {
+      return s.pseudo ? "&pseudo=" + encodeURIComponent(s.pseudo) : "";
     }
 
     function reconnecter(compter) {
       if (compter) {
         stats.reconnexions++;
       }
-      ouvrir("/rejoindre/" + encodeURIComponent(s.code) + "?version=" + VERSION_PROTOCOLE + "&jeton=" + encodeURIComponent(s.jeton));
+      ouvrir("/rejoindre/" + encodeURIComponent(s.code) + "?version=" + VERSION_PROTOCOLE + "&jeton=" + encodeURIComponent(s.jeton) + paramPseudo());
     }
 
     // info (M12) : ligne d'information de la partie (mode, carte, options), que le relais donne à tous.
-    function creer(joueurs, info) {
+    function creer(joueurs, info, pseudo) {
       s.rechargee = false;
       s.erreur = null;
       s.info = "";
+      s.pseudo = pseudo ? String(pseudo).slice(0, 40) : "";
       ouvrir("/creer?version=" + VERSION_PROTOCOLE + "&joueurs=" + (joueurs || o.joueurs) +
-        (info ? "&info=" + encodeURIComponent(String(info).slice(0, 200)) : ""));
+        (info ? "&info=" + encodeURIComponent(String(info).slice(0, 200)) : "") + paramPseudo());
     }
 
-    function rejoindre(code) {
+    function rejoindre(code, pseudo) {
       s.rechargee = false;
       s.erreur = null;
-      ouvrir("/rejoindre/" + encodeURIComponent(String(code).trim().toUpperCase()) + "?version=" + VERSION_PROTOCOLE);
+      s.pseudo = pseudo ? String(pseudo).slice(0, 40) : "";
+      ouvrir("/rejoindre/" + encodeURIComponent(String(code).trim().toUpperCase()) + "?version=" + VERSION_PROTOCOLE + paramPseudo());
     }
 
     // Reprend la session gardée dans le stockage (après rechargement de la page).
@@ -836,6 +844,7 @@
       s.code = g.code;
       s.jeton = g.jeton;
       s.joueur = g.joueur;
+      s.pseudo = typeof g.pseudo === "string" ? g.pseudo : "";
       s.session = true;
       s.rechargee = true;
       s.erreur = null;

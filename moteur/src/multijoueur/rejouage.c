@@ -1,5 +1,6 @@
 // Brutus III : mode rejouage sans affichage (voir rejouage.h)
 #include "multijoueur/fin_versus.h"
+#include "multijoueur/menu.h"
 #include "multijoueur/recap_versus.h"
 #include "multijoueur/victoire_versus.h"
 #include "multijoueur/rejouage.h"
@@ -574,6 +575,13 @@ static int rejouer(void)
             capturer_ecran();
             brutus_fin_versus_survol(-1, -1);
             brutus_fin_versus_onglet(BRUTUS_FIN_ONGLET_TABLEAU);
+            capturer_ecran();
+            // M12 : la fenêtre Multijoueur telle que l'hôte la voit au menu (pseudo, mode Versus, options)
+            window_city_show();
+            brutus_menu_disponible(1);
+            brutus_menu_definir_partie(1, 1, BRUTUS_VICTOIRE_DUREE_DEFAUT);
+            brutus_menu_pseudo_definir("Léa");
+            window_brutus_multijoueur_show(0);
             capturer_ecran();
         }
     }

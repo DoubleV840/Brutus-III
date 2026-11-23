@@ -232,6 +232,20 @@ passent.
   dans la case de la ville 2, et la partie divergeait. `--joueur-local N` (rejouage) rejoue comme le joueur N ; le
   test du récap vérifie qu'avec des resynchronisations le joueur 2 a la même partie que l'hôte.
 
+### Pseudos (demandés par le fondateur le 23/11)
+
+- **Saisie** : champ « Pseudo » en haut de la fenêtre Multijoueur (20 caractères), rempli au départ avec celui retenu
+  par le navigateur (`localStorage`, clé `brutus-pseudo`). Il part au relais en créant ou en rejoignant une partie, et à
+  chaque reconnexion (le client le garde avec sa session).
+- **Transport** : le relais le nettoie et le met dans la liste `joueurs` de chaque place (docs/protocole.md). Il ne passe
+  jamais par la simulation : pas d'effet sur l'empreinte, rien dans la sauvegarde.
+- **Affichage** (sans pseudo : « Joueur N », « la ville bleue ») : liste des joueurs du salon, chat, message de chat en
+  haut de la ville, avertissement de combat (« Marcus (rouge) attaque vos bâtiments ! »), écran de fin (raison,
+  légende des courbes, bulle, tableau, faits marquants : « la ville de Léa »). Les couleurs restent : bleue pour la
+  ville 1, rouge pour la ville 2. En Versus local (un seul écran), pas de pseudos.
+- **Test** : dans `test-reseau-memoire.sh --versus`, l'hôte s'appelle Léa et l'invité Marcus ; chacun doit voir le
+  pseudo de l'autre à la fin, après coupures, rechargement de la page de l'hôte et second onglet.
+
 ### Récap de fin de partie
 
 - **Relevés** (`multijoueur/recap_versus.c`) : au passage en Versus, puis au début de chaque mois (après les notes) et

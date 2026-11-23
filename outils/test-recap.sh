@@ -12,7 +12,8 @@
 #  3. sauvegarde au milieu, rechargement par un lancement neuf (comme un invité qui reçoit la partie) :
 #     même suite, même récap à la fin (même empreinte du récap) ;
 #  4. la partie finie, sauvegardée et rechargée, garde son récap ;
-#  5. --capture : l'écran de fin (onglet du score, onglet de la population avec la bulle de survol, tableau),
+#  5. --capture : l'écran de fin (onglet du score, onglet de la population avec la bulle de survol, tableau) et la
+#     fenêtre Multijoueur (pseudo, mode Versus, options),
 #     copié dans build-rejouage/recap/captures/ (images du jeu : jamais commitées).
 # Sorties : 0 = OK, 1 = échec, 3 = test sauté (jeu absent).
 set -euo pipefail
@@ -201,8 +202,10 @@ while IFS= read -r f; do
     city*) n=$(( n + 1 )); mv "$f" "$SORTIE/captures/fin-$n.png" ;;
   esac
 done <<< "$NOUVELLES"
-[ "$n" = 3 ] || echouer "3 captures de l'écran de fin attendues, $n trouvées."
-echo "   captures : $SORTIE/captures/fin-1.png (score), fin-2.png (population, survol), fin-3.png (tableau)"
+[ "$n" = 4 ] || echouer "4 captures attendues (3 de l'écran de fin, 1 du menu Multijoueur), $n trouvées."
+[ ! -f "$SORTIE/captures/fin-4.png" ] || mv "$SORTIE/captures/fin-4.png" "$SORTIE/captures/menu-multijoueur.png"
+echo "   captures : $SORTIE/captures/fin-1.png (score), fin-2.png (population, survol), fin-3.png (tableau),"
+echo "              menu-multijoueur.png (pseudo, mode Versus, options)"
 
 [ "$echec" = 0 ] || exit 1
 echo "OK : $releves relevés, identiques sur deux rejouages, après rechargement et dans la partie finie rechargée."
