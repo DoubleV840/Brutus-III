@@ -144,17 +144,20 @@ export class Reception {
  */
 export class ClientRelais {
   // version: null → paramètre absent (pour les tests).
-  static creer(base, { joueurs, version = VERSION_PROTOCOLE, origine } = {}) {
+  static creer(base, { joueurs, version = VERSION_PROTOCOLE, origine, info, pseudo } = {}) {
     const url = new URL("/creer", base);
     if (version !== null) url.searchParams.set("version", String(version));
     if (joueurs !== undefined) url.searchParams.set("joueurs", String(joueurs));
+    if (info !== undefined) url.searchParams.set("info", info); // M12 : ligne d'information du salon
+    if (pseudo !== undefined) url.searchParams.set("pseudo", pseudo); // M12 : pseudo du joueur
     return new ClientRelais(url, origine);
   }
 
-  static rejoindre(base, code, { jeton, version = VERSION_PROTOCOLE, origine } = {}) {
+  static rejoindre(base, code, { jeton, version = VERSION_PROTOCOLE, origine, pseudo } = {}) {
     const url = new URL("/rejoindre/" + encodeURIComponent(code), base);
     if (version !== null) url.searchParams.set("version", String(version));
     if (jeton) url.searchParams.set("jeton", jeton);
+    if (pseudo !== undefined) url.searchParams.set("pseudo", pseudo); // M12
     return new ClientRelais(url, origine);
   }
 

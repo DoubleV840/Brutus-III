@@ -533,6 +533,7 @@
         var avis = (e.alerte ? e.alerte + ' ' : '') + (e.avis || '');
         multiAppel('brutus_menu_etat', ['number', 'string', 'string', 'string', 'number', 'number'],
           [phase < 0 ? 0 : phase, e.code || '', e.texte || '', avis, e.joueur > 0 ? e.joueur : 0, e.hote ? 1 : 0]);
+        multiAppel('brutus_menu_info', ['string'], [e.info || '']);
         multiAppel('brutus_menu_joueurs_vider');
         for (var i = 0; i < e.salon.length; i++) {
           var p = e.salon[i];
@@ -559,7 +560,8 @@
           var texte = multiAppel('brutus_menu_action_texte', [], [], 'string');
           var param = multiAppel('brutus_menu_action_parametre', [], [], 'number');
           if (action === 1) {
-            multi.ls.creer(2);
+            // M12 : le paramètre est le nombre de joueurs, le texte la ligne d'information (mode, carte, options)
+            multi.ls.creer(param >= 2 ? param : 2, texte);
           } else if (action === 2) {
             multi.ls.rejoindre(texte);
           } else if (action === 3) {

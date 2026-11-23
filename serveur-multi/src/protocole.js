@@ -15,6 +15,16 @@ export const TAILLE_ENTETE = 8;
 export const ALPHABET_CODE = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 export const LONGUEUR_CODE = 6;
 export const ESSAIS_CREATION = 8;
+// M12 : longueur maximale de la ligne d'information d'un salon (mode, carte, options ; paramètre « info » de /creer).
+export const INFO_MAX = 200;
+// Pseudo d'un joueur (paramètre « pseudo » de /creer et /rejoindre) : 20 caractères au plus.
+export const PSEUDO_MAX = 20;
+
+/** Pseudo nettoyé : sans caractères de contrôle, espaces resserrés, coupé à PSEUDO_MAX (chaîne vide si rien). */
+export function nettoyerPseudo(texte) {
+  return Array.from(String(texte || "").replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim())
+    .slice(0, PSEUDO_MAX).join("").trim();
+}
 
 // Types des messages binaires (octet 0 de l'en-tête).
 export const TYPE = {

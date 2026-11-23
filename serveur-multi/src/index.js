@@ -10,7 +10,7 @@ import { DurableObject } from "cloudflare:workers";
 // ATTENTION : ce module ne doit exporter que `default` et `Salon` (workerd prend tout autre
 // export pour un gestionnaire et refuse de charger le Worker). Constantes : ./protocole.js.
 import {
-  ALPHABET_CODE, DEST_AUTRES, DEST_TOUS, ESSAIS_CREATION, FERMETURE, LONGUEUR_CODE, MESSAGES,
+  ALPHABET_CODE, DEST_AUTRES, DEST_TOUS, ESSAIS_CREATION, FERMETURE, INFO_MAX, LONGUEUR_CODE, MESSAGES, nettoyerPseudo,
   TAILLE_ENTETE, TAILLE_MAX_MESSAGE, TYPE, TYPES_CONNUS, TYPES_POUR_TOUS, VERSION_PROTOCOLE,
   codeValide, origineAcceptee,
 } from "./protocole.js";
@@ -53,9 +53,12 @@ export default {
       if (!Number.isInteger(joueurs) || joueurs < 2 || joueurs > max) {
         return refuser("requete-invalide", `Nombre de joueurs : de 2 à ${max}.`);
       }
+      // M12 : ligne d'information de la partie (mode, carte, options), montrée à tous dans le salon.
+      // Du texte seulement, sans effet sur le relais ; coupée à INFO_MAX caractères.
+      const info = (url.searchParams.get("info") || "").slice(0, INFO_MAX);
       for (let essai = 0; essai < ESSAIS_CREATION; essai++) {
         const code = nouveauCode();
-        const reponse = await versSalon(env, code, requete, { action: "creer", joueurs });
+        const reponse = await versSalon(env, code, requete, { action: "creer", joueurs, info, pseudo: url.searchParams.get("pseudo") });
         if (reponse.status !== 409) {
           return reponse; // 101 (salon créé) ou autre erreur
         }
@@ -68,7 +71,7 @@ export default {
       return refuser("salon-inconnu");
     }
     const jeton = url.searchParams.get("jeton");
-    return versSalon(env, code, requete, { action: "rejoindre", jeton: jeton || "" });
+    return versSalon(env, code, requete, { action: "rejoindre", jeton: jeton || "", pseudo: url.searchParams.get("pseudo") });
   },
 };
 
@@ -78,6 +81,8 @@ function versSalon(env, code, requete, infos) {
   cible.searchParams.set("code", code);
   if (infos.joueurs !== undefined) cible.searchParams.set("joueurs", String(infos.joueurs));
   if (infos.jeton) cible.searchParams.set("jeton", infos.jeton);
+  if (infos.info) cible.searchParams.set("info", infos.info);
+  if (infos.pseudo) cible.searchParams.set("pseudo", infos.pseudo); // M12
   return stub.fetch(new Request(cible, { headers: requete.headers }));
 }
 
@@ -130,7 +135,7 @@ function refuser(code, message) {
 // Durable Object : un salon
 // ---------------------------------------------------------------------------
 //
-// Stockage (clé « salon ») : { code, joueursMax, creeLe, jetons: [jeton du joueur 0, …] }.
+// Stockage (clé « salon ») : { code, joueursMax, info, creeLe, jetons: [jeton du joueur 0, …] }.
 // Le numéro d'un joueur est sa place dans `jetons` (ordre d'arrivée, 0 = hôte). Une place
 // libérée par l'hôte (expulsion) vaut null et sera reprise par le prochain arrivant.
 // Chaque WebSocket porte { joueur, actif } (serializeAttachment) : l'état survit à
@@ -160,6 +165,7 @@ export class Salon extends DurableObject {
     const url = new URL(requete.url);
     const action = url.pathname.slice(1);
     const code = url.searchParams.get("code");
+    const pseudo = nettoyerPseudo(url.searchParams.get("pseudo")); // M12 : pseudo du joueur (facultatif)
 
     if (action === "creer") {
       if (this.salon) {
@@ -168,8 +174,10 @@ export class Salon extends DurableObject {
       this.salon = {
         code,
         joueursMax: Number(url.searchParams.get("joueurs")),
+        info: (url.searchParams.get("info") || "").slice(0, INFO_MAX),
         creeLe: Date.now(),
         jetons: [nouveauJeton()],
+        pseudos: [nettoyerPseudo(url.searchParams.get("pseudo"))], // M12
       };
       return this.accepter(0, false);
     }
@@ -191,6 +199,7 @@ export class Salon extends DurableObject {
           envoyer(ws, erreurJson("remplace"));
           fermer(ws, FERMETURE.remplace, "remplace");
         }
+        if (pseudo) this.pseudo(joueur, pseudo); // au retour, le pseudo peut avoir changé
         return this.accepter(joueur, true);
       }
       // Première place libérée, sinon une nouvelle place.
@@ -202,6 +211,7 @@ export class Salon extends DurableObject {
         joueur = this.salon.jetons.length;
       }
       this.salon.jetons[joueur] = nouveauJeton();
+      this.pseudo(joueur, pseudo); // une place reprise perd le pseudo de l'ancien joueur
       return this.accepter(joueur, false);
     }
 
@@ -224,13 +234,14 @@ export class Salon extends DurableObject {
       joueur,
       jeton: this.salon.jetons[joueur],
       joueursMax: this.salon.joueursMax,
+      info: this.salon.info || "",
       reconnexion,
       joueurs: this.etatJoueurs(),
     }));
     this.annoncer({ type: reconnexion ? "joueur-revenu" : "joueur-arrive", joueur }, serveur);
 
     const ecritures = [this.ctx.storage.setAlarm(Date.now() + delaiFermetureMs(this.env))];
-    if (!reconnexion) ecritures.push(this.ctx.storage.put("salon", this.salon));
+    ecritures.push(this.ctx.storage.put("salon", this.salon)); // M12 : aussi au retour (le pseudo peut changer)
     await Promise.all(ecritures);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -255,12 +266,19 @@ export class Salon extends DurableObject {
     return this.actives().filter((ws) => ws.deserializeAttachment().joueur === joueur);
   }
 
-  /** État des places attribuées (les places libérées n'apparaissent pas). */
+  /** M12 : pseudo d'une place (salons créés avant M12 : pas de tableau). */
+  pseudo(joueur, pseudo) {
+    if (!this.salon.pseudos) this.salon.pseudos = [];
+    this.salon.pseudos[joueur] = pseudo || "";
+  }
+
+  /** État des places attribuées (les places libérées n'apparaissent pas). M12 : avec le pseudo de chacun. */
   etatJoueurs(actives = this.actives()) {
     const connectes = new Set(actives.map((ws) => ws.deserializeAttachment().joueur));
+    const pseudos = this.salon.pseudos || [];
     const etat = [];
     this.salon.jetons.forEach((jeton, joueur) => {
-      if (jeton !== null) etat.push({ joueur, connecte: connectes.has(joueur) });
+      if (jeton !== null) etat.push({ joueur, connecte: connectes.has(joueur), pseudo: pseudos[joueur] || "" });
     });
     return etat;
   }

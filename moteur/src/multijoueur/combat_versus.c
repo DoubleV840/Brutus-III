@@ -14,6 +14,7 @@
 #include "map/routing_terrain.h"
 #include "map/terrain.h"
 #include "multijoueur/commande.h"
+#include "multijoueur/recap_versus.h"
 #include "multijoueur/versus.h"
 #include "multijoueur/victoire_versus.h"
 #include "core/log.h"
@@ -129,6 +130,7 @@ void brutus_combat_noter_mort(const figure *tueur, const figure *victime)
     if (brutus_versus_actif() && tueur->brutus_proprietaire != victime->brutus_proprietaire &&
         est_cible_militaire(victime) && victime->brutus_proprietaire < BRUTUS_VILLES_MAX) {
         bilan.soldats_tues[victime->brutus_proprietaire]++;
+        brutus_recap_soldat_tue(victime->brutus_proprietaire); // M12
     }
 }
 
@@ -249,6 +251,7 @@ int brutus_combat_attaquer_batiment(figure *f)
                 if (victime < BRUTUS_VILLES_MAX) {
                     bilan.batiments_detruits[victime]++;
                 }
+                brutus_recap_detruit_par_ennemi(victime, b->type); // M12
                 brutus_victoire_batiment_detruit(victime, f->brutus_proprietaire); // M11
             }
         }

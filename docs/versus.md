@@ -1,9 +1,10 @@
-# Mode Versus : deux villes sur la même carte (M8 à M11)
+# Mode Versus : deux villes sur la même carte (M8 à M12)
 
-État au 23/11/2026 : **M8 à M11 terminées, en local** (un seul écran, une touche pour changer de joueur) :
+État au 23/11/2026 : **M8 à M11 terminées en local** (un seul écran, une touche pour changer de joueur) :
 deux villes séparées, trois cartes à deux créées par nous, avec une entrée et une sortie par joueur, le
 combat entre les deux villes, et la fin de partie (victoire militaire ou économique, écran des scores).
-Le réseau du Versus est la mission M12.
+**M12** (branche `m12-versus-reseau`) : le Versus en réseau, choisi dans le menu Multijoueur avec ses options, et le
+récap de fin de partie (courbes et faits marquants) ; voir « Versus en réseau et récap de fin ».
 
 ## Principe
 
@@ -201,14 +202,74 @@ siège (tick 500) : même suite et même fin ; partie finie, sauvegardée puis r
 dépense : égalité. Le solo reste identique au bit près (Lugdunum, Tarraco, Carthago) ; les tests Versus et combat
 passent.
 
+## Versus en réseau et récap de fin (M12)
+
+### Menu Multijoueur
+
+- **Créer une partie** : l'hôte choisit d'abord le **mode** (Coop ou Versus), puis, en Versus, les **options** : combat
+  (activé ou désactivé) et **durée** (5 ans, 10 ans, 20 ans, sans limite ; 10 ans par défaut). Ensuite « Nouvelle partie »
+  (choix de la carte), « Charger une sauvegarde », ou, depuis une ville, « Créer avec cette ville ». Une ville déjà en
+  Versus local ne peut devenir qu'une partie Versus.
+- **Cartes à deux en tête** : en Versus, la liste des cartes commence par celles qui ont une entrée pour le joueur 2
+  (bloc `BR3C` : nos trois cartes et celles faites dans l'éditeur), dans l'ordre d'origine ; les autres suivent (les deux
+  villes partent alors de la même entrée). `brutus_carte_versus_fichier_a_deux()` lit les 25 derniers octets du fichier.
+- **Ce que voient les invités** : l'hôte donne au relais une ligne d'information (« Versus, carte « Brutus - Deux rives »,
+  combat activé, 10 ans ») ; le relais la renvoie à chacun dans `bienvenue` (docs/protocole.md) et la fenêtre
+  Multijoueur l'affiche à côté du code, avant le départ comme pendant la partie.
+- **Départ** : en Versus, l'hôte est mis en pause tant que l'autre joueur n'est pas là (pas d'avance gratuite). Au
+  premier tour du lockstep, l'hôte envoie trois commandes, appliquées par tous au même tick : `triche` 103 (passage en
+  Versus), 105 (combat), 107 (durée) — les mêmes que Alt+W, Alt+G, Alt+T en local. Si une resynchronisation les perd,
+  elles repartent 400 ticks plus tard (`brutus_menu_versus_lancer`, appelé à chaque avance du lockstep). Le salon
+  Versus a 2 places.
+- **Chacun sa ville** : en réseau, le joueur n joue la ville n (hôte : bleue ; invité : rouge). Au passage en Versus et
+  à l'arrivée dans une partie Versus, la vue de l'invité part de l'entrée de sa ville (« Versus : vous jouez la ville
+  rouge. »). Lors d'une resynchronisation, chacun garde sa vue (avant M12 la sauvegarde imposait celle de l'hôte, en
+  Coop aussi). Alt+W, Alt+G et Alt+T restent refusés en réseau.
+- **Ville active et chargement** (bug trouvé par le test réseau) : hors simulation, la ville active est la ville vue,
+  donc la 2 chez l'invité. Le chargement d'une partie se fait maintenant toujours avec la ville 0 active (début de
+  `savegame_load_from_state`, fin de `game_file_load_saved_game`) ; la ville vue ne redevient active qu'après
+  (`brutus_versus_apres_chargement`). Avant, chaque resynchronisation mettait chez l'invité les données de la ville 1
+  dans la case de la ville 2, et la partie divergeait. `--joueur-local N` (rejouage) rejoue comme le joueur N ; le
+  test du récap vérifie qu'avec des resynchronisations le joueur 2 a la même partie que l'hôte.
+
+### Récap de fin de partie
+
+- **Relevés** (`multijoueur/recap_versus.c`) : au passage en Versus, puis au début de chaque mois (après les notes) et
+  au moment de la fin, pour chaque ville : population, trésor, prospérité, culture, score, soldats des légions,
+  bâtiments construits, bâtiments perdus et soldats tués (ces trois-là cumulés depuis le début). Les relevés
+  s'arrêtent à la fin de la partie (au plus 1 202, soit 100 ans).
+  - *construits* : bâtiments posés par une commande de construction de la ville (un lot de maisons compte pour
+    chaque maison ; les parties d'un grand bâtiment ne comptent pas) ;
+  - *perdus* : bâtiments en service détruits par incendie, effondrement, tremblement de terre, peste, émeute ou
+    ennemi (pas la démolition par son joueur) ;
+  - *tués* : militaires de la ville tués par l'autre ville.
+  Le premier bâtiment détruit par les soldats de l'autre ville est aussi noté (ville, type, date).
+- **Même récap chez les deux joueurs** : les relevés sont faits par la simulation et rangés dans le bloc `BR3V`
+  (**version 7**, à la suite de la fin de partie) : ils sont dans l'empreinte, dans chaque sauvegarde et dans chaque
+  resynchronisation. Un bloc plus ancien se lit sans récap.
+- **Écran de fin** (`multijoueur/fin_versus.c`, 608 × 464) : titre et raison, puis des onglets : Score, Population,
+  Trésor, Prospérité, Culture, Soldats, Construits, Perdus, Tués (une courbe par ville, bleue et rouge, la sienne
+  par-dessus, graduations rondes, dates en bas, valeur finale à droite, légende ; au survol, un repère et une bulle
+  avec la date et les deux valeurs) et Tableau (scores de la fin et derniers totaux). Dessous, les faits marquants :
+  durée de la partie, pic de population de chaque ville, plus grosse bataille (le mois où le plus de soldats sont
+  morts), premier bâtiment détruit, bascule du score (le dernier mois où la tête a changé). Couleurs vérifiées pour
+  les daltonismes et le contraste sur le fond clair des courbes.
+- **Test** : `bash outils/test-recap.sh [mois]` (12 par défaut) sur « Brutus - Deux rives » : un bot par ville, une
+  bataille au gué, un siège, durée de N mois. Deux rejouages identiques (empreintes et récap) ; N + 1 relevés, le
+  dernier marqué fin, un mois de jeu entre deux relevés ; soldats tués dans les deux villes, premier bâtiment détruit
+  à la ville 2 ; rechargement au milieu par un lancement neuf : même récap que l'hôte ; partie finie rechargée : même
+  récap. `--capture` enregistre l'écran de fin (onglet du score, population avec la bulle, tableau), copiées dans
+  `build-rejouage/recap/captures/` (images du jeu : jamais commitées).
+- **Test réseau** : `bash outils/test-reseau-memoire.sh court --versus` (deux moteurs wasm dans Node, relais en
+  mémoire, tout le scénario de coupures et de resynchronisations du test réseau) : l'hôte crée en Versus comme le
+  menu ; l'invité voit la ligne d'information, chacun voit sa ville, mêmes options, même fin et même récap.
+
 ## Laissé aux missions suivantes
 
-- **Combat** : les forts adverses ne se détruisent pas (comme pour les envahisseurs). L'option « combat » dans le
-  menu Multijoueur vient avec le Versus en réseau (M12) ; en local, c'est Alt+G.
+- **Combat** : les forts adverses ne se détruisent pas (comme pour les envahisseurs).
 - **Envahisseurs** : créés hors passe de ville, donc à la ville 1 (ce qui ne change rien au combat : ils attaquent et
   sont attaqués par tous). Nos cartes n'ont pas de point d'invasion.
-- **Victoire** : la durée et le combat se choisissent dans le menu Multijoueur avec M12 (en local : Alt+T, Alt+G).
-  Une ville qui ne garde qu'un bâtiment hors d'atteinte (une île, derrière l'eau) ne peut pas être battue
+- **Victoire** : une ville qui ne garde qu'un bâtiment hors d'atteinte (une île, derrière l'eau) ne peut pas être battue
   militairement.
 - **Empire** (routes ouvertes, prix), **événements du scénario**, bataille lointaine : communs. Sur « Rivage »,
   l'entrée et la sortie des navires sont communes.

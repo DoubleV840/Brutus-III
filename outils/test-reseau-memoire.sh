@@ -20,16 +20,23 @@
 # Avec la variable BRUTUS_RELAIS (ex. ws://127.0.0.1:8787), le même scénario passe par un VRAI relais
 # (wrangler dev) et la cadence réelle du jeu : c'est ce que lance outils/test-reseau-30min.sh.
 # BRUTUS_VITESSE (500 par défaut) : vitesse du jeu dans ce mode (200 % = 8 ms par tick).
+#
+# --versus (M12) : l'hôte crée la partie en Versus (comme le menu Multijoueur : combat activé, durée de 70 % des
+# ticks), sur « Brutus - Deux rives » par défaut, avec un bot par ville ; vérifie en plus que chacun joue sa ville
+# et que la fin de partie et le récap sont les mêmes chez les deux. Rapport : rapport-memoire-versus.txt.
 set -euo pipefail
 
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$RACINE"
 
 PRODUCTION=""
+VERSUS=""
 POSITIONNELS=()
 for ARG in "$@"; do
   if [ "$ARG" = "--production" ]; then
     PRODUCTION="--constantes-production"
+  elif [ "$ARG" = "--versus" ]; then
+    VERSUS="--versus"
   else
     POSITIONNELS+=("$ARG")
   fi
@@ -38,7 +45,9 @@ TICKS="${POSITIONNELS[0]:-225000}"
 if [ "$TICKS" = "court" ]; then
   TICKS=6000
 fi
-CARTE="${POSITIONNELS[1]:-Lugdunum}"
+CARTE_DEFAUT=Lugdunum
+[ -z "$VERSUS" ] || CARTE_DEFAUT="Brutus - Deux rives"
+CARTE="${POSITIONNELS[1]:-$CARTE_DEFAUT}"
 JEU="$RACINE/jeu-original/app/jeu1"
 BUILD="$RACINE/build-reseau-wasm"
 SORTIE="$RACINE/build-reseau"
@@ -46,13 +55,16 @@ export EM_CACHE="$RACINE/.emcache"
 RELAIS="${BRUTUS_RELAIS:-}"
 VITESSE="${BRUTUS_VITESSE:-500}"
 RAPPORT_FICHIER="$SORTIE/rapport-memoire.txt"
-EXTRA="$PRODUCTION"
+EXTRA="$PRODUCTION $VERSUS"
 if [ -n "$RELAIS" ]; then
   RAPPORT_FICHIER="$SORTIE/rapport-relais.txt"
   EXTRA="$EXTRA --relais $RELAIS --vitesse $VITESSE"
 fi
 if [ -n "$PRODUCTION" ]; then
   RAPPORT_FICHIER="${RAPPORT_FICHIER%.txt}-production.txt"
+fi
+if [ -n "$VERSUS" ]; then
+  RAPPORT_FICHIER="${RAPPORT_FICHIER%.txt}-versus.txt"
 fi
 
 # Code 3 = test SAUTÉ (jeu absent) : ce n'est ni un succès ni un échec du moteur, mais un script qui
@@ -92,8 +104,15 @@ fi
 echo "== Carte texte et journaux du bot ($TICKS ticks)"
 "$NATIF" --info-carte "$DEPART" "$SORTIE/carte-$CARTE.txt" "$JEU" > "$SORTIE/info-$CARTE.log" 2>&1 \
   || { tail -10 "$SORTIE/info-$CARTE.log"; exit 1; }
-node "$RACINE/outils/bot-rejouage.mjs" "$SORTIE/carte-$CARTE.txt" "$SORTIE/journal-hote.txt" --graine 42 --ticks "$TICKS"
-node "$RACINE/outils/bot-rejouage.mjs" "$SORTIE/carte-$CARTE.txt" "$SORTIE/journal-invite.txt" --graine 43 --ticks "$TICKS"
+if [ -n "$VERSUS" ]; then
+  # Un bot par ville, chacun près de son entrée (comme outils/test-versus.sh)
+  node "$RACINE/outils/bot-rejouage.mjs" "$SORTIE/carte-$CARTE.txt" "$SORTIE/journal-hote.txt" --graine 42 --ticks "$TICKS" --joueur 0
+  CENTRE0=$(sed -n 's/.*centre \([0-9]*\) \([0-9]*\).*/\1,\2/p' "$SORTIE/journal-hote.txt")
+  node "$RACINE/outils/bot-rejouage.mjs" "$SORTIE/carte-$CARTE.txt" "$SORTIE/journal-invite.txt" --graine 43 --ticks "$TICKS" --joueur 1 --eviter "$CENTRE0"
+else
+  node "$RACINE/outils/bot-rejouage.mjs" "$SORTIE/carte-$CARTE.txt" "$SORTIE/journal-hote.txt" --graine 42 --ticks "$TICKS"
+  node "$RACINE/outils/bot-rejouage.mjs" "$SORTIE/carte-$CARTE.txt" "$SORTIE/journal-invite.txt" --graine 43 --ticks "$TICKS"
+fi
 
 echo "== Test : $TICKS ticks, carte $CARTE"
 node "$RACINE/outils/test-reseau-memoire.mjs" --ticks "$TICKS" --carte "$CARTE" \

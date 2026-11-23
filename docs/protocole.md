@@ -23,11 +23,16 @@ Une connexion WebSocket par joueur. Deux adresses :
 
 | Action | Adresse | Paramètres |
 |---|---|---|
-| Créer un salon (on devient l'hôte, joueur 0) | `GET /creer?version=1&joueurs=2` | `joueurs` : 2 à `JOUEURS_MAX`, 2 par défaut |
-| Rejoindre | `GET /rejoindre/<CODE>?version=1` | code en majuscules ou minuscules |
+| Créer un salon (on devient l'hôte, joueur 0) | `GET /creer?version=1&joueurs=2&info=…` | `joueurs` : 2 à `JOUEURS_MAX`, 2 par défaut ; `info` (M12, facultatif) : ligne d'information de la partie (mode, carte, options), 200 caractères au plus, rendue telle quelle dans `bienvenue` |
+| Rejoindre | `GET /rejoindre/<CODE>?version=1&pseudo=…` | code en majuscules ou minuscules |
 | Revenir à sa place | `GET /rejoindre/<CODE>?version=1&jeton=<jeton>` | jeton reçu dans `bienvenue` |
 
 Aussi : `GET /sante` répond `ok` (sans WebSocket).
+
+**Pseudo (M12)** : `pseudo`, facultatif, sur `/creer` et `/rejoindre` (aussi au retour avec le jeton : un nouveau
+pseudo remplace l'ancien, sans pseudo le joueur garde le sien). Le relais retire les caractères de contrôle, resserre
+les espaces et coupe à 20 caractères. Il ne sert qu'à l'affichage : chaque place de `joueurs` (dans `bienvenue` et les
+annonces) porte son `pseudo` (chaîne vide si aucun). Une place libérée puis reprise perd le pseudo de l'ancien joueur.
 
 En local : `ws://127.0.0.1:8787/creer?version=1`. En ligne (M13) : `wss://<adresse du Worker>/creer?version=1`.
 
@@ -77,8 +82,13 @@ Exemple :
 
 ```json
 {"type":"bienvenue","version":1,"code":"K7QXM3","joueur":1,"jeton":"9f2c…(32 car.)","joueursMax":2,
- "reconnexion":false,"joueurs":[{"joueur":0,"connecte":true},{"joueur":1,"connecte":true}]}
+ "info":"Versus, carte « Brutus - Deux rives », combat activé, 10 ans",
+ "reconnexion":false,"joueurs":[{"joueur":0,"connecte":true,"pseudo":"Léa"},{"joueur":1,"connecte":true,"pseudo":""}]}
 ```
+
+`info` (M12) : la ligne donnée par l'hôte à la création (chaîne vide sinon). Le relais ne la lit pas ; les clients
+l'affichent dans la fenêtre Multijoueur, pour que les invités voient le mode, la carte et les options. Champ ajouté
+sans changer la version du protocole (un client plus ancien l'ignore).
 
 ### `joueur-arrive`, `joueur-revenu`, `joueur-parti`, `joueur-expulse` (aux autres joueurs)
 

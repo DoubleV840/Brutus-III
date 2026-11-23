@@ -2,6 +2,7 @@
 #include "multijoueur/carte_versus.h"
 
 #include "city/map.h"
+#include "core/file.h"
 #include "core/log.h"
 #include "multijoueur/versus.h"
 #include "scenario/map.h"
@@ -194,6 +195,26 @@ static void lire_octets(const uint8_t *d, size_t reste)
     }
     memcpy(lu.octets, d + 8, taille);
     lu.taille = taille;
+}
+
+int brutus_carte_versus_fichier_a_deux(const char *chemin)
+{
+    // Le bloc BR3C est tout à la fin du fichier : marque, taille, puis BRUTUS_CARTE_VERSUS_TAILLE octets
+    FILE *fp = chemin ? file_open(chemin, "rb") : 0;
+    if (!fp) {
+        return 0;
+    }
+    uint8_t d[8 + BRUTUS_CARTE_VERSUS_TAILLE];
+    int ok = fseek(fp, -(long) sizeof(d), SEEK_END) == 0 && fread(d, 1, sizeof(d), fp) == sizeof(d);
+    file_close(fp);
+    if (!ok || memcmp(d, MARQUE, 4) != 0 || d[4] != BRUTUS_CARTE_VERSUS_TAILLE || d[8] != VERSION_CARTE) {
+        return 0;
+    }
+    buffer b;
+    buffer_init(&b, d + 9, 8);
+    int x = buffer_read_i32(&b);
+    int y = buffer_read_i32(&b);
+    return x >= 0 && y >= 0;
 }
 
 void brutus_carte_versus_lire_fichier(FILE *fp)

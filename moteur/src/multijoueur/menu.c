@@ -12,7 +12,14 @@
 #include "graphics/window.h"
 #include "input/input.h"
 #include "input/keyboard.h"
+#include "multijoueur/combat_versus.h"
 #include "multijoueur/coop.h"
+#include "multijoueur/recap_versus.h"
+#include "multijoueur/versus.h"
+#include "multijoueur/victoire_versus.h"
+#include "game/cheats.h"
+#include "game/state.h"
+#include "scenario/property.h"
 #include "multijoueur/simulation.h"
 #include "widget/input_box.h"
 #include "window/cck_selection.h"
@@ -26,6 +33,8 @@
 #define CHAT_GARDE 20
 #define TEXTE_MAX 400
 #define CODE_MAX 8
+
+enum { MODE_COOP = 0, MODE_VERSUS = 1 };
 
 typedef struct {
     int numero;
@@ -62,11 +71,23 @@ static struct {
     char action_lue_texte[TEXTE_MAX];
     // « créer la partie quand la ville sera à l'écran » (choisie depuis le menu principal)
     int creer_quand_ville;
+    // M12 : choix de l'hôte (mode, options du Versus) et partie Versus à lancer au premier tour du lockstep
+    int mode;   // MODE_COOP ou MODE_VERSUS
+    int combat; // option du Versus
+    int duree;  // mois (0 : sans limite)
+    struct {
+        int voulu;
+        int combat;
+        int duree;
+        uint32_t tick_depot;
+        int depose;
+    } versus;
+    uint8_t info[TEXTE_MAX]; // poussé par JS : mode, carte et options de la partie (donnés par l'hôte)
     // fenêtre
     int depuis_ville;
     unsigned int focus;
     int saisie; // 0 aucune, 1 code, 2 chat
-} etat;
+} etat = { .combat = 1, .duree = BRUTUS_VICTOIRE_DUREE_DEFAUT };
 
 static uint8_t saisie_code[CODE_MAX];
 static uint8_t saisie_chat[200];
@@ -124,7 +145,9 @@ BRUTUS_RESEAU_EXPORT void brutus_menu_etat(int phase, const char *code, const ch
     copier_utf8(texte, etat.texte, sizeof(etat.texte));
     copier_utf8(avis, etat.avis, sizeof(etat.avis));
     if (!etat.texte[0] && phase == BRUTUS_MENU_JEU) {
-        copier_utf8("Partie en cours : vous gérez la même ville.", etat.texte, sizeof(etat.texte));
+        copier_utf8(!brutus_versus_actif() ? "Partie en cours : vous gérez la même ville." :
+            brutus_ville_vue() == 0 ? "Partie Versus en cours : vous jouez la ville bleue." :
+            "Partie Versus en cours : vous jouez la ville rouge.", etat.texte, sizeof(etat.texte));
     }
     // Un avis (menu refusé, divergences à répétition) doit se voir même fenêtre fermée.
     if (etat.avis[0] && !string_equals(etat.avis, ancien_avis) && !ouverte() && window_is(WINDOW_CITY)) {
@@ -136,6 +159,12 @@ BRUTUS_RESEAU_EXPORT void brutus_menu_etat(int phase, const char *code, const ch
     }
     etat.joueur_local = joueur_local;
     etat.hote = hote;
+    window_invalidate();
+}
+
+BRUTUS_RESEAU_EXPORT void brutus_menu_info(const char *info)
+{
+    copier_utf8(info, etat.info, sizeof(etat.info));
     window_invalidate();
 }
 
@@ -195,6 +224,110 @@ static void demander(int action, int parametre, const uint8_t *texte)
     }
 }
 
+static void texte_duree(int mois, char *sortie, size_t taille)
+{
+    if (!mois) {
+        snprintf(sortie, taille, "sans limite de durée");
+    } else if (mois % 12 == 0) {
+        snprintf(sortie, taille, "%d an%s", mois / 12, mois >= 24 ? "s" : "");
+    } else {
+        snprintf(sortie, taille, "%d mois", mois);
+    }
+}
+
+// M12 : création d'une partie. Le texte de l'action est la ligne d'information que le relais montrera à tous
+// (mode, carte, options). En Versus, la partie passera en Versus au premier tour du lockstep
+// (brutus_menu_versus_lancer) ; en attendant l'autre joueur, l'hôte est en pause.
+static void demander_creation(void)
+{
+    int versus = etat.mode == MODE_VERSUS || brutus_versus_actif();
+    etat.versus.voulu = versus;
+    etat.versus.combat = etat.combat;
+    etat.versus.duree = etat.duree;
+    etat.versus.depose = 0;
+    etat.versus.tick_depot = 0;
+    char carte[120];
+    carte[0] = 0;
+    if (scenario_name()[0]) {
+        encoding_to_utf8(scenario_name(), carte, sizeof(carte), 0);
+    }
+    char info[TEXTE_MAX];
+    if (versus) {
+        char d[40];
+        texte_duree(etat.duree, d, sizeof(d));
+        snprintf(info, sizeof(info), "Versus%s%s%s, combat %s, %s", carte[0] ? ", carte « " : "", carte,
+            carte[0] ? " »" : "", etat.combat ? "activé" : "désactivé", d);
+        game_state_pause(); // pas d'avance gratuite : la partie démarre pour tous à l'arrivée de l'autre
+    } else {
+        snprintf(info, sizeof(info), "Coop%s%s%s", carte[0] ? ", carte « " : "", carte, carte[0] ? " »" : "");
+    }
+    etat.action = BRUTUS_MENU_CREER;
+    etat.action_parametre = versus ? 2 : 2; // joueurs du salon (Versus : 2, une ville chacun)
+    snprintf(etat.action_texte, sizeof(etat.action_texte), "%s", info);
+}
+
+void brutus_menu_versus_lancer(void)
+{
+    // Hôte seulement, en partie réseau : les commandes partent avec le prochain tour, et tous les joueurs
+    // les appliquent au même tick (comme Alt+W, Alt+G et Alt+T en local).
+    if (!etat.versus.voulu || !brutus_reseau_actif() || brutus_joueur_local() != 0) {
+        return;
+    }
+    if (brutus_victoire_fin() != BRUTUS_FIN_AUCUNE ||
+        (brutus_versus_actif() && brutus_combat_option() == etat.versus.combat &&
+        brutus_victoire_duree() == etat.versus.duree)) {
+        etat.versus.voulu = 0; // fait
+        return;
+    }
+    uint32_t tick = brutus_tick_absolu();
+    if (etat.versus.depose && tick < etat.versus.tick_depot + 400) {
+        return; // déjà envoyées ; renvoyées si une resynchronisation les a perdues
+    }
+    if (!brutus_versus_actif()) {
+        brutus_commande_2(BRUTUS_CMD_TRICHE, BRUTUS_TRICHE_VERSUS, 0);
+    }
+    brutus_commande_2(BRUTUS_CMD_TRICHE, BRUTUS_TRICHE_COMBAT, etat.versus.combat ? 1 : 0);
+    brutus_commande_2(BRUTUS_CMD_TRICHE, BRUTUS_TRICHE_DUREE, etat.versus.duree);
+    etat.versus.depose = 1;
+    etat.versus.tick_depot = tick;
+}
+
+BRUTUS_RESEAU_EXPORT void brutus_menu_definir_partie(int versus, int combat, int duree)
+{
+    etat.mode = versus ? MODE_VERSUS : MODE_COOP;
+    etat.combat = combat ? 1 : 0;
+    etat.duree = duree < 0 ? 0 : duree;
+}
+
+BRUTUS_RESEAU_EXPORT int brutus_menu_creer(void)
+{
+    demander_creation();
+    return etat.action_parametre;
+}
+
+BRUTUS_RESEAU_EXPORT int brutus_menu_versus_etat(int quoi)
+{
+    switch (quoi) {
+        case 0: return brutus_versus_villes();
+        case 1: return brutus_ville_vue();
+        case 2: return brutus_combat_option();
+        case 3: return brutus_victoire_duree();
+        case 4: return brutus_victoire_fin();
+        case 5: return brutus_victoire_gagnant();
+        case 6: return (int) brutus_victoire_tick_fin();
+        case 7: return brutus_recap_nombre();
+        case 8: return (int) brutus_recap_empreinte32();
+        case 9: return brutus_victoire_batiments_restants(0, 0);
+        case 10: return brutus_victoire_batiments_restants(1, 0);
+        default: return 0;
+    }
+}
+
+int brutus_menu_mode_versus_choisi(void)
+{
+    return etat.creer_quand_ville && etat.mode == MODE_VERSUS;
+}
+
 static void arreter_saisie(void);
 
 BRUTUS_RESEAU_EXPORT int brutus_menu_action(void)
@@ -207,7 +340,7 @@ BRUTUS_RESEAU_EXPORT int brutus_menu_action(void)
     // fenêtre s'ouvre pour montrer le code.
     if (!etat.action && etat.creer_quand_ville && window_is(WINDOW_CITY)) {
         etat.creer_quand_ville = 0;
-        demander(BRUTUS_MENU_CREER, 0, 0);
+        demander_creation();
         window_brutus_multijoueur_show(1);
     }
     int action = etat.action;
@@ -260,20 +393,18 @@ enum {
     B_QUITTER,
     B_REVENIR,
     B_RETIRER,
-    B_VOIR
+    B_VOIR,
+    B_MODE_COOP,
+    B_MODE_VERSUS,
+    B_COMBAT,
+    B_DUREE
 };
 
 static void clic(const generic_button *b);
 
-// Boutons des deux vues (les coordonnées des boutons « Retirer » et « Voir » sont fixées au dessin).
-static generic_button boutons_accueil[] = {
-    {X0 + 24, 196, 240, 26, clic, 0, B_CREER_ICI, 0},
-    {X0 + 24, 196, 240, 26, clic, 0, B_NOUVELLE, 0},
-    {X0 + 280, 196, 240, 26, clic, 0, B_CHARGER, 0},
-    {X0 + 352, 316, 168, 26, clic, 0, B_REJOINDRE, 0},
-    {X0 + LARGEUR - 184, BAS, 160, 26, clic, 0, B_RETOUR, 0},
-};
-#define NB_ACCUEIL 5
+// Boutons visibles de l'accueil, refaits à chaque image (ils dépendent du mode choisi).
+static generic_button boutons_accueil[10];
+static unsigned int nb_accueil;
 
 static generic_button boutons_session[2 + BRUTUS_JOUEURS_MAX + CHAT_LIGNES + 3];
 static unsigned int nb_session;
@@ -318,48 +449,140 @@ static void bouton(const generic_button *b, const char *libelle, int focus)
     text_draw_centered(t(libelle), b->x, b->y + 7, b->width, FONT_NORMAL_BLACK, 0);
 }
 
+static int mode_impose(void)
+{
+    // Une ville déjà en Versus (Versus local) ne peut devenir qu'une partie Versus.
+    return etat.depuis_ville && brutus_versus_actif();
+}
+
+static int versus_choisi(void)
+{
+    return etat.mode == MODE_VERSUS || mode_impose();
+}
+
+static void ajouter_accueil(int x, int y, int w, int h, int parametre)
+{
+    generic_button *b = &boutons_accueil[nb_accueil++];
+    b->x = x;
+    b->y = y;
+    b->width = w;
+    b->height = h;
+    b->left_click_handler = clic;
+    b->right_click_handler = 0;
+    b->parameter1 = parametre;
+    b->parameter2 = 0;
+}
+
+static void preparer_boutons_accueil(void)
+{
+    nb_accueil = 0;
+    if (etat.disponible) {
+        ajouter_accueil(X0 + 96, 122, 120, 24, B_MODE_COOP);
+        ajouter_accueil(X0 + 224, 122, 120, 24, B_MODE_VERSUS);
+        if (versus_choisi()) {
+            ajouter_accueil(X0 + 96, 182, 150, 24, B_COMBAT);
+            ajouter_accueil(X0 + 352, 182, 150, 24, B_DUREE);
+        }
+        if (etat.depuis_ville) {
+            ajouter_accueil(X0 + 24, 214, 240, 26, B_CREER_ICI);
+        } else {
+            ajouter_accueil(X0 + 24, 214, 240, 26, B_NOUVELLE);
+            ajouter_accueil(X0 + 280, 214, 240, 26, B_CHARGER);
+        }
+        ajouter_accueil(X0 + 352, 316, 168, 26, B_REJOINDRE);
+    }
+    ajouter_accueil(X0 + LARGEUR - 184, BAS, 160, 26, B_RETOUR);
+}
+
+static const char *libelle_accueil(int p, char *tampon, size_t taille)
+{
+    switch (p) {
+        case B_MODE_COOP: return "Coop";
+        case B_MODE_VERSUS: return "Versus";
+        case B_COMBAT: return etat.combat ? "Activé" : "Désactivé";
+        case B_DUREE: texte_duree(etat.duree, tampon, taille); return etat.duree ? tampon : "Sans limite";
+        case B_CREER_ICI: return "Créer avec cette ville";
+        case B_NOUVELLE: return "Nouvelle partie";
+        case B_CHARGER: return "Charger une sauvegarde";
+        case B_REJOINDRE: return "Rejoindre";
+        default: return "Retour";
+    }
+}
+
+static void dessiner_boutons_accueil(void)
+{
+    for (unsigned int i = 0; i < nb_accueil; i++) {
+        const generic_button *b = &boutons_accueil[i];
+        char tampon[40];
+        const char *libelle = libelle_accueil(b->parameter1, tampon, sizeof(tampon));
+        int choisi = (b->parameter1 == B_MODE_COOP && !versus_choisi()) ||
+            (b->parameter1 == B_MODE_VERSUS && versus_choisi());
+        if (choisi) {
+            // Mode choisi : bouton enfoncé, comme un sélecteur à deux positions
+            button_border_draw(b->x, b->y, b->width, b->height, 1);
+            graphics_fill_rect(b->x + 3, b->y + 3, b->width - 6, b->height - 6, 0xff5a4a32);
+            text_draw_centered(t(libelle), b->x, b->y + 6, b->width, FONT_NORMAL_WHITE, 0);
+        } else if (b->parameter1 == B_MODE_COOP && mode_impose()) {
+            button_border_draw(b->x, b->y, b->width, b->height, 0);
+            text_draw_centered(t(libelle), b->x, b->y + 6, b->width, FONT_NORMAL_PLAIN, COLOR_FONT_LIGHT_GRAY);
+        } else {
+            button_border_draw(b->x, b->y, b->width, b->height, etat.focus == i + 1);
+            text_draw_centered(t(libelle), b->x, b->y + (b->height == 24 ? 6 : 7), b->width, FONT_NORMAL_BLACK, 0);
+        }
+    }
+}
+
 static void dessiner_indisponible(void)
 {
     text_draw_multiline(t(
         "Le multijoueur se joue dans la version navigateur de Brutus III, une fois le serveur de parties "
         "en ligne (bientôt sur brutus.ivwi.fr). En attendant, il fonctionne en local : voir le README, "
         "section « Multijoueur en local »."), X0 + 24, 90, LARGEUR - 48, 0, FONT_NORMAL_BLACK, 0);
-    bouton(&boutons_accueil[4], "Retour", etat.focus == 5);
+    dessiner_boutons_accueil();
 }
 
 static void dessiner_accueil(void)
 {
     text_draw_multiline(t(
-        "Jouez à plusieurs sur la même ville, avec les mêmes pouvoirs. Chacun a besoin de ses propres fichiers "
-        "du jeu et garde son onglet visible (un onglet masqué ralentit les deux joueurs)."), X0 + 24, 70, LARGEUR - 48, 0, FONT_NORMAL_BLACK, 0);
+        "Jouez à plusieurs en ligne. Chacun a besoin de ses propres fichiers du jeu et garde son onglet "
+        "visible (un onglet masqué ralentit tout le monde)."), X0 + 24, 62, LARGEUR - 48, 0, FONT_NORMAL_BLACK, 0);
 
-    text_draw(t("Créer une partie"), X0 + 24, 140, FONT_NORMAL_BLACK, 0);
-    if (etat.depuis_ville) {
-        text_draw_multiline(t("La ville à l'écran devient la partie multijoueur. Tu recevras un code à donner à l'autre joueur."),
-            X0 + 24, 160, LARGEUR - 48, 0, FONT_SMALL_PLAIN, COLOR_BLACK);
-        bouton(&boutons_accueil[0], "Créer avec cette ville", etat.focus == 1);
+    text_draw(t("Créer une partie"), X0 + 24, 102, FONT_NORMAL_BLACK, 0);
+    text_draw(t("Mode :"), X0 + 24, 128, FONT_NORMAL_BLACK, 0);
+    const char *aide;
+    if (mode_impose()) {
+        aide = "Cette ville est déjà en Versus : la partie sera un Versus, chacun sa ville (2 joueurs).";
+    } else if (versus_choisi()) {
+        aide = "Versus : chacun sa ville sur la même carte (2 joueurs). On gagne en détruisant entièrement la "
+            "ville de l'autre, ou par le meilleur score à la fin de la durée.";
     } else {
-        text_draw_multiline(t("Choisis une carte ou une sauvegarde : la partie multijoueur démarre quand la ville est à l'écran."),
-            X0 + 24, 160, LARGEUR - 48, 0, FONT_SMALL_PLAIN, COLOR_BLACK);
-        bouton(&boutons_accueil[1], "Nouvelle partie", etat.focus == 2);
-        bouton(&boutons_accueil[2], "Charger une sauvegarde", etat.focus == 3);
+        aide = "Coop : vous gérez la même ville à plusieurs, avec les mêmes pouvoirs.";
+    }
+    text_draw_multiline(t(aide), X0 + 24, 152, LARGEUR - 48, 0, FONT_SMALL_PLAIN, COLOR_BLACK);
+    if (versus_choisi()) {
+        text_draw(t("Combat :"), X0 + 24, 188, FONT_NORMAL_BLACK, 0);
+        text_draw(t("Durée :"), X0 + 284, 188, FONT_NORMAL_BLACK, 0);
     }
     if (etat.creer_quand_ville) {
-        text_draw(t("La partie multijoueur sera créée dès que la ville sera à l'écran."), X0 + 24, 228, FONT_SMALL_PLAIN, COLOR_BLACK);
+        text_draw(t("La partie multijoueur sera créée dès que la ville sera à l'écran."), X0 + 24, 246, FONT_SMALL_PLAIN, COLOR_BLACK);
+    } else if (!etat.depuis_ville && versus_choisi()) {
+        text_draw(t("Nouvelle partie : les cartes à deux joueurs sont en tête de liste."), X0 + 24, 246, FONT_SMALL_PLAIN, COLOR_BLACK);
+    } else if (etat.depuis_ville) {
+        text_draw(t("La ville à l'écran devient la partie multijoueur. Tu recevras un code à donner à l'autre joueur."),
+            X0 + 24, 246, FONT_SMALL_PLAIN, COLOR_BLACK);
     }
 
-    text_draw(t("Rejoindre une partie"), X0 + 24, 264, FONT_NORMAL_BLACK, 0);
+    text_draw(t("Rejoindre une partie"), X0 + 24, 268, FONT_NORMAL_BLACK, 0);
     text_draw_multiline(t("Entre le code de 6 caractères donné par l'autre joueur. Tu peux rester au menu : tu recevras sa ville."),
-        X0 + 24, 284, LARGEUR - 48, 0, FONT_SMALL_PLAIN, COLOR_BLACK);
+        X0 + 24, 288, LARGEUR - 48, 0, FONT_SMALL_PLAIN, COLOR_BLACK);
     text_draw(t("Code :"), X0 + 112, 325, FONT_NORMAL_BLACK, 0);
     input_box_draw(&boite_code);
-    bouton(&boutons_accueil[3], "Rejoindre", etat.focus == 4);
 
     if (etat.texte[0]) {
         text_draw_multiline(etat.texte, X0 + 24, 360, LARGEUR - 48, 0, FONT_NORMAL_PLAIN,
             etat.phase == BRUTUS_MENU_ERREUR ? COLOR_FONT_RED : COLOR_BLACK);
     }
-    bouton(&boutons_accueil[4], "Retour", etat.focus == 5);
+    dessiner_boutons_accueil();
 }
 
 static void ajouter_session(int x, int y, int w, int parametre, int parametre2)
@@ -415,7 +638,9 @@ static void dessiner_session(void)
     snprintf(ligne, sizeof(ligne), "Code de la partie : ");
     int x = text_draw(t(ligne), X0 + 24, 70, FONT_NORMAL_BLACK, 0);
     text_draw(etat.code[0] ? etat.code : t("..."), X0 + 24 + x, 66, FONT_LARGE_BLACK, 0);
-    if (etat.nb_joueurs < 2 && etat.code[0]) {
+    if (etat.info[0]) {
+        text_draw_ellipsized(etat.info, X0 + 250, 72, LARGEUR - 274, FONT_SMALL_PLAIN, COLOR_BLACK);
+    } else if (etat.nb_joueurs < 2 && etat.code[0]) {
         text_draw(t("Donne ce code à l'autre joueur."), X0 + 300, 70, FONT_SMALL_PLAIN, COLOR_BLACK);
     }
     text_draw_multiline(etat.texte[0] ? etat.texte : t(" "), X0 + 24, 96, LARGEUR - 48, 0, FONT_NORMAL_BLACK, 0);
@@ -483,11 +708,13 @@ static void draw_foreground(void)
     outer_panel_draw(X0, Y0, LARGEUR / 16, HAUTEUR / 16);
     text_draw_centered(t("Multijoueur"), X0, Y0 + 16, LARGEUR, FONT_LARGE_BLACK, 0);
     if (!etat.disponible) {
+        preparer_boutons_accueil();
         dessiner_indisponible();
     } else if (en_session()) {
         preparer_boutons_session();
         dessiner_session();
     } else {
+        preparer_boutons_accueil();
         dessiner_accueil();
     }
     graphics_reset_dialog();
@@ -515,14 +742,39 @@ static void rejoindre(void)
     }
 }
 
+static int duree_suivante(int duree)
+{
+    static const int durees[] = { 60, 120, 240, 0 };
+    for (int i = 0; i < 4; i++) {
+        if (durees[i] == duree) {
+            return durees[(i + 1) % 4];
+        }
+    }
+    return durees[0];
+}
+
 static void clic(const generic_button *b)
 {
     switch (b->parameter1) {
         case B_RETOUR:
             fermer();
             break;
+        case B_MODE_COOP:
+            if (!mode_impose()) {
+                etat.mode = MODE_COOP;
+            }
+            break;
+        case B_MODE_VERSUS:
+            etat.mode = MODE_VERSUS;
+            break;
+        case B_COMBAT:
+            etat.combat = !etat.combat;
+            break;
+        case B_DUREE:
+            etat.duree = duree_suivante(etat.duree);
+            break;
         case B_CREER_ICI:
-            demander(BRUTUS_MENU_CREER, 0, 0);
+            demander_creation();
             break;
         case B_NOUVELLE:
             etat.creer_quand_ville = 1;
@@ -557,19 +809,17 @@ static void clic(const generic_button *b)
             }
             break;
     }
+    window_invalidate();
 }
 
 static void handle_input(const mouse *m, const hotkeys *h)
 {
     const mouse *m_dialog = mouse_in_dialog(m);
     if (!etat.disponible) {
-        if (generic_buttons_handle_mouse(m_dialog, 0, 0, &boutons_accueil[4], 1, &etat.focus)) {
-            if (etat.focus) {
-                etat.focus = 5;
-            }
+        preparer_boutons_accueil();
+        if (generic_buttons_handle_mouse(m_dialog, 0, 0, boutons_accueil, nb_accueil, &etat.focus)) {
             return;
         }
-        etat.focus = 0;
     } else if (en_session()) {
         if (input_box_handle_mouse(m_dialog, &boite_chat) ||
             generic_buttons_handle_mouse(m_dialog, 0, 0, boutons_session, nb_session, &etat.focus)) {
@@ -580,27 +830,9 @@ static void handle_input(const mouse *m, const hotkeys *h)
             return;
         }
     } else {
-        generic_button *visibles = etat.depuis_ville ? &boutons_accueil[0] : &boutons_accueil[1];
-        // Accueil : « créer ici » (en ville) ou « nouvelle / charger » (au menu), puis rejoindre et retour.
-        unsigned int focus = 0;
-        int traite = input_box_handle_mouse(m_dialog, &boite_code);
-        if (!traite) {
-            if (etat.depuis_ville) {
-                traite = generic_buttons_handle_mouse(m_dialog, 0, 0, visibles, 1, &focus);
-                etat.focus = focus ? 1 : 0;
-            } else {
-                traite = generic_buttons_handle_mouse(m_dialog, 0, 0, visibles, 2, &focus);
-                etat.focus = focus ? focus + 1 : 0;
-            }
-            if (!traite) {
-                focus = 0;
-                traite = generic_buttons_handle_mouse(m_dialog, 0, 0, &boutons_accueil[3], 2, &focus);
-                if (focus) {
-                    etat.focus = focus + 3;
-                }
-            }
-        }
-        if (traite) {
+        preparer_boutons_accueil();
+        if (input_box_handle_mouse(m_dialog, &boite_code) ||
+            generic_buttons_handle_mouse(m_dialog, 0, 0, boutons_accueil, nb_accueil, &etat.focus)) {
             return;
         }
         if (input_box_is_accepted()) {
@@ -629,4 +861,41 @@ void window_brutus_multijoueur_show(int depuis_ville)
     etat.focus = 0;
     etat.saisie = 0;
     window_show(&fenetre);
+}
+
+// ------------------------------------------------------------------ M12 : cartes à deux en tête de liste
+
+#include "core/dir.h"
+#include "multijoueur/carte_versus.h"
+
+#include <stdlib.h>
+
+void brutus_menu_trier_cartes(dir_listing *cartes)
+{
+    if (!cartes || !brutus_menu_mode_versus_choisi() || cartes->num_files < 2) {
+        return;
+    }
+    // Tri stable : les cartes à deux (entrée du joueur 2) d'abord, chaque groupe dans l'ordre d'origine
+    dir_entry *tri = malloc(sizeof(dir_entry) * (size_t) cartes->num_files);
+    char *a_deux = malloc((size_t) cartes->num_files);
+    if (!tri || !a_deux) {
+        free(tri);
+        free(a_deux);
+        return;
+    }
+    for (int i = 0; i < cartes->num_files; i++) {
+        a_deux[i] = (char) brutus_carte_versus_fichier_a_deux(
+            dir_get_file_at_location(cartes->files[i].name, PATH_LOCATION_SCENARIO));
+    }
+    int n = 0;
+    for (int passe = 1; passe >= 0; passe--) {
+        for (int i = 0; i < cartes->num_files; i++) {
+            if (a_deux[i] == passe) {
+                tri[n++] = cartes->files[i];
+            }
+        }
+    }
+    memcpy(cartes->files, tri, sizeof(dir_entry) * (size_t) cartes->num_files);
+    free(tri);
+    free(a_deux);
 }

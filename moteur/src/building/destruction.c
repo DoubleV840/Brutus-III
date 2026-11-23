@@ -19,6 +19,7 @@
 #include "map/routing_terrain.h"
 #include "map/terrain.h"
 #include "map/tiles.h"
+#include "multijoueur/recap_versus.h"
 #include "multijoueur/versus.h"
 #include "sound/effect.h"
 
@@ -206,6 +207,7 @@ void building_destroy_by_collapse(building *b)
     if (building_properties_for_type(b->type)->shared) {
         return;
     }
+    brutus_recap_perdu(b); // Brutus III (M12) : récap du Versus
     game_undo_disable();
     b->state = BUILDING_STATE_RUBBLE;
     if (b->type == BUILDING_TOWER) {
@@ -225,6 +227,7 @@ void building_destroy_by_fire(building *b)
     if (building_properties_for_type(b->type)->shared) {
         return;
     }
+    brutus_recap_perdu(b); // Brutus III (M12) : récap du Versus
     destroy_on_fire(b, 0);
     destroy_linked_parts(b, DESTROY_FIRE, 0);
 }
@@ -234,6 +237,7 @@ void building_destroy_by_earthquake(building *b)
     if (building_properties_for_type(b->type)->shared) {
         return;
     }
+    brutus_recap_perdu(b); // Brutus III (M12) : récap du Versus
     game_undo_disable();
     int grid_offset = b->grid_offset; // save before destroying building
     int size = b->size;
@@ -248,6 +252,7 @@ void building_destroy_by_plague(building *b)
     if (building_properties_for_type(b->type)->shared) {
         return;
     }
+    brutus_recap_perdu(b); // Brutus III (M12) : récap du Versus
     destroy_on_fire(b, 1);
     destroy_linked_parts(b, DESTROY_FIRE, 1);
 }
@@ -263,6 +268,7 @@ void building_destroy_by_rioter(building *b)
     if (building_properties_for_type(b->type)->shared) {
         return;
     }
+    brutus_recap_perdu(b); // Brutus III (M12) : récap du Versus
     destroy_on_fire(b, 0);
     destroy_linked_parts(b, DESTROY_FIRE, 0);
 }

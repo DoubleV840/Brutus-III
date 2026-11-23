@@ -135,6 +135,41 @@ describe("relais Brutus III", () => {
     assert.equal(await r.text(), "ok\n");
   });
 
+  test("ligne d'information du salon (M12) : donnée à la création, reçue par tous, coupée à 200 caractères", async () => {
+    const info = "Versus, carte « Brutus - Deux rives », combat activé, 10 ans";
+    const hote = client(ClientRelais.creer(relais.base, { info }));
+    const b = await hote.bienvenue();
+    assert.equal(b.info, info);
+    const invite = client(ClientRelais.rejoindre(relais.base, b.code));
+    assert.equal((await invite.bienvenue()).info, info);
+    const long = client(ClientRelais.creer(relais.base, { info: "x".repeat(500) }));
+    assert.equal((await long.bienvenue()).info.length, 200);
+    const sans = client(ClientRelais.creer(relais.base));
+    assert.equal((await sans.bienvenue()).info, "");
+  });
+
+  test("pseudos (M12) : donnés à l'arrivée, nettoyés, vus par tous, changés au retour", async () => {
+    const hote = client(ClientRelais.creer(relais.base, { pseudo: "  Léa\u0007  la   Grande " }));
+    const b = await hote.bienvenue();
+    assert.deepEqual(b.joueurs, [{ joueur: 0, connecte: true, pseudo: "Léa la Grande" }]);
+    const invite = client(ClientRelais.rejoindre(relais.base, b.code, { pseudo: "Marcus".repeat(10) }));
+    const bi = await invite.bienvenue();
+    assert.equal(bi.joueurs[1].pseudo, "MarcusMarcusMarcusMa"); // 20 caractères
+    const arrive = await hote.attendreType("joueur-arrive");
+    assert.equal(arrive.joueurs[1].pseudo, "MarcusMarcusMarcusMa");
+    // Retour avec le jeton et un nouveau pseudo
+    invite.fermer();
+    await hote.attendreType("joueur-parti");
+    const retour = client(ClientRelais.rejoindre(relais.base, b.code, { jeton: bi.jeton, pseudo: "Marcus" }));
+    assert.equal((await retour.bienvenue()).joueurs[1].pseudo, "Marcus");
+    assert.equal((await hote.attendreType("joueur-revenu")).joueurs[1].pseudo, "Marcus");
+    // Retour sans pseudo : il garde le sien
+    retour.fermer();
+    await hote.attendreType("joueur-parti");
+    const retour2 = client(ClientRelais.rejoindre(relais.base, b.code, { jeton: bi.jeton }));
+    assert.equal((await retour2.bienvenue()).joueurs[1].pseudo, "Marcus");
+  });
+
   test("créer puis rejoindre : code, numéros, jetons, annonces", async () => {
     const hote = client(ClientRelais.creer(relais.base));
     const b = await hote.bienvenue();
@@ -145,7 +180,7 @@ describe("relais Brutus III", () => {
     assert.match(b.code, /^[A-Z0-9]{6}$/);
     for (const c of b.code) assert.ok(ALPHABET.includes(c), "caractère ambigu : " + c);
     assert.match(b.jeton, /^[0-9a-f]{32}$/);
-    assert.deepEqual(b.joueurs, [{ joueur: 0, connecte: true }]);
+    assert.deepEqual(b.joueurs, [{ joueur: 0, connecte: true, pseudo: "" }]);
 
     // Le code se tape aussi en minuscules.
     const invite = client(ClientRelais.rejoindre(relais.base, b.code.toLowerCase()));
@@ -153,7 +188,7 @@ describe("relais Brutus III", () => {
     assert.equal(bi.joueur, 1);
     assert.equal(bi.code, b.code);
     assert.notEqual(bi.jeton, b.jeton);
-    assert.deepEqual(bi.joueurs, [{ joueur: 0, connecte: true }, { joueur: 1, connecte: true }]);
+    assert.deepEqual(bi.joueurs, [{ joueur: 0, connecte: true, pseudo: "" }, { joueur: 1, connecte: true, pseudo: "" }]);
 
     const arrive = await hote.attendreType("joueur-arrive");
     assert.equal(arrive.joueur, 1);
@@ -410,7 +445,7 @@ describe("relais Brutus III", () => {
     await invite.fermer();
     const parti = await hote.attendreType("joueur-parti");
     assert.equal(parti.joueur, 1);
-    assert.deepEqual(parti.joueurs, [{ joueur: 0, connecte: true }, { joueur: 1, connecte: false }]);
+    assert.deepEqual(parti.joueurs, [{ joueur: 0, connecte: true, pseudo: "" }, { joueur: 1, connecte: false, pseudo: "" }]);
 
     // La place est gardée : un nouveau venu sans jeton trouve le salon plein.
     await refusAttendu(client(ClientRelais.rejoindre(relais.base, code)), "salon-plein", 4002);
@@ -496,7 +531,7 @@ describe("relais Brutus III", () => {
     hote.expulser(1);
     const ex = await hote.attendreType("joueur-expulse");
     assert.equal(ex.joueur, 1);
-    assert.deepEqual(ex.joueurs, [{ joueur: 0, connecte: true }]);
+    assert.deepEqual(ex.joueurs, [{ joueur: 0, connecte: true, pseudo: "" }]);
     await refusAttendu(client(ClientRelais.rejoindre(relais.base, code, { jeton: ancien })), "jeton-invalide", 4003);
 
     // Un ami prend la place libérée ; expulsé alors qu'il est connecté, il est fermé en 4006.

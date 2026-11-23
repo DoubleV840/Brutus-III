@@ -1,9 +1,11 @@
 // Brutus III : mode rejouage sans affichage (voir rejouage.h)
 #include "multijoueur/fin_versus.h"
+#include "multijoueur/recap_versus.h"
 #include "multijoueur/victoire_versus.h"
 #include "multijoueur/rejouage.h"
 #include "multijoueur/combat_versus.h"
 #include "city/ratings.h"
+#include "city/warning.h"
 #include "city/view.h"
 #include "game/file_editor.h"
 #include "game/game.h"
@@ -37,6 +39,8 @@
 #include "game/game.h"
 #include "graphics/window.h"
 #include "window/city.h"
+
+#include "SDL.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,6 +78,7 @@ static struct {
     int capture; // M8 : à la fin, image de toute la ville et de la mini-carte (dossier des captures)
     long ticks_par_image;
     long resync_au_tick[64];
+    int joueur_local;
     int nb_resync;
     int nb_reglages;
     const char *reglages[32];
@@ -123,6 +128,10 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
             options.detail = argv[++i];
         } else if (strcmp(a, "--multijoueur") == 0) {
             options.multijoueur = 1;
+        } else if (strcmp(a, "--joueur-local") == 0 && i + 1 < argc) {
+            // M12 : rejoue comme le joueur N d'une partie réseau (en Versus, il voit sa ville)
+            options.multijoueur = 1;
+            options.joueur_local = strtol(argv[++i], 0, 10);
         } else if (strcmp(a, "--capture") == 0) {
             options.capture = 1;
         } else if (strcmp(a, "--interface-test") == 0) {
@@ -343,6 +352,17 @@ static void ecrire_detail(const char *moment)
     }
 }
 
+// Capture de l'écran (sans l'avis « capture enregistrée » de la précédente). Le nom du fichier est
+// à la seconde près : on attend un peu pour que la capture suivante ne l'écrase pas.
+static void capturer_ecran(void)
+{
+    city_warning_clear_all();
+    window_draw(1);
+    graphics_save_screenshot(SCREENSHOT_DISPLAY);
+    city_warning_clear_all();
+    SDL_Delay(1100);
+}
+
 static int rejouer(void)
 {
     if (!options.empreintes) {
@@ -400,6 +420,7 @@ static int rejouer(void)
     if (options.multijoueur) {
         // M6a : les ticks viennent de l'extérieur (comme le lockstep), image par image (game_run).
         brutus_multijoueur_definir(1);
+        brutus_joueur_local_definir(options.joueur_local);
         if (options.interface_test) {
             window_city_show();
         }
@@ -533,6 +554,7 @@ static int rejouer(void)
     brutus_ville_activer(0);
     brutus_combat_bilan(); // M10
     brutus_victoire_bilan(); // M11
+    brutus_recap_bilan(); // M12
 
     if (options.capture) {
         // Vue de la ville du joueur local (ville 1) : les bâtiments de l'autre ville ont sa teinte
@@ -545,8 +567,14 @@ static int rejouer(void)
         graphics_save_screenshot(SCREENSHOT_MINIMAP);
         if (brutus_victoire_fin() != BRUTUS_FIN_AUCUNE) { // M11 : l'écran de fin, sur la ville
             window_brutus_fin_versus_show();
-            window_draw(1);
-            graphics_save_screenshot(SCREENSHOT_DISPLAY);
+            capturer_ecran();
+            // M12 : le récap, onglet de la population avec la bulle de survol au milieu, puis le tableau
+            brutus_fin_versus_onglet(BRUTUS_FIN_ONGLET_POPULATION);
+            brutus_fin_versus_survol(16 + 16 + 60 + 222, 8 + 106 + 90);
+            capturer_ecran();
+            brutus_fin_versus_survol(-1, -1);
+            brutus_fin_versus_onglet(BRUTUS_FIN_ONGLET_TABLEAU);
+            capturer_ecran();
         }
     }
 
