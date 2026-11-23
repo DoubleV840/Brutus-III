@@ -1,3 +1,4 @@
+#include "multijoueur/carte_versus.h" // Brutus III (M9)
 #include "file_editor.h"
 
 #include "assets/assets.h"
@@ -164,6 +165,7 @@ static void prepare_map_for_editing(void)
 
 void game_file_editor_create_scenario(int size)
 {
+    brutus_carte_versus_effacer(); // Brutus III (M9) : nouvelle carte sans points du joueur 2
     create_blank_map(size);
     prepare_map_for_editing();
     scenario_editor_set_custom_message_introduction(0);

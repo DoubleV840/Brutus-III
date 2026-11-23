@@ -1,3 +1,4 @@
+#include "multijoueur/carte_versus.h" // Brutus III (M9)
 #include "tool.h"
 
 #include "assets/assets.h"
@@ -482,6 +483,19 @@ static void place_earthquake_flag(const map_tile *tile)
     }
 }
 
+// Brutus III (M9) : points du joueur 2 (la carte est à enregistrer, comme pour les autres points)
+static void brutus_editeur_entree_2(int x, int y)
+{
+    brutus_carte_versus_definir_entree(1, x, y);
+    scenario_editor_set_as_unsaved();
+}
+
+static void brutus_editeur_sortie_2(int x, int y)
+{
+    brutus_carte_versus_definir_sortie(1, x, y);
+    scenario_editor_set_as_unsaved();
+}
+
 static void place_flag(const map_tile *tile, void (*update)(int x, int y))
 {
     int warning = 0;
@@ -709,6 +723,12 @@ void editor_tool_end_use(const map_tile *tile)
             break;
         case TOOL_EXIT_POINT:
             place_flag(tile, scenario_editor_set_exit_point);
+            break;
+        case TOOL_BRUTUS_ENTREE_2: // Brutus III (M9)
+            place_flag(tile, brutus_editeur_entree_2);
+            break;
+        case TOOL_BRUTUS_SORTIE_2:
+            place_flag(tile, brutus_editeur_sortie_2);
             break;
         case TOOL_RIVER_ENTRY_POINT:
             place_flag(tile, scenario_editor_set_river_entry_point);

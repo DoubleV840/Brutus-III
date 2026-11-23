@@ -144,6 +144,8 @@ static void draw_map_flag(const figure *f, int x, int y, float scale)
         number = id - MAP_FLAG_FISHING_MIN + 1;
     } else if (id >= MAP_FLAG_HERD_MIN && id < MAP_FLAG_HERD_MAX) {
         number = id - MAP_FLAG_HERD_MIN + 1;
+    } else if (id == MAP_FLAG_BRUTUS_ENTREE_2 || id == MAP_FLAG_BRUTUS_SORTIE_2) {
+        number = 2; // Brutus III (M9) : points du joueur 2
     }
     if (number > 0) {
         text_draw_number_scaled(number, '@', 0, x + 6, y + 7, FONT_NORMAL_PLAIN, COLOR_WHITE, scale);

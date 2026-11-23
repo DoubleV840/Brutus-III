@@ -58,7 +58,8 @@ for (let i = 0; i < lignes.length; i++) {
 const L = info.largeur[0];
 const H = info.hauteur[0];
 const TICK0 = info.tick[0];
-const [ex, ey] = info.entree;
+// M9 : sur une carte à deux, le joueur 2 part de sa propre entrée (ligne « entree2 » de la carte)
+const [ex, ey] = JOUEUR === 1 && info.entree2 ? info.entree2 : info.entree;
 if (rangees.length !== H) {
   console.error(`carte illisible : ${rangees.length} rangées au lieu de ${H}`);
   process.exit(2);

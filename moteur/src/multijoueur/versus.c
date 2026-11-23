@@ -7,6 +7,7 @@
 #include "city/message.h"
 #include "core/log.h"
 #include "figure/figure.h"
+#include "multijoueur/carte_versus.h"
 #include "multijoueur/empreinte.h"
 #include "multijoueur/simulation.h"
 #include "scenario/request.h"
@@ -15,7 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define VERSION_BLOC 3 // 2 : ville de chaque message ; 3 : demandes de César de chaque ville
+#define VERSION_BLOC 4 // 2 : ville de chaque message ; 3 : demandes de César de chaque ville ; 4 : points de la carte
 #define TAILLE_VILLE_MAX 65536
 
 static const char MARQUE[4] = { 'B', 'R', '3', 'V' };
@@ -154,6 +155,7 @@ int brutus_versus_activer(void)
     brutus_villes_donnees[1].map = brutus_villes_donnees[0].map;
     scenario_request_brutus_copier(1); // mêmes demandes de César, mais chacune les siennes
     brutus_ville_activer(avant);
+    brutus_carte_versus_appliquer_aux_villes(); // M9 : carte à deux, la ville 2 prend les points du joueur 2
     log_info("Brutus III (M8) : partie en Versus, deux villes", 0, 0);
     return 1;
 }
@@ -179,7 +181,7 @@ static uint32_t composer(uint8_t **sortie)
     unsigned int nb_batiments = (unsigned int) building_count();
     unsigned int nb_figures = figure_count();
     unsigned int nb_messages = (unsigned int) city_message_brutus_cases();
-    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures + 4 + nb_messages;
+    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures + 4 + nb_messages + BRUTUS_CARTE_VERSUS_TAILLE;
     taille += (uint32_t) (etat.villes - 1) * (4 + TAILLE_VILLE_MAX);
     int active_avant = etat.active;
     for (int v = 1; v < etat.villes; v++) {
@@ -210,6 +212,12 @@ static uint32_t composer(uint8_t **sortie)
     for (unsigned int i = 0; i < nb_messages; i++) {
         d[p++] = (uint8_t) (city_message_brutus_ville_case((int) i) + 1); // 0 : toutes les villes
     }
+    {
+        buffer b;
+        buffer_init(&b, d + p, BRUTUS_CARTE_VERSUS_TAILLE);
+        brutus_carte_versus_ecrire(&b); // M9 : points des autres joueurs, pour un passage en Versus plus tard
+        p += BRUTUS_CARTE_VERSUS_TAILLE;
+    }
     int avant = etat.active;
     for (int v = 1; v < etat.villes; v++) {
         buffer b;
@@ -229,8 +237,8 @@ static uint32_t composer(uint8_t **sortie)
 
 void brutus_versus_ecrire_fichier(FILE *fp)
 {
-    if (etat.villes <= 1) {
-        return; // solo et Coop : le fichier ne change pas
+    if (etat.villes <= 1 && !brutus_carte_versus_a_points()) {
+        return; // solo et Coop sur une carte ordinaire : le fichier ne change pas
     }
     uint8_t *d;
     uint32_t taille = composer(&d);
@@ -307,6 +315,7 @@ void brutus_versus_lire_tampon(buffer *buf)
 void brutus_versus_appliquer_lu(void)
 {
     if (!etat.bloc.lu) {
+        brutus_carte_versus_effacer(); // M9 : partie sans bloc, donc sans points à nous
         remettre_une_ville();
         return;
     }
@@ -352,6 +361,17 @@ void brutus_versus_appliquer_lu(void)
         }
         p += nb_messages;
     }
+    if (ok && version >= 4) {
+        ok = p + BRUTUS_CARTE_VERSUS_TAILLE <= taille;
+        if (ok) {
+            buffer b;
+            buffer_init(&b, (uint8_t *) d + p, BRUTUS_CARTE_VERSUS_TAILLE);
+            brutus_carte_versus_lire(&b);
+            p += BRUTUS_CARTE_VERSUS_TAILLE;
+        }
+    } else {
+        brutus_carte_versus_effacer();
+    }
     if (!ok) {
         log_error("Brutus III (M8) : bloc Versus illisible, partie chargée avec une seule ville", 0, 0);
         oublier_bloc();
@@ -387,6 +407,7 @@ void brutus_versus_appliquer_lu(void)
     }
     brutus_ville_activer(0);
     oublier_bloc();
+    brutus_carte_versus_appliquer_aux_villes(); // M9 : chaque ville a les points de son joueur
     building_brutus_reconstruire_listes(); // les listes par type et par ville suivent les propriétaires
     if (!ok) {
         log_error("Brutus III (M8) : données de ville Versus illisibles", 0, 0);
@@ -402,8 +423,8 @@ void brutus_versus_partie_neuve(void)
 
 uint64_t brutus_versus_empreinte(uint64_t h)
 {
-    if (etat.villes <= 1) {
-        return h; // solo et Coop : empreinte inchangée
+    if (etat.villes <= 1 && !brutus_carte_versus_a_points()) {
+        return h; // solo et Coop sur une carte ordinaire : empreinte inchangée
     }
     uint8_t *d;
     uint32_t taille = composer(&d);
@@ -418,6 +439,8 @@ uint64_t brutus_versus_empreinte(uint64_t h)
 
 // ------------------------------------------------------------------ Versus local (touche Alt+W)
 
+#include "city/map.h"
+#include "city/view.h"
 #include "city/warning.h"
 #include "core/encoding.h"
 #include "game/cheats.h"
@@ -444,7 +467,16 @@ void brutus_versus_touche(void)
         return;
     }
     int ville = (etat.vue + 1) % etat.villes;
+    // M9 : chaque ville garde sa vue ; la première fois, la vue part de l'entrée de la ville
+    static int camera[BRUTUS_VILLES_MAX][3];
+    city_view_get_camera(&camera[etat.vue][0], &camera[etat.vue][1]);
+    camera[etat.vue][2] = 1;
     brutus_ville_vue_changer(ville);
+    if (camera[ville][2]) {
+        city_view_set_camera(camera[ville][0], camera[ville][1]);
+    } else {
+        city_view_go_to_grid_offset(city_map_entry_point()->grid_offset);
+    }
     brutus_joueur_local_definir(ville);
     char ligne[120];
     snprintf(ligne, sizeof(ligne), "Tu joues maintenant pour la ville %d (%s).", ville + 1, ville ? "rouge" : "bleue");

@@ -689,6 +689,10 @@ const uint8_t *lang_get_string(int group, int index)
                 return translation_for(TR_EDITOR_TOOL_EARTHQUAKE_REMOVE);
             case TR_EDITOR_RUBBLE:
                 return translation_for(TR_EDITOR_RUBBLE);
+            case TR_BRUTUS_EDITEUR_ENTREE_2: // Brutus III (M9)
+                return translation_for(TR_BRUTUS_EDITEUR_ENTREE_2);
+            case TR_BRUTUS_EDITEUR_SORTIE_2:
+                return translation_for(TR_BRUTUS_EDITEUR_SORTIE_2);
             case TR_EDITOR_TOOL_OUTSKIRTS:
                 return translation_for(TR_EDITOR_TOOL_OUTSKIRTS);
             case TR_EDITOR_TOOL_OUTSKIRTS_REMOVE:

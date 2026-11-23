@@ -46,7 +46,7 @@ static const int Y_MENU_OFFSETS[16] = {
 #define MAX_ITEMS_PER_MENU 15
 static const int MENU_TYPES[MENU_NUM_ITEMS][MAX_ITEMS_PER_MENU] = {
     {0, 1, 2, 3, 4, -1},
-    {5, 6, -1},
+    {5, 6, TR_BRUTUS_EDITEUR_ENTREE_2, TR_BRUTUS_EDITEUR_SORTIE_2, -1}, // Brutus III (M9) : points du joueur 2
     {7, 8, 9, -1},
     {10, 11, 12, 13, 14, 15, 16, 17, TR_EDITOR_TOOL_OUTSKIRTS, TR_EDITOR_TOOL_OUTSKIRTS_REMOVE, -1},
     {18, 19, -1},
@@ -178,6 +178,8 @@ static void button_menu_item(const generic_button *button)
             switch (index) {
                 case 0: editor_tool_set_type(TOOL_ENTRY_POINT); break;
                 case 1: editor_tool_set_type(TOOL_EXIT_POINT); break;
+                case 2: editor_tool_set_type(TOOL_BRUTUS_ENTREE_2); break; // Brutus III (M9)
+                case 3: editor_tool_set_type(TOOL_BRUTUS_SORTIE_2); break;
             }
             break;
         case MENU_RIVER_POINTS:

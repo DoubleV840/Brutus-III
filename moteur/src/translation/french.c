@@ -2398,6 +2398,8 @@ static translation_string all_strings[] = {
     {TR_TERRAIN_BEACH, "Plage"},
     {TR_TERRAIN_BEACH_DESC, "Une plage de sable fin. Agréable à contempler et prisée des flâneurs qui viennent s'y prélasser, elle fournit du sable et de l'argile en abondance à la cité."},
     {TR_BRUTUS_MULTIJOUEUR, "Multijoueur"}, // Brutus III
+    {TR_BRUTUS_EDITEUR_ENTREE_2, "Entrée joueur 2"}, // Brutus III (M9)
+    {TR_BRUTUS_EDITEUR_SORTIE_2, "Sortie joueur 2"}, // Brutus III (M9)
 };
 
 void translation_french(const translation_string **strings, int *num_strings)

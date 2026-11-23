@@ -1,3 +1,4 @@
+#include "multijoueur/generateur_cartes.h" // Brutus III (M9)
 #include "game.h"
 
 #include "assets/assets.h"
@@ -157,6 +158,7 @@ int game_init(void)
     } else {
         platform_user_path_create_subdirectories();
     }
+    brutus_cartes_versus_installer(); // Brutus III (M9) : les cartes Versus dans le dossier des cartes
     if (config_get(CONFIG_UI_SHOW_INTRO_VIDEO)) {
         actions |= ACTION_SHOW_INTRO_VIDEOS;
     }

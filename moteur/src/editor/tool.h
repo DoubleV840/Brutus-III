@@ -46,7 +46,9 @@ typedef enum {
     TOOL_LOW_BRIDGE = 43,
     TOOL_SHIP_BRIDGE = 44,
     TOOL_MARSHLAND = 45,
-    TOOL_BEACH = 46
+    TOOL_BEACH = 46,
+    TOOL_BRUTUS_ENTREE_2 = 47, // Brutus III (M9) : entrée et sortie du joueur 2 (cartes Versus)
+    TOOL_BRUTUS_SORTIE_2 = 48
 } tool_type;
 
 tool_type editor_tool_type(void);

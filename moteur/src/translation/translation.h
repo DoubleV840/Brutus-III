@@ -2399,6 +2399,8 @@ typedef enum {
     TR_PARAMETER_TERRAIN_MARSHLAND,
     TR_PARAMETER_TERRAIN_BEACH,
     TR_BRUTUS_MULTIJOUEUR, // Brutus III : menu « Multijoueur »
+    TR_BRUTUS_EDITEUR_ENTREE_2, // Brutus III (M9) : éditeur, entrée du joueur 2
+    TR_BRUTUS_EDITEUR_SORTIE_2, // Brutus III (M9) : éditeur, sortie du joueur 2
     TRANSLATION_MAX_KEY
 } translation_key;
 

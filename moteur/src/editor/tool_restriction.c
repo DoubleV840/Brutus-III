@@ -64,6 +64,8 @@ int editor_tool_can_place_flag(tool_type type, const map_tile *tile, int *warnin
     switch (type) {
         case TOOL_ENTRY_POINT:
         case TOOL_EXIT_POINT:
+        case TOOL_BRUTUS_ENTREE_2: // Brutus III (M9)
+        case TOOL_BRUTUS_SORTIE_2:
         case TOOL_INVASION_POINT:
             return is_clear_terrain(tile, warning) && is_edge(tile, warning);
 

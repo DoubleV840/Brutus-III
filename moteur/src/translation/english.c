@@ -2403,7 +2403,9 @@ static translation_string all_strings[] = {
     {TR_PARAMETER_TERRAIN_SHALLOW_WATER, "Shallow water"},
     {TR_PARAMETER_TERRAIN_MARSHLAND, "Marshland"},
     {TR_PARAMETER_TERRAIN_BEACH, "Beach"},
-    {TR_BRUTUS_MULTIJOUEUR, "Multiplayer"} // Brutus III
+    {TR_BRUTUS_MULTIJOUEUR, "Multiplayer"}, // Brutus III
+    {TR_BRUTUS_EDITEUR_ENTREE_2, "Entry point player 2"}, // Brutus III (M9)
+    {TR_BRUTUS_EDITEUR_SORTIE_2, "Exit point player 2"} // Brutus III (M9)
 };
 
 void translation_english(const translation_string **strings, int *num_strings)

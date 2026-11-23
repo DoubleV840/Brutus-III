@@ -1,7 +1,8 @@
-# Mode Versus : deux villes sur la même carte (M8)
+# Mode Versus : deux villes sur la même carte (M8, M9)
 
-État au 23/11/2026 : **M8 terminée, en local** (un seul écran, une touche pour changer de joueur).
-Le réseau du Versus est la mission M12 ; les cartes à deux points de départ, M9 ; le combat, M10 ; la victoire, M11.
+État au 23/11/2026 : **M8 et M9 terminées, en local** (un seul écran, une touche pour changer de joueur) :
+deux villes séparées, et trois cartes à deux créées par nous, avec une entrée et une sortie par joueur.
+Le réseau du Versus est la mission M12 ; le combat, M10 ; la victoire, M11.
 
 ## Principe
 
@@ -85,13 +86,44 @@ seulement. Le solo reste identique au bit près (Lugdunum, Tarraco, Carthago).
 Bloc `BR3V` : version 3 (2 : ville de chaque message ; 3 : demandes de César de chaque ville). Les versions 1 et 2
 se lisent encore.
 
+## Cartes à deux (M9)
+
+- **Points du joueur 2.** Le joueur 1 garde l'entrée et la sortie du scénario. L'entrée et la sortie du joueur 2
+  sont à nous (`multijoueur/carte_versus.c`) : dans la carte, un bloc `BR3C` écrit après les données d'Augustus
+  (un Augustus d'origine ouvre la carte sans le voir) ; dans une partie, le bloc `BR3V` (version 4), écrit dès que
+  la carte en a, même avant le passage en Versus, pour qu'un invité qui charge la sauvegarde de départ ait les mêmes
+  points. Au passage en Versus, la ville 2 prend les points du joueur 2 (`city_data.map`) : route de Rome,
+  arrivée des migrants et des marchands, départ des émigrants. Carte sans ces points (toutes les cartes d'origine) :
+  la ville 2 reçoit ceux de la ville 1, comme en M8.
+- **Éditeur de cartes.** Menu « Points des personnes » : « Entrée joueur 2 » et « Sortie joueur 2 » (même règle que
+  l'entrée et la sortie : sur le bord, terrain dégagé). Leur drapeau porte le numéro 2. Ils sont enregistrés avec
+  la carte. Une nouvelle carte n'en a pas.
+- **Nos trois cartes** (100 × 100, symétriques : même terrain, mêmes ressources, même route de Rome pour les deux
+  joueurs ; jeu libre, la victoire du Versus viendra en M11 ; 4 000 deniers au départ) :
+  - **Brutus - Deux rives** : un fleuve en diagonale, un gué au centre ;
+  - **Brutus - Lac central** : une plaine, un lac au centre, une forêt en arc entre les deux villes ;
+  - **Brutus - Rivage** : une côte au sud ouverte aux navires, des collines entre les deux villes, deux passages.
+  Elles sont créées par programme (`multijoueur/generateur_cartes.c`, aucune donnée du jeu d'origine) :
+  `bash outils/creer-cartes-versus.sh` les refait dans `moteur/res/assets/Brutus/cartes/`. Elles sont embarquées
+  avec les assets (application et page web) ; au démarrage, le jeu copie celles qui manquent dans le dossier des
+  cartes (une carte déjà présente, peut-être retouchée, n'est pas écrasée).
+- **Versus local** : Alt+W garde la vue de chaque ville ; la première fois, la vue part de l'entrée de la ville.
+- **Tests** : `bash outils/test-versus.sh 60000 "Brutus - Deux rives"` (de même « Brutus - Lac central »,
+  « Brutus - Rivage ») : le bot du joueur 2 part de l'entrée du joueur 2 (`entree2` dans `--info-carte`). Le bilan du
+  rejouage donne l'entrée et la sortie de chaque ville. `--capture-editeur <carte>` ouvre la carte dans l'éditeur,
+  la vue sur l'entrée du joueur 2, le menu des points ouvert, et enregistre l'image de l'écran.
+
+Résultat du 23/11 : les trois cartes passent le test Versus (empreintes identiques, rechargement identique,
+demande de César séparée) ; la ville 2 a l'entrée 99,29 et la sortie 71,0 sur « Deux rives », en continu comme
+après rechargement.
+
 ## Laissé aux missions suivantes
 
-- **Points d'entrée et de sortie par ville** (accès à Rome, migrants, marchands) : M9. Ils sont déjà dans les
-  données de chaque ville (`city_data.map`), mais la ville 2 reçoit ceux de la ville 1.
-- **Envahisseurs et combat** : les envahisseurs sont créés hors passe de ville, donc à la ville 1 ; M10.
+- **Envahisseurs et combat** : les envahisseurs sont créés hors passe de ville, donc à la ville 1 ; M10. Nos cartes
+  n'ont pas de point d'invasion.
 - **Victoire** (`city_victory_check`) : vérifiée pour la ville 1 seulement ; M11.
-- **Empire** (routes ouvertes, prix), **événements du scénario**, bataille lointaine : communs.
+- **Empire** (routes ouvertes, prix), **événements du scénario**, bataille lointaine : communs. Sur « Rivage »,
+  l'entrée et la sortie des navires sont communes.
 - Les jalons de population (« 500 habitants »…) sont comptés une fois pour toute la partie.
 - Le bot de test construit mal (sa population tombe vers 100 habitants vers le tick 20 000, avant comme après M8) :
   les chiffres de fin ne mesurent pas la qualité du jeu.

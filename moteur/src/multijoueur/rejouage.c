@@ -1,6 +1,14 @@
 // Brutus III : mode rejouage sans affichage (voir rejouage.h)
 #include "multijoueur/rejouage.h"
 #include "city/ratings.h"
+#include "city/view.h"
+#include "game/file_editor.h"
+#include "game/game.h"
+#include "game/tick.h"
+#include "map/grid.h"
+#include "window/editor/build_menu.h"
+#include "multijoueur/carte_versus.h"
+#include "multijoueur/generateur_cartes.h"
 #include "graphics/screenshot.h"
 #include "scenario/request.h"
 #include "multijoueur/versus.h"
@@ -42,7 +50,9 @@ enum {
     MODE_REJOUER,
     MODE_CREER_SAUVEGARDE,
     MODE_INFO_CARTE,
-    MODE_RESEAU
+    MODE_RESEAU,
+    MODE_CREER_CARTE_VERSUS, // M9
+    MODE_CAPTURE_EDITEUR // M9 : carte ouverte dans l'éditeur, menu des points, image de l'écran
 };
 
 static struct {
@@ -145,6 +155,13 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
             // M6b : test du client réseau sous Node (voir brutus_rejouage_garder_actif)
             options.mode = MODE_RESEAU;
             options.sauvegarde = argv[++i];
+        } else if (strcmp(a, "--capture-editeur") == 0 && i + 1 < argc) {
+            options.mode = MODE_CAPTURE_EDITEUR;
+            options.carte = argv[++i];
+        } else if (strcmp(a, "--creer-carte-versus") == 0 && i + 2 < argc) {
+            options.mode = MODE_CREER_CARTE_VERSUS;
+            options.carte = argv[++i];
+            options.sortie = argv[++i];
         } else if (strcmp(a, "--info-carte") == 0 && i + 2 < argc) {
             options.mode = MODE_INFO_CARTE;
             options.sauvegarde = argv[++i];
@@ -506,8 +523,9 @@ static int rejouer(void)
             }
         }
         printf("Brutus III : ville %d : population %d, trésor %d, %d bâtiments, faveur %d, "
-            "demandes de César : %d en cours, %d servies\n",
-            v + 1, city_population(), city_finance_treasury(), a_elle, city_rating_favor(), demandes, servies);
+            "demandes de César : %d en cours, %d servies, entrée %d,%d, sortie %d,%d\n",
+            v + 1, city_population(), city_finance_treasury(), a_elle, city_rating_favor(), demandes, servies,
+            city_map_entry_point()->x, city_map_entry_point()->y, city_map_exit_point()->x, city_map_exit_point()->y);
     }
     brutus_ville_activer(0);
 
@@ -560,6 +578,11 @@ static int info_carte(void)
     fprintf(fp, "largeur %d\nhauteur %d\ntick %u\nentree %d %d\nsortie %d %d\ntresor %d\n",
         map_data.width, map_data.height, (unsigned int) brutus_tick_absolu(),
         entree->x, entree->y, sortie->x, sortie->y, city_finance_treasury());
+    if (brutus_carte_versus_a_points()) { // M9 : carte à deux
+        map_point e2 = brutus_carte_versus_entree(1);
+        map_point s2 = brutus_carte_versus_sortie(1);
+        fprintf(fp, "entree2 %d %d\nsortie2 %d %d\n", e2.x, e2.y, s2.x, s2.y);
+    }
     fprintf(fp, "carte\n");
     for (int y = 0; y < map_data.height; y++) {
         for (int x = 0; x < map_data.width; x++) {
@@ -618,6 +641,32 @@ int brutus_rejouage_executer(void)
             return creer_sauvegarde();
         case MODE_INFO_CARTE:
             return info_carte();
+        case MODE_CAPTURE_EDITEUR: {
+            // La carte s'ouvre dans l'éditeur, la vue sur l'entrée du joueur 2, le menu des points ouvert
+            if (!game_init_editor() || !game_file_editor_load_scenario(options.carte)) {
+                fprintf(stderr, "Brutus III : carte introuvable dans l'éditeur : %s\n", options.carte);
+                return 4;
+            }
+            map_point e2 = brutus_carte_versus_entree(1);
+            if (e2.x >= 0) {
+                city_view_go_to_grid_offset(map_grid_offset(e2.x, e2.y));
+            }
+            for (int n = 0; n < 4; n++) {
+                game_tick_run(); // les drapeaux prennent leur place
+            }
+            window_editor_build_menu_show(MENU_PEOPLE_POINTS);
+            window_draw(1);
+            graphics_save_screenshot(SCREENSHOT_DISPLAY);
+            return 0;
+        }
+        case MODE_CREER_CARTE_VERSUS: {
+            int modele = brutus_carte_versus_modele(options.carte);
+            if (modele < 0) {
+                fprintf(stderr, "Brutus III : modèle de carte inconnu : %s (deux-rives, lac, rivage)\n", options.carte);
+                return 2;
+            }
+            return brutus_generer_carte_versus(modele, options.sortie) ? 0 : 6;
+        }
         default:
             return 0;
     }

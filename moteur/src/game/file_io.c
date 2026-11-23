@@ -73,6 +73,7 @@
 #include "scenario/scenario.h"
 #include "sound/city.h"
 #include "widget/minimap.h"
+#include "multijoueur/carte_versus.h" // Brutus III (M9)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1461,6 +1462,7 @@ static int load_scenario_from_buffer(buffer *buf)
         }
     }
     core_memory_block_free(&compress_buffer);
+    brutus_carte_versus_lire_tampon(buf); // Brutus III (M9) : points des autres joueurs (bloc BR3C)
     return 1;
 }
 
@@ -1498,6 +1500,7 @@ static int load_scenario_to_buffers(const char *filename)
             return 0;
         }
     }
+    brutus_carte_versus_lire_fichier(fp); // Brutus III (M9) : points des autres joueurs (bloc BR3C)
     core_memory_block_free(&compress_buffer);
     file_close(fp);
     return 1;
@@ -1509,6 +1512,7 @@ int game_file_io_read_scenario_from_buffer(buffer *buf)
         return 0;
     }
     scenario_load_from_state(&scenario_data.state, scenario_data.version);
+    brutus_carte_versus_adopter_lu(); // Brutus III (M9)
     return 1;
 }
 
@@ -1519,6 +1523,7 @@ int game_file_io_read_scenario(const char *filename)
         return 0;
     }
     scenario_load_from_state(&scenario_data.state, scenario_data.version);
+    brutus_carte_versus_adopter_lu(); // Brutus III (M9)
     return 1;
 }
 
@@ -1687,6 +1692,7 @@ int game_file_io_write_scenario(const char *filename)
             fwrite(piece->buf.data, 1, piece->buf.size, fp);
         }
     }
+    brutus_carte_versus_ecrire_fichier(fp); // Brutus III (M9) : points des autres joueurs (bloc BR3C)
     core_memory_block_free(&compress_buffer);
     file_close(fp);
     return 1;

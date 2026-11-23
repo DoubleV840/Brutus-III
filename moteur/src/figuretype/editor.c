@@ -1,3 +1,4 @@
+#include "multijoueur/carte_versus.h" // Brutus III (M9)
 #include "editor.h"
 
 #include "core/image.h"
@@ -47,6 +48,12 @@ void figure_editor_flag_action(figure *f)
     } else if (id >= MAP_FLAG_HERD_MIN && id < MAP_FLAG_HERD_MAX) {
         point = scenario_editor_herd_point(id - MAP_FLAG_HERD_MIN);
         f->cart_image_id = image_group(GROUP_FIGURE_FORT_STANDARD_ICONS) + 4;
+    } else if (id == MAP_FLAG_BRUTUS_ENTREE_2) { // Brutus III (M9)
+        point = brutus_carte_versus_entree(1);
+        f->cart_image_id = image_base + 2;
+    } else if (id == MAP_FLAG_BRUTUS_SORTIE_2) {
+        point = brutus_carte_versus_valeur_sortie(1);
+        f->cart_image_id = image_base + 3;
     }
     f->x = point.x;
     f->y = point.y;

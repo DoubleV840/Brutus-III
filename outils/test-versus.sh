@@ -95,10 +95,15 @@ done
 echo "OK : les deux villes ont leurs bâtiments, leurs habitants et leur trésor."
 
 # Demandes de César par ville : celle de la triche 104 (joueur 0) ne concerne que la ville 1.
-d1=$(grep "Brutus III : ville 1 :" "$SORTIE/rejouage-1.log" | sed -n 's/.*César : \([0-9]*\) en cours.*/\1/p')
-d2=$(grep "Brutus III : ville 2 :" "$SORTIE/rejouage-1.log" | sed -n 's/.*César : \([0-9]*\) en cours.*/\1/p')
+# (en cours ou déjà servie : le bot peut l'avoir envoyée)
+demandes() {
+  grep "Brutus III : ville $1 :" "$SORTIE/rejouage-1.log" |
+    sed -n 's/.*César : \([0-9]*\) en cours, \([0-9]*\) servies.*/\1 \2/p' | awk '{ print $1 + $2 }'
+}
+d1=$(demandes 1)
+d2=$(demandes 2)
 if [ "${d1:-0}" -lt 1 ] || [ "${d2:-0}" -ne 0 ]; then
-  echo "ÉCHEC : demandes de César mélangées (ville 1 : ${d1:-?} en cours, ville 2 : ${d2:-?})."
+  echo "ÉCHEC : demandes de César mélangées (ville 1 : ${d1:-?}, ville 2 : ${d2:-?})."
   exit 1
 fi
 echo "OK : la demande de César faite à la ville 1 ne concerne pas la ville 2."

@@ -346,6 +346,8 @@ void map_editor_tool_draw(const map_tile *tile)
         case TOOL_EARTHQUAKE_POINT:
         case TOOL_ENTRY_POINT:
         case TOOL_EXIT_POINT:
+        case TOOL_BRUTUS_ENTREE_2: // Brutus III (M9)
+        case TOOL_BRUTUS_SORTIE_2:
         case TOOL_RIVER_ENTRY_POINT:
         case TOOL_RIVER_EXIT_POINT:
         case TOOL_INVASION_POINT:
