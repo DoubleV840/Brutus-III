@@ -168,7 +168,8 @@ static int custom_earthquake_advance_next_tile(void)
 static int custom_earthquake_advance_random_tiles(void)
 {
     // 1. Collect all tiles that can be affected by the earthquake
-    map_point candidates[GRID_SIZE * GRID_SIZE];
+    // Brutus III : statique, pas sur la pile (210 Ko : la pile du navigateur débordait)
+    static map_point candidates[GRID_SIZE * GRID_SIZE];
     int count = 0;
 
     for (int y = 0; y < map_data.height; y++) {

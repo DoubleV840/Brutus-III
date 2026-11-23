@@ -690,7 +690,8 @@ static void place_native_palisade(const map_tile *start_tile, const map_tile *en
 static void place_bridge(const map_tile *tile, int is_ship_bridge)
 {
     int length, direction;
-    grid_slice blocked = { .size = 0 };
+    static grid_slice blocked; // Brutus III : statique, pas sur la pile (105 Ko)
+    blocked.size = 0;
     int min_length = is_ship_bridge ? 5 : 2;
     if (!map_bridge_calculate_length_direction(tile->x, tile->y, &length, &direction, &blocked) ||
         length < min_length) {

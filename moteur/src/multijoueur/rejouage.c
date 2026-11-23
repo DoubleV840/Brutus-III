@@ -88,6 +88,7 @@ static struct {
     const char *reglages[32];
     const char *prechargement;
     long ticks_prechargement;
+    int test_batiments; // tous les types du menu de construction (multijoueur), voir rejouage_interface.c
 } options = { MODE_AUCUN, 0, 0, 0, 0, 0, 0, -1, 50, 0, 0, 0, 2, { 0 }, 0, 0, { 0 }, 0, 0 };
 
 // Le moteur change de dossier courant au démarrage : les chemins relatifs sont rendus
@@ -140,6 +141,9 @@ int brutus_rejouage_extraire_options(int argc, char **argv)
             options.capture = 1;
         } else if (strcmp(a, "--capture-salon") == 0) {
             options.capture_salon = 1;
+        } else if (strcmp(a, "--test-batiments") == 0) {
+            options.multijoueur = 1;
+            options.test_batiments = 1;
         } else if (strcmp(a, "--interface-test") == 0) {
             options.multijoueur = 1;
             options.interface_test = 1;
@@ -473,6 +477,14 @@ static int rejouer(void)
     if (!sortie) {
         fprintf(stderr, "Brutus III : impossible d'écrire %s\n", options.empreintes);
         return 6;
+    }
+    if (options.test_batiments) {
+        brutus_multijoueur_definir(1);
+        brutus_joueur_local_definir(options.joueur_local);
+        int ok = brutus_interface_test_batiments(sortie);
+        fclose(sortie);
+        free(journal.items);
+        return ok ? 0 : 9;
     }
     uint32_t debut = brutus_tick_absolu();
     // Reprise depuis une sauvegarde intermédiaire (test de rechargement) : les commandes

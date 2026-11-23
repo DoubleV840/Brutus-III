@@ -447,7 +447,7 @@ static int executer_construire(const brutus_commande *c)
         if (type == BUILDING_LOW_BRIDGE || type == BUILDING_SHIP_BRIDGE) {
             // Le moteur calcule le pont pendant le dessin du fantôme : on le recalcule ici.
             int longueur, direction;
-            grid_slice bloquees;
+            static grid_slice bloquees; // statique : 105 Ko, trop pour la pile du navigateur
             bloquees.size = 0;
             map_bridge_calculate_length_direction(x1, y1, &longueur, &direction, &bloquees);
         }

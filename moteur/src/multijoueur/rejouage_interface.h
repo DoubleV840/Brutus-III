@@ -15,4 +15,9 @@ void brutus_interface_test_dessiner(long image);
 /** Nombre de fenêtres ouvertes et de glissers commencés. */
 void brutus_interface_test_bilan(unsigned int *ouvertures, unsigned int *glissers);
 
+#include <stdio.h>
+
+/** --test-batiments : chaque type du menu de construction, survolé, cliqué, glissé. 1 si aucune image lente. */
+int brutus_interface_test_batiments(FILE *sortie);
+
 #endif // MULTIJOUEUR_REJOUAGE_INTERFACE_H

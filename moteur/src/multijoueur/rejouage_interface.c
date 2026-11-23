@@ -214,3 +214,206 @@ void brutus_interface_test_bilan(unsigned int *ouvertures, unsigned int *glisser
     *ouvertures = etat.ouvertures;
     *glissers = etat.glissers;
 }
+
+// ------------------------------------------------------------------ tous les bâtiments (--test-batiments)
+//
+// Chaque type du menu de construction est choisi comme le ferait le joueur, en multijoueur (ticks imposés
+// de l'extérieur) : survol de plusieurs cases (terre, rive, eau, emplacements de pont), clic, glisser,
+// relâchement, puis quelques images pour que la commande soit jouée. La souris passe par input/mouse.c et
+// window_draw, comme dans le jeu. Une image trop lente ou un blocage (le script de test coupe au bout d'un
+// délai) désigne le type fautif : son nom est écrit avant chaque essai.
+
+#include "building/menu.h"
+#include "city/finance.h"
+#include "city/view.h"
+#include "core/time.h"
+#include "game/game.h"
+#include "input/mouse.h"
+#include "map/bridge.h"
+#include "map/terrain.h"
+#include "multijoueur/commande.h"
+#include "multijoueur/simulation.h"
+
+#include <stdio.h>
+
+#define CASES_MAX 6
+#define IMAGE_LENTE_MS 3000
+
+static struct {
+    FILE *sortie;
+    int lentes;
+    int fenetres;
+    time_millis pire;
+    int pire_type;
+} tb;
+
+static void une_image(int type)
+{
+    time_millis debut = time_get_millis();
+    window_draw(0);
+    brutus_ticks_externes_ajouter(1);
+    while (brutus_ticks_externes_en_attente() > 0) {
+        game_run();
+    }
+    time_millis duree = time_get_millis() - debut;
+    if (duree > tb.pire) {
+        tb.pire = duree;
+        tb.pire_type = type;
+    }
+    if (duree > IMAGE_LENTE_MS) {
+        tb.lentes++;
+        fprintf(tb.sortie, "# LENT type %d : image de %u ms\n", type, (unsigned int) duree);
+        fflush(tb.sortie);
+    }
+}
+
+static int choisir_cases(int *cases)
+{
+    int n = 0;
+    // Emplacements de pont valides (deux au plus, éloignés), puis une case d'eau quelconque et une rive.
+    int ponts = 0, eau = 0, rive = 0;
+    for (int y = 2; y < map_data.height - 2 && n < CASES_MAX - 3; y++) {
+        for (int x = 2; x < map_data.width - 2 && n < CASES_MAX - 3; x++) {
+            int offset = map_grid_offset(x, y);
+            if (!map_terrain_is(offset, TERRAIN_WATER)) {
+                continue;
+            }
+            int longueur, direction;
+            static grid_slice bloquees; // statique : 105 Ko
+            bloquees.size = 0;
+            if (ponts < 2 && map_bridge_calculate_length_direction(x, y, &longueur, &direction, &bloquees)) {
+                if (!ponts || abs(map_grid_offset_to_x(cases[n - 1]) - x) + abs(map_grid_offset_to_y(cases[n - 1]) - y) > 20) {
+                    cases[n++] = offset;
+                    ponts++;
+                }
+            } else if (!eau && map_terrain_count_directly_adjacent_with_type(offset, TERRAIN_WATER) == 4) {
+                cases[n++] = offset;
+                eau = 1;
+            } else if (!rive && map_terrain_count_directly_adjacent_with_type(offset, TERRAIN_WATER) == 2) {
+                cases[n++] = offset;
+                rive = 1;
+            }
+        }
+    }
+    map_bridge_reset_building_length();
+    fprintf(tb.sortie, "# cases : %d emplacements de pont, eau %d, rive %d\n", ponts, eau, rive);
+    // Terre, au hasard (graine fixe)
+    while (n < CASES_MAX) {
+        tuile_au_hasard(10);
+        int offset = map_grid_offset(etat.x, etat.y);
+        if (!map_terrain_is(offset, TERRAIN_WATER)) {
+            cases[n++] = offset;
+        }
+    }
+    return n;
+}
+
+static void essayer(int type, int offset)
+{
+    int vx, vy, largeur, hauteur;
+    city_view_go_to_grid_offset(offset);
+    city_view_get_viewport(&vx, &vy, &largeur, &hauteur);
+    int cx = vx + largeur / 2, cy = vy + hauteur / 2;
+    // Pixel de l'écran qui tombe sur la case (la caméra est bornée au bord de la carte : pas toujours au centre)
+    int trouve = 0;
+    for (int py = vy + 2; py < vy + hauteur - 2 && !trouve; py += 3) {
+        for (int px = vx + 2; px < vx + largeur - 2 && !trouve; px += 6) {
+            view_tile vt;
+            if (city_view_pixels_to_view_tile(px, py, &vt) && city_view_tile_to_grid_offset(&vt) == offset) {
+                cx = px;
+                cy = py;
+                trouve = 1;
+            }
+        }
+    }
+    if (!trouve) {
+        fprintf(tb.sortie, "#   case %d hors de l'écran\n", offset);
+        return;
+    }
+    if (building_construction_type() != type) {
+        building_construction_set_type(type, 0);
+    }
+    mouse_set_position(cx, cy);
+    int tresor = city_finance_treasury();
+    une_image(type); // survol : fantôme
+    mouse_set_left_down(1); // clic simple
+    une_image(type);
+    mouse_set_left_down(0);
+    une_image(type);
+    une_image(type);
+    int clic = tresor - city_finance_treasury();
+    if (!window_is(WINDOW_CITY)) {
+        tb.fenetres++;
+        fprintf(tb.sortie, "#   case %d : fenêtre %d ouverte après le clic, refermée\n", offset, window_get_id());
+        window_city_show();
+        une_image(type);
+    }
+    if (building_construction_type() != type) {
+        building_construction_set_type(type, 0);
+    }
+    tresor = city_finance_treasury();
+    mouse_set_left_down(1); // glisser
+    une_image(type);
+    int glisse = building_construction_in_progress();
+    mouse_set_position(cx + 58, cy + 30); // glisser de deux cases
+    une_image(type);
+    mouse_set_left_down(0);
+    une_image(type); // relâchement
+    une_image(type); // commande jouée
+    fprintf(tb.sortie, "#   case %d (%d,%d) : clic coût %d ; glisser %d coût %d\n", offset, map_grid_offset_to_x(offset),
+        map_grid_offset_to_y(offset), clic, glisse, tresor - city_finance_treasury());
+    if (!window_is(WINDOW_CITY)) {
+        tb.fenetres++;
+        fprintf(tb.sortie, "# type %d case %d : fenêtre %d ouverte, refermée\n", type, offset, window_get_id());
+        window_city_show();
+        une_image(type);
+    }
+}
+
+int brutus_interface_test_batiments(FILE *sortie)
+{
+    tb.sortie = sortie;
+    window_city_show();
+    building_menu_enable_all();
+    city_finance_treasury_add(1000000);
+    int cases[CASES_MAX];
+    int nb_cases = choisir_cases(cases);
+    int vus[BUILDING_TYPE_MAX] = { 0 };
+    int testes = 0;
+    for (int sub = 0; sub < BUILD_MENU_MAX; sub++) {
+        int nb = building_menu_count_all_items(sub);
+        for (int item = 0; item < nb; item++) {
+            building_type type = building_menu_type(sub, item);
+            if (type <= BUILDING_NONE || type >= BUILDING_TYPE_MAX || vus[type] ||
+                building_menu_get_submenu_for_type(type)) {
+                continue; // vide, déjà vu, ou bouton qui ouvre un sous-menu
+            }
+            vus[type] = 1;
+            // Diagnostic : BRUTUS_TYPES="26,27" limite le test à ces types
+            const char *filtre = getenv("BRUTUS_TYPES");
+            if (filtre) {
+                char cle[16];
+                snprintf(cle, sizeof(cle), ",%d,", type);
+                char liste[256];
+                snprintf(liste, sizeof(liste), ",%s,", filtre);
+                if (!strstr(liste, cle)) {
+                    continue;
+                }
+            }
+            fprintf(stderr, "Brutus III : test des bâtiments : type %d (menu %d)\n", type, sub);
+            fprintf(sortie, "# type %d menu %d\n", type, sub);
+            fflush(sortie);
+            for (int c = 0; c < nb_cases; c++) {
+                essayer(type, cases[c]);
+            }
+            building_construction_clear_type();
+            une_image(type);
+            testes++;
+        }
+    }
+    fprintf(sortie, "# fin test-batiments types %d cases %d lentes %d fenetres %d pire %u ms (type %d)"
+        " commandes_appliquees %u commandes_refusees %u\n", testes, nb_cases, tb.lentes, tb.fenetres,
+        (unsigned int) tb.pire, tb.pire_type, brutus_commandes_total_appliquees(), brutus_commandes_total_refusees());
+    fflush(sortie);
+    return tb.lentes == 0;
+}
