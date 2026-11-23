@@ -25,6 +25,7 @@
 #include "window/cck_selection.h"
 #include "window/city.h"
 #include "window/file_dialog.h"
+#include "window/select_campaign.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -480,7 +481,8 @@ enum {
     B_COMBAT,
     B_DUREE,
     B_PLACES,
-    B_PRET
+    B_PRET,
+    B_CAMPAGNE
 };
 
 static void clic(const generic_button *b);
@@ -575,9 +577,14 @@ static void preparer_boutons_accueil(void)
         }
         if (etat.depuis_ville) {
             ajouter_accueil(X0 + 24, 214, 240, 26, B_CREER_ICI);
-        } else {
+        } else if (versus_choisi()) {
             ajouter_accueil(X0 + 24, 214, 240, 26, B_NOUVELLE);
             ajouter_accueil(X0 + 280, 214, 240, 26, B_CHARGER);
+        } else {
+            // Coop : aussi les missions des campagnes (une seule ville, gérée à plusieurs)
+            ajouter_accueil(X0 + 24, 214, 160, 26, B_CAMPAGNE);
+            ajouter_accueil(X0 + 192, 214, 160, 26, B_NOUVELLE);
+            ajouter_accueil(X0 + 360, 214, 160, 26, B_CHARGER);
         }
         ajouter_accueil(X0 + 352, 316, 168, 26, B_REJOINDRE);
     }
@@ -593,8 +600,9 @@ static const char *libelle_accueil(int p, char *tampon, size_t taille)
         case B_DUREE: texte_duree(etat.duree, tampon, taille); return etat.duree ? tampon : "Sans limite";
         case B_PLACES: snprintf(tampon, taille, "%d joueurs", etat.places); return tampon;
         case B_CREER_ICI: return "Créer avec cette ville";
-        case B_NOUVELLE: return "Nouvelle partie";
-        case B_CHARGER: return "Charger une sauvegarde";
+        case B_CAMPAGNE: return "Campagne";
+        case B_NOUVELLE: return versus_choisi() ? "Nouvelle partie" : "Carte libre";
+        case B_CHARGER: return versus_choisi() ? "Charger une sauvegarde" : "Sauvegarde";
         case B_REJOINDRE: return "Rejoindre";
         default: return "Retour";
     }
@@ -675,6 +683,9 @@ static void dessiner_accueil(void)
     }
     if (etat.creer_quand_ville) {
         text_draw(t("La partie multijoueur sera créée dès que la ville sera à l'écran."), X0 + 24, 246, FONT_SMALL_PLAIN, COLOR_BLACK);
+    } else if (!etat.depuis_ville && !versus_choisi()) {
+        text_draw(t("Campagne : à chaque victoire, la mission suivante choisie par l'hôte part chez tous."),
+            X0 + 24, 246, FONT_SMALL_PLAIN, COLOR_BLACK);
     } else if (!etat.depuis_ville && versus_choisi()) {
         text_draw(t("Nouvelle partie : les cartes à deux joueurs sont en tête de liste."), X0 + 24, 246, FONT_SMALL_PLAIN, COLOR_BLACK);
     } else if (etat.depuis_ville) {
@@ -894,6 +905,11 @@ static void clic(const generic_button *b)
             break;
         case B_CREER_ICI:
             demander_creation();
+            break;
+        case B_CAMPAGNE:
+            etat.creer_quand_ville = 1;
+            arreter_saisie();
+            window_select_campaign_show();
             break;
         case B_NOUVELLE:
             etat.creer_quand_ville = 1;

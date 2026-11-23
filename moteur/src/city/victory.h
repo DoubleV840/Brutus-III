@@ -25,4 +25,9 @@ void city_victory_stop_governing(void);
 
 int city_victory_has_won(void);
 
+/** Brutus III : multijoueur, ce joueur a choisi « continuer à gouverner » (pas d'écran de fin en attendant). */
+void city_victory_brutus_continuer_demande(void);
+/** Brutus III : la victoire a été annoncée et le choix (continuer ou partir) n'est pas encore fait. */
+int city_victory_brutus_victoire_annoncee(void);
+
 #endif // CITY_VICTORY_H

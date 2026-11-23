@@ -590,6 +590,13 @@
       return !!(moteur.villeQuittee && moteur.villeQuittee());
     }
 
+    // Ville quittée puis une ville de nouveau à l'écran : le joueur en a chargé une autre (mission suivante après
+    // une victoire, partie chargée depuis le menu principal). Revenir dans la partie passe par le rechargement,
+    // qui efface « ville quittée » : ce cas n'est donc qu'une nouvelle ville.
+    function nouvelleVille() {
+      return villeQuittee() && moteur.jeuEnCours();
+    }
+
     // ------------------------------------------------------------ état visible par la page
 
     function placeConnectee(j) {
@@ -670,7 +677,13 @@
         }
       } else if (villeQuittee()) {
         phase = "hors-ville";
-        texte = "Vous avez quitté la ville : la partie multijoueur est en pause pour " + (s.joueursMax > 2 ? "tous les joueurs" : "vous deux") + ". Revenez dans la partie ou quittez-la.";
+        if (s.joueur === 0 && nouvelleVille()) {
+          texte = "Nouvelle partie : envoi de cette ville aux autres joueurs…";
+        } else if (s.joueur !== 0) {
+          texte = "Vous avez quitté la ville : la partie est en pause pour " + (s.joueursMax > 2 ? "tous les joueurs" : "vous deux") + ". Quand l'hôte lance la mission suivante, vous la recevrez automatiquement. Vous pouvez aussi revenir dans la partie ou la quitter.";
+        } else {
+          texte = "Vous avez quitté la ville : la partie multijoueur est en pause pour " + (s.joueursMax > 2 ? "tous les joueurs" : "vous deux") + ". Lancez la mission suivante (elle sera envoyée à tous), revenez dans la partie ou quittez-la.";
+        }
       } else if (att.length) {
         phase = "attente";
         var n = [];
@@ -1566,7 +1579,13 @@
       // Hôte hors de la ville : la partie repart de la copie prise en partant (un invité qui veut revenir
       // ne doit pas attendre sans fin) ; sans copie, on ne peut rien renvoyer.
       var copie = s.actif && villeQuittee() && s.retourDemande ? s.copieQuittee : null;
-      if (!copie && (s.actif ? villeQuittee() : !moteur.jeuEnCours())) {
+      // Hôte revenu dans une ville après l'avoir quittée (mission suivante de la campagne, partie chargée) :
+      // c'est cette nouvelle ville qui part chez tous.
+      var nouvelle = s.actif && villeQuittee() && nouvelleVille();
+      if (nouvelle) {
+        copie = null;
+        s.restants = 0; // les ticks restants visaient l'ancienne ville : ne pas les jouer sur la nouvelle
+      } else if (!copie && (s.actif ? villeQuittee() : !moteur.jeuEnCours())) {
         return false;
       }
       var octets, tick, vitesse, pause;
@@ -1802,6 +1821,18 @@
 
     function jouer(t) {
       if (villeQuittee()) {
+        if (s.joueur === 0 && nouvelleVille() && s.resyncEnAttente === null && s.connecte) {
+          // Hôte : la mission suivante (ou une autre partie) est à l'écran. Sans cela, elle restait figée :
+          // en multijoueur, seuls les tours du lockstep font avancer la ville.
+          s.copieQuittee = null;
+          s.retourDemande = false;
+          demanderResync("nouvelle mission de l'hôte");
+        }
+        if (nouvelleVille()) {
+          s.dernierProgres = t;
+          s.echeance = t;
+          return; // pas de copie de cette ville-là : la partie commune reste celle d'avant
+        }
         garderCopie();
         // Ville quittée (menu principal, fin de mission) : on n'avance plus hors de la ville. L'autre
         // joueur attend (« en attente de Joueur N ») ; le retour passe par revenir().
