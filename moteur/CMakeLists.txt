@@ -875,6 +875,7 @@ set(MULTIJOUEUR_FILES
     ${PROJECT_SOURCE_DIR}/src/multijoueur/menu.c # Brutus III : fenêtre « Multijoueur »
     ${PROJECT_SOURCE_DIR}/src/multijoueur/versus.c # Brutus III : M8 (deux villes)
     ${PROJECT_SOURCE_DIR}/src/multijoueur/carte_versus.c # Brutus III : M9 (cartes à deux)
+    ${PROJECT_SOURCE_DIR}/src/multijoueur/combat_versus.c # Brutus III : M10 (combat entre les villes)
     ${PROJECT_SOURCE_DIR}/src/multijoueur/generateur_cartes.c # Brutus III : M9 (cartes Versus)
 )
 

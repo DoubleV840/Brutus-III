@@ -1,8 +1,8 @@
-# Mode Versus : deux villes sur la même carte (M8, M9)
+# Mode Versus : deux villes sur la même carte (M8, M9, M10)
 
-État au 23/11/2026 : **M8 et M9 terminées, en local** (un seul écran, une touche pour changer de joueur) :
-deux villes séparées, et trois cartes à deux créées par nous, avec une entrée et une sortie par joueur.
-Le réseau du Versus est la mission M12 ; le combat, M10 ; la victoire, M11.
+État au 23/11/2026 : **M8, M9 et M10 terminées, en local** (un seul écran, une touche pour changer de joueur) :
+deux villes séparées, trois cartes à deux créées par nous, avec une entrée et une sortie par joueur, et le
+combat entre les deux villes. Le réseau du Versus est la mission M12 ; la victoire, M11.
 
 ## Principe
 
@@ -117,10 +117,51 @@ Résultat du 23/11 : les trois cartes passent le test Versus (empreintes identiq
 demande de César séparée) ; la ville 2 a l'entrée 99,29 et la sortie 71,0 sur « Deux rives », en continu comme
 après rechargement.
 
+## Combat (M10)
+
+- **Option de la partie.** Activé par défaut au passage en Versus. **Alt+G** (Versus local, en ville) l'éteint ou le
+  rallume : commande `triche` 105 (0 éteint, 1 allume, autre valeur : bascule), donc rejouable et déterministe.
+  L'option est dans le bloc `BR3V` (version 5) et dans l'empreinte ; un bloc plus ancien se lit « combat activé ».
+  Le choix dans le menu Multijoueur viendra avec M12. Combat éteint : les deux villes s'ignorent, comme en M9.
+- **Qui se bat** (`multijoueur/combat_versus.c`) : les militaires d'une ville (soldats des légions, sentinelles des
+  murs, balistes, archers des tours de guet) attaquent ceux de l'autre, avec les règles qu'Augustus applique aux
+  envahisseurs, sans rien changer aux dégâts :
+  - corps à corps : au contact (`figure_combat_attack_figure_at`), y compris les soldats au fort ;
+  - à distance : javelots, flèches et carreaux visent et touchent les soldats et les sentinelles de l'autre ville
+    (`is_valid_missile_target`, `is_non_citizen` dans `figuretype/missile.c`) ; les balistes et les archers des
+    tours de guet restent sur leur tour et ne sont pas des cibles (comme pour les envahisseurs) ;
+  - une légion en formation « nettoyage » poursuit aussi les militaires de l'autre ville.
+  Les habitants (marchands, préfets…) ne sont pas attaqués. Les envahisseurs du scénario attaquent tout le monde et
+  sont attaqués par les deux villes, comme avant.
+- **Bâtiments.** Un soldat arrêté à son étendard qui touche un bâtiment de l'autre ville le frappe tous les 4 ticks
+  (`building_destroy_increase_enemy_damage`, mêmes points de vie que pour les envahisseurs : 10 pour un bâtiment,
+  60 palissade et tour de guet, 150 porte, 200 mur). Pour attaquer une ville, on place donc sa légion contre ses
+  bâtiments ; quand ils tombent, on avance la légion. Les forts ne se détruisent pas (comme pour les envahisseurs).
+  Les effets de la destruction (note de paix, ruines) comptent pour la ville du bâtiment. Les villages indigènes ne sont
+  à personne : les soldats ne les attaquent pas.
+- **Légions par ville.** Une légion est à la ville de son fort. Chaque ville ne recrute (casernes), ne compte
+  (conseiller militaire, nombre de légions permis pour poser un fort, totaux de soldats), ne fait défiler, ne
+  sélectionne d'un clic et ne commande que les siennes : une commande de légion pour celle de l'autre ville est
+  refusée. Le moral lié au mess (nourriture des soldats) est celui du mess de la ville de la légion ; il faut un mess
+  dans sa ville pour poser un fort.
+- **Affichage.** Les soldats, les étendards et les sentinelles de l'autre ville prennent sa teinte (comme ses
+  bâtiments depuis M8).
+- **Test** : `bash outils/test-combat.sh [ticks]` (12 000 par défaut), sur « Brutus - Deux rives ». Journal écrit à
+  la main : un fort de légionnaires pour la ville 1, un fort de javeliniers, quatre puits et un mur pour la ville 2,
+  soldats tout de suite (`triche` 106, pour les tests : chaque fort de la ville du joueur reçoit ses soldats), bataille
+  au gué, puis la ville 1 refait sa légion et attaque les bâtiments de la ville 2. Le bilan du rejouage donne, pour
+  chaque ville, les soldats créés, vivants, tués par l'autre ville, et ses bâtiments détruits par l'autre ville.
+  Résultat du 23/11 : 4 soldats de la ville 1 et 8 de la ville 2 tués (bataille entre les ticks 700 et 1 300),
+  7 bâtiments de la ville 2 détruits ; combat éteint : aucun mort ni bâtiment détruit entre les villes (3 soldats par
+  ville désertent quand même : légion loin du fort sans nourriture, règle d'Augustus) ; empreintes identiques,
+  rechargement en pleine bataille (tick 1 000) identique ; la commande du joueur 2 pour la légion 1 est refusée.
+
 ## Laissé aux missions suivantes
 
-- **Envahisseurs et combat** : les envahisseurs sont créés hors passe de ville, donc à la ville 1 ; M10. Nos cartes
-  n'ont pas de point d'invasion.
+- **Combat** : pas d'animation de frappe quand un soldat attaque un bâtiment (il reste en position) ; pas de
+  message « l'ennemi attaque » chez la ville attaquée ; les forts adverses ne se détruisent pas.
+- **Envahisseurs** : créés hors passe de ville, donc à la ville 1 (ce qui ne change rien au combat : ils attaquent et
+  sont attaqués par tous). Nos cartes n'ont pas de point d'invasion.
 - **Victoire** (`city_victory_check`) : vérifiée pour la ville 1 seulement ; M11.
 - **Empire** (routes ouvertes, prix), **événements du scénario**, bataille lointaine : communs. Sur « Rivage »,
   l'entrée et la sortie des navires sont communes.

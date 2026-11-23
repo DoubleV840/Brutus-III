@@ -10,6 +10,7 @@
 #include "figure/sound.h"
 #include "game/difficulty.h"
 #include "map/figure.h"
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 #include "sound/effect.h"
 
 static int is_attacking_native(const figure *f)
@@ -137,6 +138,7 @@ static void hit_opponent(figure *f)
     } else {
         opponent->action_state = FIGURE_ACTION_149_CORPSE;
         opponent->wait_ticks = 0;
+        brutus_combat_noter_mort(f, opponent); // Brutus III (M10) : bilan des tests
         figure_play_die_sound(opponent);
         formation_update_morale_after_death(opponent_formation);
     }
@@ -187,7 +189,7 @@ int figure_combat_get_target_for_soldier(int x, int y, int max_distance)
             // Do not allow to target dead and enemies located outside of the map
             continue;
         }
-        if (figure_is_enemy(f) || f->type == FIGURE_RIOTER || is_attacking_native(f)) {
+        if (figure_is_enemy(f) || f->type == FIGURE_RIOTER || is_attacking_native(f) || brutus_combat_cible(f)) {
             int distance = calc_maximum_distance(x, y, f->x, f->y);
             if (distance <= max_distance) {
                 if (f->targeted_by_figure_id) {
@@ -208,7 +210,7 @@ int figure_combat_get_target_for_soldier(int x, int y, int max_distance)
         if (figure_is_dead(f)) {
             continue;
         }
-        if (figure_is_enemy(f) || f->type == FIGURE_RIOTER || is_attacking_native(f)) {
+        if (figure_is_enemy(f) || f->type == FIGURE_RIOTER || is_attacking_native(f) || brutus_combat_cible(f)) {
             return i;
         }
     }
@@ -302,7 +304,7 @@ int figure_combat_get_target_for_enemy(int x, int y)
 
 static int is_valid_missile_target(figure *f, formation *l)
 {
-    if (figure_is_enemy(f) || is_attacking_native(f)) {
+    if (figure_is_enemy(f) || is_attacking_native(f) || brutus_combat_cible(f)) {
         return 1;
     }
     if (!figure_is_herd(f)) {
@@ -453,6 +455,8 @@ void figure_combat_attack_figure_at(figure *f, int grid_offset)
             attack = 0;
         } else if (opponent->action_state == FIGURE_ACTION_149_CORPSE) {
             attack = 0;
+        } else if (brutus_combat_ennemis(f, opponent)) {
+            attack = 1; // Brutus III (M10) : militaire de l'autre ville
         } else if (category & FIGURE_CATEGORY_ARMED && opponent_category & FIGURE_CATEGORY_NATIVE) {
             if (opponent->action_state == FIGURE_ACTION_159_NATIVE_ATTACKING) {
                 attack = 1;

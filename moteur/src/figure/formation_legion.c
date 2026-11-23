@@ -6,6 +6,7 @@
 #include "city/warning.h"
 #include "core/calc.h"
 #include "figure/enemy_army.h"
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 #include "figure/figure.h"
 #include "figure/route.h"
 #include "map/building.h"
@@ -51,7 +52,8 @@ int formation_legion_recruits_needed(void)
 {
     for (int i = 1; i < formation_count(); i++) {
         formation *m = formation_get(i);
-        if (m->in_use && m->is_legion && m->legion_recruit_type != LEGION_RECRUIT_NONE) {
+        if (m->in_use && m->is_legion && m->legion_recruit_type != LEGION_RECRUIT_NONE &&
+            !brutus_versus_formation_ignorer(m)) {
             return 1;
         }
     }
@@ -402,7 +404,8 @@ void formation_legion_update(void)
         } else if (m->layout == FORMATION_MOP_UP) {
             if (enemy_army_total_enemy_formations() +
                 city_figures_rioters() +
-                city_figures_attacking_natives() > 0) {
+                city_figures_attacking_natives() +
+                brutus_combat_nombre_cibles(brutus_versus_formation_proprietaire(m)) > 0) {
                 for (int n = 0; n < MAX_FORMATION_FIGURES; n++) {
                     if (m->figures[n] != 0) {
                         figure *f = figure_get(m->figures[n]);

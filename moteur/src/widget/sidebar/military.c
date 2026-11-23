@@ -1,6 +1,7 @@
 #include "military.h"
 
 #include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 
 #include "assets/assets.h"
 #include "building/count.h"
@@ -624,7 +625,7 @@ static void button_cycle_legion(int cycle_forward, int param2)
             i = 1;
         }
         const formation *m = formation_get(i);
-        if (m->in_use && !m->is_herd && m->is_legion) {
+        if (m->in_use && !m->is_herd && m->is_legion && !brutus_versus_formation_ignorer(m)) {
             legion->formation_id = i;
             break;
         }

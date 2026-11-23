@@ -1,5 +1,6 @@
 // Brutus III : mode rejouage sans affichage (voir rejouage.h)
 #include "multijoueur/rejouage.h"
+#include "multijoueur/combat_versus.h"
 #include "city/ratings.h"
 #include "city/view.h"
 #include "game/file_editor.h"
@@ -528,6 +529,7 @@ static int rejouer(void)
             city_map_entry_point()->x, city_map_entry_point()->y, city_map_exit_point()->x, city_map_exit_point()->y);
     }
     brutus_ville_activer(0);
+    brutus_combat_bilan(); // M10
 
     if (options.capture) {
         // Vue de la ville du joueur local (ville 1) : les bâtiments de l'autre ville ont sa teinte

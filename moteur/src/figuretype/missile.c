@@ -5,6 +5,7 @@
 #include "core/image.h"
 #include "figure/formation.h"
 #include "figure/movement.h"
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 #include "figure/properties.h"
 #include "figure/sound.h"
 #include "map/figure.h"
@@ -92,7 +93,7 @@ static int is_non_citizen(figure *f)
     if (f->action_state == FIGURE_ACTION_149_CORPSE) {
         return 0;
     }
-    if (figure_is_enemy(f)) {
+    if (figure_is_enemy(f) || brutus_combat_cible(f)) {
         return f->id;
     }
     if (f->type == FIGURE_INDIGENOUS_NATIVE && f->action_state == FIGURE_ACTION_159_NATIVE_ATTACKING) {
@@ -152,6 +153,7 @@ static void missile_hit_target(figure *f, int target_id, figure_type legionary_t
         target->damage = max_damage + 1;
         target->action_state = FIGURE_ACTION_149_CORPSE;
         target->wait_ticks = 0;
+        brutus_combat_noter_mort(f, target); // Brutus III (M10) : bilan des tests
         figure_play_die_sound(target);
         formation_update_morale_after_death(m);
     }
@@ -264,6 +266,7 @@ void figure_bolt_action(figure *f)
             target->damage = max_damage + 1;
             target->action_state = FIGURE_ACTION_149_CORPSE;
             target->wait_ticks = 0;
+            brutus_combat_noter_mort(f, target); // Brutus III (M10) : bilan des tests
             figure_play_die_sound(target);
             formation_update_morale_after_death(formation_get(target->formation_id));
         }

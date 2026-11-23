@@ -1,5 +1,6 @@
 #include "barracks.h"
 
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 #include "building/count.h"
 #include "building/monument.h"
 #include "building/properties.h"
@@ -134,6 +135,9 @@ static int get_closest_legion_needing_soldiers(const building *barracks)
         }
         if (m->in_distant_battle || m->legion_recruit_type == LEGION_RECRUIT_NONE) {
             continue;
+        }
+        if (brutus_versus_formation_ignorer(m)) {
+            continue; // Brutus III (M10) : fort de l'autre ville
         }
         if (m->legion_recruit_type == LEGION_RECRUIT_LEGIONARY && barracks->resources[RESOURCE_WEAPONS] <= 0) {
             continue;

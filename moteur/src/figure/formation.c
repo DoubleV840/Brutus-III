@@ -1,5 +1,7 @@
 #include "formation.h"
 
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
+#include "multijoueur/versus.h"
 #include "building/count.h"
 #include "building/monument.h"
 #include "city/data_private.h"
@@ -383,6 +385,9 @@ int formation_has_low_morale(const formation *m)
 
 int formation_get_num_legions_cached(void)
 {
+    if (brutus_versus_actif()) {
+        return formation_get_num_legions(); // Brutus III (M10) : les légions de la ville active
+    }
     return data.num_legions;
 }
 
@@ -398,7 +403,7 @@ void formation_calculate_legion_totals(void)
                 data.id_last_legion = i;
                 data.num_legions++;
                 if (m->figure_type == FIGURE_FORT_LEGIONARY) {
-                    city_military_add_legionary_legion();
+                    city_military_brutus_add_legionary_legion(brutus_versus_formation_proprietaire(m));
                 }
             }
             if (m->missile_attack_timeout <= 0 && m->figures[0]) {
@@ -418,7 +423,7 @@ int formation_get_num_legions(void)
     formation *m;
     array_foreach(formations, m)
     {
-        if (m->in_use && m->is_legion) {
+        if (m->in_use && m->is_legion && !brutus_versus_formation_ignorer(m)) {
             total++;
         }
     }
@@ -443,7 +448,7 @@ int formation_for_legion(int legion_index)
     formation *m;
     array_foreach(formations, m)
     {
-        if (m->in_use && m->is_legion) {
+        if (m->in_use && m->is_legion && !brutus_versus_formation_ignorer(m)) {
             if (index++ == legion_index) {
                 return m->id;
             }
@@ -560,17 +565,21 @@ static void update_morale_for_mess_hall(void)
             continue;
         }
 
+        // Brutus III (M10) : le mess de la ville de la légion
+        int ville = brutus_versus_formation_proprietaire(f);
+        const struct city_data_t *donnees = &brutus_villes_donnees[ville > 0 && ville < brutus_versus_villes() ? ville : 0];
+
         // food types bonus
-        max_morale += calc_bound(((city_data.mess_hall.food_types - 1) * 5), 0, 10);
+        max_morale += calc_bound(((donnees->mess_hall.food_types - 1) * 5), 0, 10);
 
         // well-fed bonus
-        if (city_data.mess_hall.food_stress_cumulative < 3) {
+        if (donnees->mess_hall.food_stress_cumulative < 3) {
             max_morale += 5;
         }
 
         // hungry soldiers morale penalty
-        if (city_data.mess_hall.food_stress_cumulative > 20) {
-            max_morale -= city_data.mess_hall.food_stress_cumulative / 3;
+        if (donnees->mess_hall.food_stress_cumulative > 20) {
+            max_morale -= donnees->mess_hall.food_stress_cumulative / 3;
         }
 
         // apply
@@ -708,7 +717,8 @@ int formation_legion_count_alive_soldiers_by_type(figure_type type)
     int totals = 0;
     array_foreach(formations, m)
     {
-        if (m->in_use && m->is_legion && (m->figure_type == type || type == FIGURE_FORT_STANDARD)) {
+        if (m->in_use && m->is_legion && (m->figure_type == type || type == FIGURE_FORT_STANDARD) &&
+            !brutus_versus_formation_ignorer(m)) {
             // fort_standard used to count all types
             totals += formation_legion_count_alive_soldiers(m->id);
         }

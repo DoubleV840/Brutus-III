@@ -37,6 +37,7 @@
 #include "window/plain_message_dialog.h"
 #include "multijoueur/commande.h"
 #include "multijoueur/versus.h" // Brutus III
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 
 #include <stdio.h> // Brutus III
 #include <string.h>
@@ -494,6 +495,10 @@ int game_cheat_brutus_executer(int numero, const int32_t *args)
             return brutus_versus_activer();
         case BRUTUS_TRICHE_DEMANDE:
             return scenario_request_brutus_triche();
+        case BRUTUS_TRICHE_COMBAT:
+            return brutus_combat_triche(args[0]);
+        case BRUTUS_TRICHE_SOLDATS:
+            return brutus_combat_triche_soldats();
         default:
             break;
     }

@@ -1,5 +1,6 @@
 #include "city.h"
 
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 #include "building/construction.h"
 #include "building/properties.h"
 #include "building/rotation.h"
@@ -320,7 +321,8 @@ static int handle_legion_click(const map_tile *tile)
 {
     if (tile->grid_offset) {
         int formation_id = formation_legion_at_grid_offset(tile->grid_offset);
-        if (formation_id > 0 && !formation_get(formation_id)->in_distant_battle) {
+        if (formation_id > 0 && !formation_get(formation_id)->in_distant_battle &&
+            !brutus_versus_formation_ignorer(formation_get(formation_id))) { // Brutus III (M10) : ses légions
             window_city_military_show(formation_id);
             return 1;
         }

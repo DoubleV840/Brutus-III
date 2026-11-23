@@ -1,6 +1,7 @@
 #include "city.h"
 
 #include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 #include "multijoueur/reseau.h" // Brutus III
 
 #include "building/clone.h"
@@ -708,7 +709,7 @@ static void cycle_legion(void)
     for (int pass = 0; pass < 2 && next_legion_id == 0; pass++) {
         for (int i = 1; i < formation_count(); i++) {
             const formation *m = formation_get(i);
-            if (!m || m->in_use != 1 || !m->is_legion || m->is_herd) {
+            if (!m || m->in_use != 1 || !m->is_legion || m->is_herd || brutus_versus_formation_ignorer(m)) {
                 continue;
             }
             if ((pass == 0 && i > current_legion_id) || (pass == 1)) {

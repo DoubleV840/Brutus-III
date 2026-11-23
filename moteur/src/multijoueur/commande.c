@@ -1,6 +1,7 @@
 // Brutus III : couche de commandes (phase 2a). Voir commande.h et docs/commandes.md.
 #include "multijoueur/commande.h"
 #include "multijoueur/versus.h"
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 #include "multijoueur/coop.h" // M7 : conflits
 
 #include "building/building.h"
@@ -394,8 +395,8 @@ static formation *legion(int id)
         return 0;
     }
     formation *m = formation_get(id);
-    if (!m->in_use || !m->is_legion) {
-        return 0;
+    if (!m->in_use || !m->is_legion || brutus_versus_formation_ignorer(m)) {
+        return 0; // M10 : en Versus, chacun ne commande que ses légions
     }
     return m;
 }

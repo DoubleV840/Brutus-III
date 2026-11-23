@@ -8,6 +8,7 @@
 #include "core/log.h"
 #include "figure/figure.h"
 #include "multijoueur/carte_versus.h"
+#include "multijoueur/combat_versus.h"
 #include "multijoueur/empreinte.h"
 #include "multijoueur/simulation.h"
 #include "scenario/request.h"
@@ -16,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define VERSION_BLOC 4 // 2 : ville de chaque message ; 3 : demandes de César de chaque ville ; 4 : points de la carte
+#define VERSION_BLOC 5 // 2 : ville de chaque message ; 3 : demandes de César ; 4 : points de la carte ; 5 : combat
 #define TAILLE_VILLE_MAX 65536
 
 static const char MARQUE[4] = { 'B', 'R', '3', 'V' };
@@ -133,6 +134,7 @@ uint32_t brutus_versus_teinte(int ville)
 
 static void remettre_une_ville(void)
 {
+    brutus_combat_definir_option(1); // M10 : combat activé par défaut au passage en Versus
     etat.villes = 1;
     etat.vue = 0;
     brutus_ville_activer(0);
@@ -181,7 +183,7 @@ static uint32_t composer(uint8_t **sortie)
     unsigned int nb_batiments = (unsigned int) building_count();
     unsigned int nb_figures = figure_count();
     unsigned int nb_messages = (unsigned int) city_message_brutus_cases();
-    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures + 4 + nb_messages + BRUTUS_CARTE_VERSUS_TAILLE;
+    uint32_t taille = 2 + 4 + nb_batiments + 4 + nb_figures + 4 + nb_messages + BRUTUS_CARTE_VERSUS_TAILLE + 1;
     taille += (uint32_t) (etat.villes - 1) * (4 + TAILLE_VILLE_MAX);
     int active_avant = etat.active;
     for (int v = 1; v < etat.villes; v++) {
@@ -218,6 +220,7 @@ static uint32_t composer(uint8_t **sortie)
         brutus_carte_versus_ecrire(&b); // M9 : points des autres joueurs, pour un passage en Versus plus tard
         p += BRUTUS_CARTE_VERSUS_TAILLE;
     }
+    d[p++] = (uint8_t) brutus_combat_option(); // M10 (version 5) : options du Versus (bit 0 : combat)
     int avant = etat.active;
     for (int v = 1; v < etat.villes; v++) {
         buffer b;
@@ -371,6 +374,14 @@ void brutus_versus_appliquer_lu(void)
         }
     } else {
         brutus_carte_versus_effacer();
+    }
+    brutus_combat_definir_option(1); // avant la version 5 : combat activé (défaut)
+    if (ok && version >= 5) {
+        ok = p + 1 <= taille;
+        if (ok) {
+            brutus_combat_definir_option(d[p] & 1);
+            p++;
+        }
     }
     if (!ok) {
         log_error("Brutus III (M8) : bloc Versus illisible, partie chargée avec une seule ville", 0, 0);

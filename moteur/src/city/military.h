@@ -3,6 +3,7 @@
 
 void city_military_clear_legionary_legions(void);
 void city_military_add_legionary_legion(void);
+void city_military_brutus_add_legionary_legion(int ville); // Brutus III (M10) : légion de cette ville
 int city_military_has_legionary_legions(void);
 
 int city_military_total_legions(void);

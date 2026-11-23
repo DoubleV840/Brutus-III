@@ -11,10 +11,23 @@
 #include "figure/formation.h"
 #include "figure/formation_legion.h"
 #include "scenario/distant_battle.h"
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
+#include "multijoueur/versus.h"
 
 void city_military_clear_legionary_legions(void)
 {
-    city_data.military.legionary_legions = 0;
+    // Brutus III (M10) : chaque ville compte ses légions (une seule ville : comme avant)
+    for (int v = 0; v < brutus_versus_villes(); v++) {
+        brutus_villes_donnees[v].military.legionary_legions = 0;
+    }
+}
+
+void city_military_brutus_add_legionary_legion(int ville)
+{
+    if (ville < 0 || ville >= brutus_versus_villes()) {
+        ville = 0;
+    }
+    brutus_villes_donnees[ville].military.legionary_legions++;
 }
 
 void city_military_add_legionary_legion(void)
@@ -54,21 +67,27 @@ void city_military_clear_empire_service_legions(void)
 
 void city_military_update_totals(void)
 {
-    city_data.military.empire_service_legions = 0;
-    city_data.military.total_soldiers = 0;
-    city_data.military.soldiers_in_city = 0;
-    city_data.military.total_legions = 0;
+    // Brutus III (M10) : chaque ville compte les légions de ses forts (une seule ville : comme avant)
+    for (int v = 0; v < brutus_versus_villes(); v++) {
+        struct city_data_t *ville = &brutus_villes_donnees[v];
+        ville->military.empire_service_legions = 0;
+        ville->military.total_soldiers = 0;
+        ville->military.soldiers_in_city = 0;
+        ville->military.total_legions = 0;
+    }
     for (int i = 1; i < formation_count(); i++) {
         const formation *m = formation_get(i);
         if (m->in_use && m->is_legion) {
-            city_data.military.total_legions++;
-            city_data.military.total_soldiers += m->num_figures;
+            int v = brutus_versus_formation_proprietaire(m);
+            struct city_data_t *ville = &brutus_villes_donnees[v >= 0 && v < brutus_versus_villes() ? v : 0];
+            ville->military.total_legions++;
+            ville->military.total_soldiers += m->num_figures;
             if (m->empire_service && m->num_figures > 0) {
-                city_data.military.empire_service_legions++;
+                ville->military.empire_service_legions++;
             }
 
             if (!m->in_distant_battle) {
-                city_data.military.soldiers_in_city += m->num_figures;
+                ville->military.soldiers_in_city += m->num_figures;
             }
         }
     }

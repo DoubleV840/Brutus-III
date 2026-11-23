@@ -13,6 +13,7 @@
 #include "figure/movement.h"
 #include "figure/properties.h"
 #include "figure/route.h"
+#include "multijoueur/combat_versus.h" // Brutus III (M10)
 #include "figuretype/missile.h"
 #include "map/figure.h"
 #include "map/grid.h"
@@ -477,6 +478,9 @@ void figure_soldier_action(figure *f)
                     }
                 } else if (f->type == FIGURE_FORT_INFANTRY || f->type == FIGURE_FORT_MOUNTED) {
                     legionary_attack_adjacent_enemy(f);
+                }
+                if (f->action_state == FIGURE_ACTION_84_SOLDIER_AT_STANDARD) {
+                    brutus_combat_attaquer_batiment(f); // Brutus III (M10) : bâtiments de l'autre ville
                 }
             }
             break;
