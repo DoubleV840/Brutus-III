@@ -37,6 +37,7 @@
 #include "window/select_list.h"
 #include "window/text_input.h"
 #include "window/user_path_setup.h"
+#include "multijoueur/nom_jeu.h" // Brutus III
 
 #include <stdio.h>
 #include <string.h>
@@ -926,7 +927,7 @@ static int config_change_string_language(int key)
         return 0;
     }
     char title[100];
-    encoding_to_utf8(lang_get_string(9, 0), title, 100, 0);
+    snprintf(title, sizeof(title), "%s", BRUTUS_NOM_JEU); // Brutus III : au lieu de « Caesar III »
     system_change_window_title(title);
     memcpy(data.config_string_values[key].original_value, data.config_string_values[key].new_value,
            CONFIG_STRING_VALUE_MAX);

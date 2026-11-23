@@ -107,6 +107,10 @@ Tout se fait dans le jeu, par le menu **« Multijoueur »** : un bouton au menu 
 
 Page servie depuis `localhost` ou `127.0.0.1` : elle utilise le relais local (`ws://127.0.0.1:8787`) ; ajouter `?relais=en-ligne` à l'adresse pour passer par le relais en ligne. Ailleurs (brutus.ivwi.fr), c'est le relais en ligne. Dans la version native, la fenêtre Multijoueur explique où jouer. Si quelque chose cloche, noter le message affiché dans la fenêtre et la console du navigateur.
 
+**Démarrage direct** : une fois le dossier du jeu copié dans le navigateur, la page lance le jeu toute seule à chaque visite. Pour retrouver l'accueil (« Changer de dossier du jeu », « Tout effacer ») : « Quitter » dans le menu principal du jeu, ou `?accueil` à la fin de l'adresse.
+
+**Nom du jeu** : le jeu s'affiche comme « Brutus III » (titre de la fenêtre et de l'onglet, bannière du menu principal, textes qui disaient « Augustus » : `moteur/src/multijoueur/nom_jeu.c`). Le moteur reste crédité dans le bandeau de version du menu et en bas de la page. La bannière est générée par `outils/generer-banniere.py` (Pillow et numpy, police Baskerville de macOS).
+
 
 Tests du client réseau, sans navigateur :
 

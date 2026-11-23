@@ -3,6 +3,7 @@
 #include "core/encoding.h"
 #include "core/log.h"
 #include "core/string.h"
+#include "multijoueur/nom_jeu.h"
 
 #include <string.h>
 
@@ -25,7 +26,8 @@ static void set_strings(const translation_string *strings, int num_strings, int 
             log_info("Translation key not found:", string->string, string->key);
         }
         int length_left = BUFFER_SIZE - data.buf_index;
-        encoding_from_utf8(string->string, &data.buffer[data.buf_index], length_left);
+        // Brutus III : « Augustus » devient « Brutus III » dans les textes affichés.
+        encoding_from_utf8(brutus_nom_jeu_traduire(string->string), &data.buffer[data.buf_index], length_left);
         data.strings[string->key] = &data.buffer[data.buf_index];
         data.buf_index += 1 + string_length(&data.buffer[data.buf_index]);
     }

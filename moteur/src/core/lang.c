@@ -2,6 +2,7 @@
 
 #include "building/building.h"
 #include "core/buffer.h"
+#include "multijoueur/nom_jeu.h" // Brutus III
 #include "core/file.h"
 #include "core/io.h"
 #include "core/log.h"
@@ -70,6 +71,7 @@ static void parse_text(buffer *buf)
         data.text_entries[i].in_use = buffer_read_i32(buf);
     }
     buffer_read_raw(buf, data.text_data, MAX_TEXT_DATA);
+    brutus_nom_jeu_textes_originaux(data.text_data, MAX_TEXT_DATA); // Brutus III
 }
 
 static int load_text(const char *filename, int localizable, uint8_t *buf_data)
@@ -133,6 +135,7 @@ static void parse_message(buffer *buf)
         m->content.text = get_message_text(buffer_read_i32(buf));
     }
     buffer_read_raw(buf, &data.message_data, MAX_MESSAGE_DATA);
+    brutus_nom_jeu_textes_originaux(data.message_data, MAX_MESSAGE_DATA); // Brutus III
 }
 
 

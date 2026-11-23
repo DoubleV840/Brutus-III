@@ -60,9 +60,9 @@ function loadPage(options = {}) {
     visibilityState: 'visible',
   };
   const ctx = {
-    document, navigator: { userAgent: 'node-test' }, location: { href: 'http://localhost:8000/augustus.html' },
+    document, navigator: { userAgent: 'node-test' }, location: { href: 'http://localhost:8000/augustus.html', search: options.search === undefined ? '?accueil' : options.search },
     indexedDB: options.noIndexedDB ? undefined : indexedDB, IDBKeyRange, console, setTimeout, clearTimeout, setInterval, clearInterval,
-    TextDecoder, TextEncoder, WebAssembly, performance, URL, Blob, fetch, atob, btoa, queueMicrotask,
+    TextDecoder, TextEncoder, WebAssembly, performance, URL, URLSearchParams, Blob, fetch, atob, btoa, queueMicrotask,
     requestAnimationFrame: (f) => setTimeout(f, 16),
     FileReader: function FileReader() {},
     addEventListener() {}, removeEventListener() {},
@@ -132,6 +132,13 @@ const exists = (p, f) => { try { p.FS().stat(f); return true; } catch (e) { retu
   check(!exists(p, '/C3/autre.bin') && !exists(p, '/C3/jeu1'), 'seule la racine du jeu est copiée');
   check(exists(p, '/C3/Rome.sav'), 'sauvegarde 1 retrouvée après rechargement');
   check(exists(p, '/C3/Rome2.svx'), 'sauvegarde 2 (écrite pendant une synchro) retrouvée');
+
+  // 4b. Démarrage direct : sans ?accueil, le jeu déjà installé se lance sans bouton « Jouer ».
+  const direct = loadPage({ search: '' });
+  await until(() => direct.Module.calls.length === 1, 'démarrage direct');
+  check(JSON.stringify(direct.Module.calls[0]) === '["/C3"]' && !shown(direct, 'startOptions'),
+    'démarrage direct : jeu lancé sans passer par l\'accueil');
+  direct.Module.running = false;
 
   // 5. Changer de dossier : les sauvegardes restent, l'ancien jeu part.
   p.Module.loadGameFiles(Promise.resolve([

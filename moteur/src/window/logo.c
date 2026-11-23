@@ -1,5 +1,6 @@
 #include "logo.h"
 
+#include "assets/assets.h"
 #include "core/config.h"
 #include "graphics/graphics.h"
 #include "graphics/image.h"
@@ -64,7 +65,8 @@ static void draw_background(void)
     graphics_clear_screen();
 
     graphics_in_dialog();
-    image_draw(image_group(GROUP_LOGO), 0, 0, COLOR_MASK_NONE, SCALE_NONE);
+    // Brutus III : notre logo au lieu de celui de Caesar III (GROUP_LOGO), sur fond noir.
+    image_draw(assets_get_image_id("Brutus", "Logo Demarrage"), 36, 160, COLOR_MASK_NONE, SCALE_NONE);
     lang_text_draw_centered_colored(13, 7, 160, 462, 320, FONT_NORMAL_PLAIN, COLOR_WHITE);
     graphics_reset_dialog();
 }

@@ -880,6 +880,7 @@ set(MULTIJOUEUR_FILES
     ${PROJECT_SOURCE_DIR}/src/multijoueur/fin_versus.c # Brutus III : M11 (écran de fin)
     ${PROJECT_SOURCE_DIR}/src/multijoueur/recap_versus.c # Brutus III : M12 (récap de fin de partie)
     ${PROJECT_SOURCE_DIR}/src/multijoueur/generateur_cartes.c # Brutus III : M9 (cartes Versus)
+    ${PROJECT_SOURCE_DIR}/src/multijoueur/nom_jeu.c # Brutus III : nom du jeu affiché
 )
 
 set(SOURCE_FILES
