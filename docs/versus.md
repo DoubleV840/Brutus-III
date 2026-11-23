@@ -100,15 +100,29 @@ se lisent encore.
 - **Éditeur de cartes.** Menu « Points des personnes » : « Entrée joueur 2 » et « Sortie joueur 2 » (même règle que
   l'entrée et la sortie : sur le bord, terrain dégagé). Leur drapeau porte le numéro 2. Ils sont enregistrés avec
   la carte. Une nouvelle carte n'en a pas.
-- **Nos trois cartes** (100 × 100, symétriques : même terrain, mêmes ressources, même route de Rome pour les deux
+- **Nos cinq cartes** (100 × 100, symétriques : même terrain, mêmes ressources, même route de Rome pour les deux
   joueurs ; jeu libre, la victoire du Versus viendra en M11 ; 4 000 deniers au départ) :
   - **Brutus - Deux rives** : un fleuve en diagonale, un gué au centre ;
   - **Brutus - Lac central** : une plaine, un lac au centre, une forêt en arc entre les deux villes ;
-  - **Brutus - Rivage** : une côte au sud ouverte aux navires, des collines entre les deux villes, deux passages.
+  - **Brutus - Rivage** : une côte au sud ouverte aux navires, des collines entre les deux villes, deux passages ;
+  - **Brutus - Collines** (23/11) : une ville à gauche, l'autre à droite, une crête rocheuse au milieu (carrières et
+    mines) qu'on ne passe que par deux cols, un étang (pêche) et des prés de chaque côté ;
+  - **Brutus - Marais** (23/11) : un fleuve en diagonale bordé de roseaux et de prés humides, trois gués.
+  Le générateur affiche un bilan par joueur (prés, terrain libre, arbres, rochers, eau). Le 23/11, à la demande du
+  fondateur, le Lac central a reçu des prés sur les rives du lac et une couronne de champs autour de chaque ville :
+  37 cases de prés par joueur avant, 822 après (Deux rives : 484, Rivage : 322, Collines : 779, Marais : 642).
   Elles sont créées par programme (`multijoueur/generateur_cartes.c`, aucune donnée du jeu d'origine) :
   `bash outils/creer-cartes-versus.sh` les refait dans `moteur/res/assets/Brutus/cartes/`. Elles sont embarquées
   avec les assets (application et page web) ; au démarrage, le jeu copie celles qui manquent dans le dossier des
-  cartes (une carte déjà présente, peut-être retouchée, n'est pas écrasée).
+  cartes (une carte déjà présente, peut-être retouchée, n'est pas écrasée). Exception : une carte refaite depuis
+  (champ `version` du modèle, plus grand que le numéro noté dans `brutus-cartes-version.txt` du dossier des cartes)
+  remplace l'ancienne copie une seule fois ; le Lac central est en version 2. Si tu refais une carte, augmente sa
+  version. Une partie déjà commencée garde son terrain (il est dans la sauvegarde).
+- **Caméra au départ** (23/11) : au passage en Versus en réseau, chaque joueur, ville bleue comprise, part du
+  centre de sa zone (`centre_zone`, `multijoueur/versus.c`) : le milieu de ses maisons si sa ville en a (partie
+  créée depuis une ville en cours), sinon la zone la plus dégagée de son côté, près de son entrée (la clairière
+  préparée pour sa ville sur nos cartes). Avant, la ville bleue gardait la vue de l'hôte et la rouge partait de son
+  point d'entrée, au bord de la carte.
 - **Versus local** : Alt+W garde la vue de chaque ville ; la première fois, la vue part de l'entrée de la ville.
 - **Tests** : `bash outils/test-versus.sh 60000 "Brutus - Deux rives"` (de même « Brutus - Lac central »,
   « Brutus - Rivage ») : le bot du joueur 2 part de l'entrée du joueur 2 (`entree2` dans `--info-carte`). Le bilan du
@@ -213,8 +227,8 @@ passent.
 - **Cartes à deux en tête** : en Versus, la liste des cartes commence par celles qui ont une entrée pour le joueur 2
   (bloc `BR3C` : nos trois cartes et celles faites dans l'éditeur), dans l'ordre d'origine ; les autres suivent (les deux
   villes partent alors de la même entrée). `brutus_carte_versus_fichier_a_deux()` lit les 25 derniers octets du fichier.
-- **Ce que voient les invités** : l'hôte donne au relais une ligne d'information (« Versus, carte « Brutus - Deux rives »,
-  combat activé, 10 ans ») ; le relais la renvoie à chacun dans `bienvenue` (docs/protocole.md) et la fenêtre
+- **Ce que voient les invités** : l'hôte donne au relais une ligne d'information (« Versus, carte Brutus - Deux rives,
+  combat activé, 10 ans », sans guillemets autour du nom : la police du jeu ne les a pas) ; le relais la renvoie à chacun dans `bienvenue` (docs/protocole.md) et la fenêtre
   Multijoueur l'affiche à côté du code, avant le départ comme pendant la partie.
 - **Départ** : en Versus, l'hôte est mis en pause tant que l'autre joueur n'est pas là (pas d'avance gratuite). Au
   premier tour du lockstep, l'hôte envoie trois commandes, appliquées par tous au même tick : `triche` 103 (passage en
@@ -277,6 +291,22 @@ passent.
 - **Test réseau** : `bash outils/test-reseau-memoire.sh court --versus` (deux moteurs wasm dans Node, relais en
   mémoire, tout le scénario de coupures et de resynchronisations du test réseau) : l'hôte crée en Versus comme le
   menu ; l'invité voit la ligne d'information, chacun voit sa ville, mêmes options, même fin et même récap.
+
+## Corrections du 23/11/2026 (retours du fondateur)
+
+- **Démolition** : l'outil de démolition ne touche plus que les bâtiments de sa propre ville
+  (`get_deletable_building`, `building/construction_clear.c` : `brutus_versus_ignorer`). La ville active est celle du
+  joueur qui envoie l'ordre : le refus est le même chez tous ; dans l'interface c'est la ville du joueur local, donc
+  l'aperçu ne marque pas les bâtiments de l'autre et la confirmation « détruire ce fort » ne s'ouvre pas pour un fort
+  adverse. Routes, aqueducs et terrain restent communs (ils n'ont pas de propriétaire). Effet de bord découvert : le
+  bot de test de l'invité démolissait au hasard les murs de l'hôte, si bien que le cas « route de Rome coupée » du test
+  réseau Versus n'avait jamais vraiment coupé la route. Il est désormais vérifié : message chez l'hôte, rien chez
+  l'invité.
+- **Faveur de César de la ville 2** : au passage en Versus, la ville 2 était remise à zéro (`city_data_init`) sans
+  la faveur de départ du scénario : faveur 0, donc dès le premier mois « César est en colère » et une invasion de
+  l'empereur annoncée dans un an. Elle reçoit maintenant `city_emperor_init_scenario` comme une partie neuve (faveur,
+  salaire, rang). Le trésor de départ, lui, était déjà bon (celui du scénario, 6 000 Dn sur « Deux rives » pour les
+  deux villes). Une sauvegarde Versus faite avant la correction garde sa faveur à 0 pour la ville 2.
 
 ## Laissé aux missions suivantes
 

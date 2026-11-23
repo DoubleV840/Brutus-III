@@ -25,11 +25,13 @@ fi
 [ -x "$BINAIRE" ] || { echo "ERREUR : moteur natif introuvable (cmake --build build-natif)." >&2; exit 1; }
 mkdir -p "$DOSSIER" "$RACINE/build-rejouage"
 
-for modele in deux-rives lac rivage; do
+for modele in deux-rives lac rivage collines marais; do
   case "$modele" in
     deux-rives) nom="Brutus - Deux rives.mapx" ;;
     lac) nom="Brutus - Lac central.mapx" ;;
     rivage) nom="Brutus - Rivage.mapx" ;;
+    collines) nom="Brutus - Collines.mapx" ;;
+    marais) nom="Brutus - Marais.mapx" ;;
   esac
   log="$RACINE/build-rejouage/carte-$modele.log"
   if ! "$BINAIRE" --creer-carte-versus "$modele" "$DOSSIER/$nom" "$JEU" > "$log" 2>&1; then
@@ -37,6 +39,6 @@ for modele in deux-rives lac rivage; do
     tail -20 "$log" >&2
     exit 1
   fi
-  grep "Brutus III : carte" "$log"
+  grep "Brutus III : carte\|Brutus III : bilan" "$log"
 done
 ls -la "$DOSSIER"

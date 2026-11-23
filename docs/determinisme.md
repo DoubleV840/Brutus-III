@@ -130,6 +130,20 @@ Les messages du mode Coop (`CHAT`, `PING`, `PRESENCE`, `SIGNAL`) ne passent jama
 - Vrai relais, 30 min (`bash outils/test-reseau-30min.sh`, `wrangler dev` sur 8788) : 225 869 ticks, 4 511 empreintes comparées, **zéro divergence**, empreintes finales identiques ; présence, latence (2 à 6 ms), chat et signal OK. Le cas du conflit avait échoué (0 sur 15 essais) parce que le test injectait les deux ordres « au même passage », ce qui en temps réel ne tombe pas dans le même tour : il vise désormais un tour précis. Refait ensuite avec le vrai relais sur 20 000 ticks : OK, conflit détecté au premier essai.
 - Un premier essai de 30 min avait échoué sans bug : le Mac (sur batterie) s'est mis en veille 15 min, et au réveil le relais local avait effacé le salon. Le script se lance maintenant sous `caffeinate -i`.
 
+## Test réseau (Coop jusqu'à 4, 23/11/2026)
+
+`bash outils/test-reseau-memoire.sh [ticks] --joueurs=3` (ou `--joueurs=4`) : l'hôte crée un salon Coop de 3 ou 4 places comme le menu Multijoueur (`brutus_menu_definir_places`, `brutus_menu_creer` : info « Coop à 3, carte Lugdunum »), l'invité rejoint, puis les joueurs 3 et 4 **arrivent pendant la partie** (resynchronisation d'arrivée). Un bot par joueur (graines 42 à 45). Le scénario des deux joueurs est gardé, avec en plus : coupure propre puis silencieuse du joueur 3, resynchronisation qu'il demande, **coupures simultanées** de l'invité et du joueur 3, **rechargement de la page du joueur 3** (moteur neuf, session reprise par son stockage, même numéro). Les cas complémentaires (présence, latence, chat, signal, conflit, route de Rome…) portent sur tous les joueurs. Critères en plus : empreintes finales identiques chez tous, chacun voit tous les joueurs connectés avec leur pseudo (Léa, Marcus, Julia, Quintus), vue de chacun connue de tous (cadre sur la mini-carte, `brutus_coop_test_presence`), « en attente de » vu pendant les coupures du joueur 3. Rapport : `build-reseau/rapport-memoire-coop3.txt`.
+
+| Passe | Ticks | Durée réelle | Empreintes comparables | Divergences réelles | Comparaison finale |
+|---|---|---|---|---|---|
+| 3 joueurs, court | 87 700 | 68 s | 1 749 | 0 | identique chez les 3 |
+| 4 joueurs, court | 62 380 | 71 s | 1 243 | 0 | identique chez les 4 |
+| **3 joueurs, 225 000 ticks** | 288 215 | 130 s | 5 756 | 0 | identique chez les 3 |
+
+Dans les trois passes : panne injectée détectée une fois et réparée, tous les événements et tous les critères cochés. Deux corrections du test seulement : un événement ne part plus tant que la panne injectée n'est pas détectée (une resynchronisation la réparait en silence), et l'hôte remet de l'argent (triche 0, commande synchronisée) avant les cas qui construisent, car trois bots ruinent la ville (−178 000 Dn sur une longue partie). Non-régression à 2 joueurs (Coop et Versus) : OK.
+
+**Divergence intermittente, antérieure à cette mission** : une fois sur quatre passes courtes à **deux** joueurs le 23/11, une divergence réelle est apparue 50 ticks après le rechargement de la page de l'hôte, quand l'hôte (moteur neuf) et l'invité chargent la sauvegarde de l'invité (morceau `figure_grid`). Elle est détectée et réparée par la resynchronisation suivante. Ce chemin n'a pas changé dans cette mission (aucun code de simulation touché) ; les trois passes suivantes étaient OK. Piste : un état des personnages hors sauvegarde chez l'invité, comme ceux de l'audit (`--prechargement`). À reprendre.
+
 ## Divergences trouvées à la relecture QA (M6b) : causes corrigées
 
 Deux familles de divergence que la resynchronisation aurait cachées (le client recharge l'état de l'hôte à la première empreinte différente, et le symptôme disparaît). Elles sont corrigées **à la cause**, dans le moteur :

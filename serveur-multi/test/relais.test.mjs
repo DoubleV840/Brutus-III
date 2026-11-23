@@ -117,7 +117,7 @@ async function recevoirSauvegarde(c) {
 const attendreMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
 before(async () => {
-  // Délai de fermeture court pour tester l'alarme ; 4 joueurs permis (2 en production).
+  // Délai de fermeture court pour tester l'alarme ; 4 joueurs permis (comme en production).
   relais = await demarrerRelais({ DELAI_FERMETURE_S: 1, JOUEURS_MAX: 4 });
 });
 
@@ -277,10 +277,12 @@ describe("relais Brutus III", () => {
     // M7 : présence aux autres, signal à tous.
     invite.envoyer(TYPE.PRESENCE, 0, new Uint8Array(24), DEST_AUTRES);
     invite.envoyer(TYPE.SIGNAL, 0, new Uint8Array(4), DEST_TOUS);
+    // Lobby : « prêt », à tous.
+    invite.envoyer(TYPE.PRET, 0, new Uint8Array([1]), DEST_TOUS);
     const [avantHote, avantInvite] = await barriere(invite, hote, invite);
     assert.deepEqual(avantHote.map((m) => [m.type, m.joueur]),
-      [[TYPE.SAUVEGARDE_DEMANDE, 1], [TYPE.CHAT, 1], [TYPE.PRESENCE, 1], [TYPE.SIGNAL, 1]]);
-    assert.deepEqual(avantInvite.map((m) => m.type), [TYPE.PING, TYPE.SIGNAL]);
+      [[TYPE.SAUVEGARDE_DEMANDE, 1], [TYPE.CHAT, 1], [TYPE.PRESENCE, 1], [TYPE.SIGNAL, 1], [TYPE.PRET, 1]]);
+    assert.deepEqual(avantInvite.map((m) => m.type), [TYPE.PING, TYPE.SIGNAL, TYPE.PRET]);
   });
 
   test("TOUR, VITESSE et EMPREINTE : seulement à tout le salon", async () => {

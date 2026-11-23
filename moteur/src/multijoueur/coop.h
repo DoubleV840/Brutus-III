@@ -42,6 +42,8 @@ BRUTUS_RESEAU_EXPORT int brutus_coop_conflits(void);
 
 /** Tests : la n-ième case libre (3 x 3 cases dégagées autour), ou -1 ; x et y (i32) dans le tampon. */
 BRUTUS_RESEAU_EXPORT int brutus_coop_test_case_libre(int n);
+/** Tests (Coop jusqu'à 4) : vrai si la vue du joueur `joueur` est connue (cadre sur la mini-carte). */
+BRUTUS_RESEAU_EXPORT int brutus_coop_test_presence(int joueur);
 
 /** multijoueur/commande.c : un ordre du joueur local a échoué après celui d'un autre joueur. */
 void brutus_coop_signaler_conflit(void);

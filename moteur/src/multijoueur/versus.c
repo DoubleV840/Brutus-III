@@ -5,6 +5,7 @@
 #include "building/menu.h"
 #include "city/data.h"
 #include "city/data_private.h"
+#include "city/emperor.h"
 #include "city/message.h"
 #include "core/log.h"
 #include "figure/figure.h"
@@ -15,6 +16,7 @@
 #include "multijoueur/recap_versus.h"
 #include "multijoueur/simulation.h"
 #include "multijoueur/victoire_versus.h"
+#include "scenario/property.h"
 #include "scenario/request.h"
 #include "widget/minimap.h"
 
@@ -165,6 +167,9 @@ int brutus_versus_activer(void)
     brutus_ville_activer(1);
     city_data_init();
     city_data_init_scenario();
+    // Faveur de César, salaire et rang de départ, comme une partie neuve : sans cela la ville 2 partait avec une
+    // faveur de 0, et César lui annonçait dès le premier mois sa colère et une invasion dans un an.
+    city_emperor_init_scenario(scenario_campaign_rank());
     brutus_villes_donnees[1].map = brutus_villes_donnees[0].map;
     scenario_request_brutus_copier(1); // mêmes demandes de César, mais chacune les siennes
     brutus_ville_activer(avant);
@@ -501,6 +506,8 @@ uint64_t brutus_versus_empreinte(uint64_t h)
 #include "game/cheats.h"
 #include "graphics/window.h"
 #include "multijoueur/commande.h"
+#include "map/grid.h"
+#include "map/terrain.h"
 
 #include <stdio.h>
 
@@ -550,15 +557,77 @@ void brutus_versus_apres_chargement(void)
     }
 }
 
+// Centre de la zone de jeu d'une ville (affichage seulement) : le milieu de ses maisons si elle en a (ville
+// créée depuis une partie en cours), sinon la zone la plus dégagée près de son entrée, de son côté. Sur nos cartes,
+// c'est la clairière préparée pour la ville ; sur une carte ordinaire, les abords de l'entrée commune. -1 si rien.
+static int centre_zone(int ville)
+{
+    long sx = 0, sy = 0, n = 0;
+    for (int i = 1; i < building_count(); i++) { // ses maisons
+        building *b = building_get(i);
+        if (b->state == BUILDING_STATE_IN_USE && b->house_size && b->brutus_proprietaire == ville) {
+            sx += b->x;
+            sy += b->y;
+            n++;
+        }
+    }
+    if (n >= 3) {
+        return map_grid_offset((int) (sx / n), (int) (sy / n));
+    }
+    map_point e = brutus_carte_versus_entree(ville);
+    if (e.x < 0) {
+        e = brutus_carte_versus_entree(0);
+    }
+    // Le point de son côté (plus près de son entrée que de celle des autres), à moins de 35 cases de l'entrée,
+    // qui a le plus de terrain dégagé autour de lui (carré de 17 cases) : la clairière de la ville.
+    int largeur = map_grid_width(), hauteur = map_grid_height();
+    int meilleur = -1, meilleur_score = -1, meilleure_distance = 0;
+    for (int y = 10; y < hauteur - 10; y += 2) { // pas trop près du bord : la vue y montre le noir hors carte
+        for (int x = 10; x < largeur - 10; x += 2) {
+            int d = (x - e.x) * (x - e.x) + (y - e.y) * (y - e.y);
+            if (d > 35 * 35) {
+                continue;
+            }
+            int a_moi = 1;
+            for (int v = 0; v < etat.villes && a_moi; v++) {
+                map_point f = brutus_carte_versus_entree(v);
+                a_moi = v == ville || f.x < 0 || (x - f.x) * (x - f.x) + (y - f.y) * (y - f.y) >= d;
+            }
+            if (!a_moi) {
+                continue;
+            }
+            int score = 0;
+            for (int dy = -8; dy <= 8; dy++) {
+                for (int dx = -8; dx <= 8; dx++) {
+                    int cx = x + dx, cy = y + dy;
+                    if (cx >= 0 && cy >= 0 && cx < largeur && cy < hauteur &&
+                        !map_terrain_is(map_grid_offset(cx, cy), TERRAIN_NOT_CLEAR)) {
+                        score++;
+                    }
+                }
+            }
+            if (score > meilleur_score || (score == meilleur_score && d < meilleure_distance)) {
+                meilleur = map_grid_offset(x, y);
+                meilleur_score = score;
+                meilleure_distance = d;
+            }
+        }
+    }
+    return meilleur;
+}
+
 void brutus_versus_aller_chez_moi(void)
 {
     etat.aller_chez_moi = 0;
-    if (etat.villes <= 1 || etat.vue == 0 || brutus_simulation_en_cours()) {
-        return; // ville 1 : la vue de la sauvegarde est déjà la sienne
+    if (etat.villes <= 1 || brutus_simulation_en_cours()) {
+        return;
     }
+    // Chaque joueur, la ville bleue comprise, part du centre de sa zone (et non du point d'entrée, au bord
+    // de la carte, ni de la vue de l'hôte gardée dans la sauvegarde).
     int avant = etat.active;
     brutus_ville_activer(etat.vue);
-    city_view_go_to_grid_offset(city_map_entry_point()->grid_offset);
+    int centre = centre_zone(etat.vue);
+    city_view_go_to_grid_offset(centre >= 0 ? centre : city_map_entry_point()->grid_offset);
     brutus_ville_activer(avant);
     if (window_is(WINDOW_CITY)) {
         static uint8_t texte[120];

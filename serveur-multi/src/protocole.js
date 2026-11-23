@@ -37,6 +37,7 @@ export const TYPE = {
   PING: 0x11,
   PRESENCE: 0x12, // M7 : vue et curseur d'un joueur (jamais dans la simulation)
   SIGNAL: 0x13, // M7 : signal posé sur la carte
+  PRET: 0x14, // lobby : le joueur est prêt (1) ou non (0) ; la partie démarre quand tous le sont
 };
 export const TYPES_CONNUS = new Set(Object.values(TYPE));
 

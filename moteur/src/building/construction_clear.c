@@ -24,6 +24,7 @@
 #include "map/terrain.h"
 #include "map/tiles.h"
 #include "multijoueur/commande.h" // Brutus III
+#include "multijoueur/versus.h" // Brutus III
 #include "translation/translation.h"
 #include "window/popup_dialog.h"
 
@@ -78,6 +79,11 @@ static building *get_deletable_building(int grid_offset)
         return 0;
     }
     if (b->state == BUILDING_STATE_DELETED_BY_PLAYER || b->is_deleted) {
+        return 0;
+    }
+    // Brutus III : en Versus, on ne démolit que les bâtiments de sa ville (la ville active est celle du joueur
+    // qui envoie l'ordre ; dans l'interface, celle du joueur local : l'aperçu ne marque pas ceux de l'autre)
+    if (brutus_versus_ignorer(b->brutus_proprietaire)) {
         return 0;
     }
     return b;
@@ -369,7 +375,7 @@ static void scan_auto_confirm(int x_start, int y_start, int x_end, int y_end)
     for (int y = y_min; y <= y_max; y++) {
         for (int x = x_min; x <= x_max; x++) {
             int building_id = map_building_at(map_grid_offset(x, y));
-            if (building_id) {
+            if (building_id && !brutus_versus_ignorer(building_get(building_id)->brutus_proprietaire)) { // Brutus III
                 building *b = building_get(building_id);
                 if (building_monument_is_monument(b) && building_monument_type_is_mini_monument(b->type)) {
                     confirm.monument_confirmed = 1;
@@ -396,7 +402,7 @@ unsigned int building_construction_clear_land(int x_start, int y_start, int x_en
         for (int x = x_min; x <= x_max; x++) {
             int grid_offset = map_grid_offset(x, y);
             int building_id = map_building_at(grid_offset);
-            if (building_id) {
+            if (building_id && !brutus_versus_ignorer(building_get(building_id)->brutus_proprietaire)) { // Brutus III
                 building *b = building_get(building_id);
                 if (building_is_fort(b->type) || b->type == BUILDING_FORT_GROUND) {
                     ask_confirm_fort = 1;

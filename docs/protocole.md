@@ -82,7 +82,7 @@ Exemple :
 
 ```json
 {"type":"bienvenue","version":1,"code":"K7QXM3","joueur":1,"jeton":"9f2c…(32 car.)","joueursMax":2,
- "info":"Versus, carte « Brutus - Deux rives », combat activé, 10 ans",
+ "info":"Versus, carte Brutus - Deux rives, combat activé, 10 ans",
  "reconnexion":false,"joueurs":[{"joueur":0,"connecte":true,"pseudo":"Léa"},{"joueur":1,"connecte":true,"pseudo":""}]}
 ```
 
@@ -140,6 +140,7 @@ Un message à un joueur absent (pas encore arrivé ou déconnecté) est perdu sa
 | `0x11` | `PING` | un joueur | 0 | mesure de latence entre joueurs (M7, voir plus bas) |
 | `0x12` | `PRESENCE` | libre (le client : `0xFE`) | 0 | vue et curseur de l'émetteur, 24 octets (M7) |
 | `0x13` | `SIGNAL` | libre (le client : `0xFF`) | 0 | `i32` case de la carte signalée (M7) |
+| `0x14` | `PRET` | libre (le client : `0xFF`) | 0 | `u8` 1 prêt, 0 pas prêt (lobby) |
 
 `TOUR`, `VITESSE` et `EMPREINTE` doivent aller à tout le salon, émetteur compris : un tour envoyé à un seul joueur, ou sans écho à l'émetteur, désynchroniserait la partie sans aucune erreur. Le serveur refuse donc tout autre `dest` (`destinataire-interdit`).
 
@@ -154,6 +155,7 @@ Ces messages ne touchent jamais la simulation : ni commandes, ni sauvegarde, ni 
 - **`CHAT`** : texte UTF-8 (caractères de contrôle remplacés par des espaces), coupé à 400 octets. Envoyé à tout le salon, émetteur compris : la ligne s'affiche à l'écho, dans le même ordre chez tous. La page l'affiche avec `textContent` (jamais comme du HTML).
 - **`PING`** : 13 octets, `u8 sorte` (0 demande, 1 réponse), `u32 numéro`, `f64 heure d'envoi` (horloge de l'émetteur, en ms). Chaque client en envoie un à chaque autre joueur connecté toutes les 5 s ; le destinataire renvoie les mêmes octets avec `sorte = 1`. La latence affichée est l'aller-retour.
 - **`PRESENCE`** : 6 × `i32` : caméra x et y (coordonnées de vue, comme `city_view_get_camera`), largeur et hauteur de la vue en cases, orientation de la vue, case sous la souris (`grid offset`, `-1` hors de la carte). Envoyée aux autres quand elle change (au plus toutes les 150 ms) et au moins toutes les 2 s, seulement dans la ville. Le moteur la borne avant de dessiner : cadre de couleur sur la mini-carte (si l'orientation est la même, ce qui est le cas sauf pendant une rotation, partagée par la commande `rotation-vue`) et case colorée sous le curseur de l'autre.
+- **`PRET`** (lobby) : `u8`. Envoyé à tous, émetteur compris, quand le joueur clique « Prêt » (ou l'annule), et redit par chacun à chaque `bienvenue`, `joueur-arrive` et `joueur-revenu` tant que la partie n'a pas démarré (le nouveau venu apprend ainsi qui est prêt). Avant le départ, une arrivée ne lance plus de resynchronisation : l'hôte lance la partie (resynchronisation « tous prêts ») quand tous les joueurs connectés, deux au moins, sont prêts. Après le départ, une arrivée (Coop) rejoint directement, comme avant. Le relais n'en sait rien : il relaie le type comme les autres.
 - **`SIGNAL`** : `i32` case de la carte. Envoyé à tous, émetteur compris (touche **G** dans la page : case sous la souris). Chaque client fait clignoter la case et ses voisines 8 s, sur la ville et la mini-carte, et ajoute au chat une ligne avec un bouton « Voir » qui centre la vue dessus.
 
 Couleurs des joueurs (moteur et page) : joueur 1 bleu `#3399ff`, joueur 2 orange `#ff6633`, joueur 3 vert `#33dd55`, joueur 4 violet `#bb55ff`.
@@ -222,7 +224,7 @@ Exemple (en-tête, puis les 12 premiers octets du premier morceau) :
 | Limite | Valeur | Réglage |
 |---|---|---|
 | Taille d'un message (en-tête compris) | 65 536 octets | `TAILLE_MAX_MESSAGE` (`src/index.js`) |
-| Joueurs par salon | 2 (PLAN.md : 2, prévoir jusqu'à 4) | `JOUEURS_MAX` (`wrangler.jsonc`) : mettre `"4"` pour permettre au créateur de demander 3 ou 4 places |
+| Joueurs par salon | 4 au plus (le créateur demande 2, 3 ou 4 places : Coop de 2 à 4, Versus à 2) | `JOUEURS_MAX` (`wrangler.jsonc`, `"4"`) |
 | Fermeture d'un salon vide | 600 s après le départ du dernier joueur | `DELAI_FERMETURE_S` (`wrangler.jsonc`) |
 | Sauvegarde | 8 Mo | règle côté client (le serveur ne limite que chaque message) |
 

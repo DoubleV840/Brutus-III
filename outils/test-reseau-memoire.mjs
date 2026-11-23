@@ -60,6 +60,11 @@ const EMPREINTE_GROUPES = Number(opt('--empreinte-groupes', PROD ? '50' : '10'))
 // M12 : l'hôte crée la partie en Versus (menu Multijoueur : mode Versus, combat activé, durée DUREE_VERSUS mois) ;
 // chaque joueur joue sa ville ; à la fin, fin de partie et récap identiques chez les deux.
 const VERSUS = args.includes('--versus');
+// Coop jusqu'à 4 : nombre de joueurs du salon (2 par défaut ; le Versus reste à 2). À 3 ou 4, l'hôte crée le salon
+// comme le menu Multijoueur (mode Coop, « Places »), le 3e joueur (et le 4e) arrive pendant la partie, et le scénario
+// ajoute ses coupures, une resynchronisation qu'il demande, des coupures simultanées et le rechargement de sa page.
+const JOUEURS = VERSUS ? 2 : Math.max(2, Math.min(4, Number(opt('--joueurs', '2'))));
+const PSEUDOS = ['Léa', 'Marcus', 'Julia', 'Quintus'];
 const DUREE_VERSUS = Number(opt('--duree-versus', String(Math.max(2, Math.floor((TICKS * 0.7) / 800)))));
 
 const LS = require(fileURLToPath(new URL('../web/lockstep.js', import.meta.url)));
@@ -563,6 +568,9 @@ const mismatches = [];
 let panne = null; // { epoque, tick } : la panne injectée
 
 const clientsBruts = {};
+let menuCoop = null;
+const lobbyVu = {}; // lobby : la partie attend que tous soient prêts // Coop à 3 ou 4 : { joueurs, info } donnés par le menu
+const arrivees = {}; // joueur → état à son arrivée en cours de partie
 let brutsEcrits = false;
 function ecrireBruts(tick) {
   if (brutsEcrits) return;
@@ -716,7 +724,7 @@ class Client {
 async function principal() {
   dire(`Test réseau sans port : carte ${CARTE}, ${TICKS} ticks, une empreinte tous les ${EMPREINTE_GROUPES * 5} ticks.`);
   const journaux = JOURNAUX.map(lireJournal);
-  while (journaux.length < 2) {
+  while (journaux.length < JOUEURS) {
     journaux.push([]);
   }
   dire(`Journaux du bot : ${journaux.map((j) => j.length + ' commandes').join(', ')}.`);
@@ -724,9 +732,17 @@ async function principal() {
   let hote = new Client('hôte', 0, journaux[0]);
   let invite = new Client('invité', 1, journaux[1]);
   let premierInvite = null; // l'onglet remplacé (cas des deux onglets)
+  // Joueurs 3 et 4 (Coop jusqu'à 4) : `autres[k]` est le joueur k + 2.
+  const autres = [];
+  for (let j = 2; j < JOUEURS; j++) {
+    autres.push(new Client(`joueur ${j + 1}`, j, journaux[j]));
+  }
   await hote.demarrer();
   await invite.demarrer();
-  dire(`Deux instances du moteur prêtes (${secondes().trim()} s).`);
+  for (const c of autres) {
+    await c.demarrer();
+  }
+  dire(`${JOUEURS} instances du moteur prêtes (${secondes().trim()} s).`);
   const tick0 = hote.tick();
   const cible = tick0 + TICKS;
 
@@ -738,11 +754,23 @@ async function principal() {
     const info = hote.M.ccall('brutus_menu_action_texte', 'string', [], []);
     dire(`Versus : salon de ${joueurs} joueurs, info « ${info} ».`);
     hote.lock.creer(joueurs, info, 'Léa');
+  } else if (JOUEURS > 2) {
+    // Ce que fait le menu Multijoueur : mode Coop, « Places » sur JOUEURS, « Créer avec cette ville ».
+    hote.M.ccall('brutus_menu_definir_partie', null, ['number', 'number', 'number'], [0, 1, 0]);
+    hote.M.ccall('brutus_menu_definir_places', null, ['number'], [JOUEURS]);
+    const joueurs = hote.M.ccall('brutus_menu_creer', 'number', [], []);
+    hote.M.ccall('brutus_menu_action', 'number', [], []);
+    const info = hote.M.ccall('brutus_menu_action_texte', 'string', [], []);
+    menuCoop = { joueurs, info };
+    dire(`Coop : salon de ${joueurs} joueurs, info « ${info} ».`);
+    hote.lock.creer(joueurs, info, PSEUDOS[0]);
   } else {
     hote.lock.creer(2);
   }
   let it = 0;
-  const clients = () => [hote, invite];
+  const clients = () => [hote, invite, ...autres];
+  const tous = () => clients().every((c) => c.s().actif);
+  const phasesJeu = () => clients().every((c) => ['jeu', 'resync'].includes(c.lock.etat().phase));
   const pomperTout = () => {
     it++;
     if (!REEL || FAUX_WS) relais.tic(it);
@@ -759,8 +787,22 @@ async function principal() {
   if (!hote.s().code) {
     throw new Error('Le salon n’a pas été créé.');
   }
-  invite.lock.rejoindre(hote.s().code, VERSUS ? 'Marcus' : undefined);
+  invite.lock.rejoindre(hote.s().code, VERSUS || JOUEURS > 2 ? PSEUDOS[1] : undefined);
   dire(`Salon ${hote.s().code} : l'invité rejoint.`);
+  // Lobby : la partie ne démarre pas à l'arrivée de l'invité, ni quand seul l'hôte est prêt ; elle démarre
+  // quand les deux le sont (l'hôte la lance pour tous).
+  const attendreIt = async (n) => { for (let i = 0; i < n; i++) { pomperTout(); await respirer(); } };
+  while (!(hote.s().salon.length === 2 && invite.s().salon.length === 2) && it < 20000) {
+    pomperTout();
+    await respirer();
+  }
+  await attendreIt(TEMPS_REEL ? 500 : 200);
+  lobbyVu.arrivee = !hote.s().actif && !invite.s().actif && hote.lock.etat().lobby && invite.lock.etat().lobby;
+  hote.lock.pret(true);
+  await attendreIt(TEMPS_REEL ? 500 : 200);
+  lobbyVu.hotePret = !hote.s().actif && !invite.s().actif && invite.s().prets[0] === true && /1 prêt sur 2/.test(invite.lock.etat().texte);
+  invite.lock.pret(true);
+  dire(`Lobby : ${JSON.stringify(lobbyVu)} ; les deux joueurs sont prêts.`);
   while ((!hote.s().actif || !invite.s().actif) && it < 20000) {
     pomperTout();
     await respirer();
@@ -769,6 +811,28 @@ async function principal() {
     throw new Error('La partie à deux n’a pas démarré (resynchronisation d’arrivée).');
   }
   dire(`Partie à deux démarrée au tick ${hote.tick()} (époque ${hote.s().epoque}).`);
+  // Joueurs 3 et 4 : ils arrivent pendant la partie (resynchronisation d'arrivée lancée par l'hôte).
+  for (const [k, c] of autres.entries()) {
+    const arrives = [hote, invite, ...autres.slice(0, k + 1)];
+    const t1 = hote.tick();
+    while (hote.tick() < t1 + 300 && it < 200000) {
+      pomperTout();
+      await respirer();
+    }
+    const ep = hote.s().epoque;
+    c.lock.rejoindre(hote.s().code, PSEUDOS[c.joueurAttendu]);
+    dire(`${c.nom} rejoint la partie en cours (tick ${hote.tick()}).`);
+    const t0 = performance.now();
+    while (!(c.s().actif && hote.s().epoque !== ep && arrives.every((x) => x.s().actif && x.s().epoque === hote.s().epoque)) && performance.now() - t0 < 120000) {
+      pomperTout();
+      await respirer();
+    }
+    arrivees[c.joueurAttendu] = { joueur: c.s().joueur, actif: !!c.s().actif, epoque: c.s().epoque, tick: c.tick() };
+    if (!c.s().actif) {
+      throw new Error(`Le ${c.nom} n'a pas rejoint la partie (resynchronisation d'arrivée).`);
+    }
+    dire(`  ${c.nom} en jeu : numéro ${c.s().joueur + 1}, tick ${c.tick()}, époque ${c.s().epoque}.`);
+  }
 
   if (TEMPS_REEL) {
     // Le jeu tourne à la cadence réelle : on monte la vitesse partagée jusqu'à la vitesse demandée.
@@ -780,7 +844,7 @@ async function principal() {
         await respirer();
       }
     }
-    dire(`Vitesse partagée : hôte ${hote.moteur.vitesse()} %, invité ${invite.moteur.vitesse()} %.`);
+    dire(`Vitesse partagée : ${clients().map((c) => c.nom + ' ' + c.moteur.vitesse() + ' %').join(', ')}.`);
   }
 
   const evenements = [];
@@ -793,6 +857,7 @@ async function principal() {
 
   function evenement(nom, fraction, action, pret) {
     evenements.push({ nom, fraction, action, pret, fait: false });
+    evenements.sort((a, b) => a.fraction - b.fraction); // tri stable : l'ordre du scénario suit les fractions
   }
 
   // 1. coupure propre de l'invité (hors ligne 1,5 s)
@@ -842,12 +907,40 @@ async function principal() {
     }, () => !!panne && (mismatches.some((m) => m.attendue) && hote.s().epoque !== panne.epoque));
   }
 
+  // Coop à 3 ou 4 : le joueur 3 se coupe, demande une resynchronisation, se coupe en même temps que l'invité,
+  // puis recharge sa page (nouvelle instance du moteur, état perdu, session reprise par son stockage).
+  const trois = autres[0];
+  if (trois) {
+    evenement('coupure propre du joueur 3', 0.15, () => {
+      coupurePropre(trois, 1500);
+      outage = { nom: 'coupure propre joueur 3', fin: performance.now() + 1500, qui: trois };
+      attenteVue.propre3 = false;
+    });
+    evenement('coupure silencieuse du joueur 3', 0.30, () => {
+      coupureSilencieuse(trois);
+      outage = { nom: 'coupure silencieuse joueur 3', fin: performance.now() + (PROD ? 50000 : 6000), qui: trois };
+      attenteVue.silencieuse3 = false;
+    });
+    evenement('resynchronisation forcée (demandée par le joueur 3)', 0.45, () => trois.lock.forcerResync());
+    evenement('coupures simultanées de l\'invité et du joueur 3', 0.55, () => {
+      // Assez longues pour dépasser l'affichage « resynchronisation… » qui suit un départ (environ 2 s).
+      coupurePropre(invite, 2600);
+      coupurePropre(trois, 3200);
+      outage = { nom: 'coupures simultanées invité et joueur 3', fin: performance.now() + 3200, qui: trois };
+      attenteVue.simultanees = false;
+    });
+    evenement('rechargement de la page du joueur 3 (nouvelle instance du moteur)', 0.75, () => {
+      attendreFin = { it, rechargerTrois: true };
+    });
+  }
+
   // Dernier changement d'époque vu (une resynchronisation répare tout : la panne ne doit pas tomber juste avant).
   let epoqueVue = hote.s().epoque;
   let tickEpoque = hote.tick();
   const th0 = () => hote.tick();
   let prochainAffichage = tick0 + 20000;
   let rechargeFaite = null;
+  let rechargeTrois = null; // Coop à 3 ou 4 : rechargement de la page du joueur 3
   let finDemandee = false;
   let dernierProgres = performance.now();
   let dernierTickVu = hote.tick();
@@ -881,11 +974,19 @@ async function principal() {
       const reste = outage.nom.includes('hôte') ? invite : hote;
       const e = reste.lock.etat();
       if (e.phase === 'attente' && /en attente de/.test(e.texte)) {
-        if (outage.nom.includes('silencieuse')) attenteVue.silencieuse = e.texte;
+        if (outage.qui) {
+          const cle = outage.nom.includes('simultanées') ? 'simultanees' : outage.nom.includes('silencieuse') ? 'silencieuse3' : 'propre3';
+          // Coupures simultanées : on cumule les absents nommés (chacun attend le premier tour qui lui manque :
+          // un joueur coupé qui avait envoyé ses tours d'avance n'est nommé qu'ensuite, ou pas du tout).
+          if (cle === 'simultanees') attenteVue[cle] = [...new Set([...(attenteVue[cle] || []), ...e.attente.map((j) => j + 1)])].sort();
+          else attenteVue[cle] = e.texte;
+        } else if (outage.nom.includes('silencieuse')) attenteVue.silencieuse = e.texte;
         else if (outage.nom.includes('hôte')) attenteVue.hote = e.texte;
         else attenteVue.propre = e.texte;
       }
-      if (performance.now() > outage.fin && hote.s().actif && invite.s().actif && hote.lock.etat().phase !== 'attente' && invite.lock.etat().phase !== 'attente') {
+      // Fin de la coupure : tout le monde est reconnecté (sinon on la clôt pendant l'affichage « resynchronisation… »
+      // qui suit un départ, avant que « en attente de » ait pu se voir).
+      if (performance.now() > outage.fin && tous() && clients().every((c) => c.s().connecte && c.lock.etat().phase !== 'attente')) {
         outage = null;
       }
     }
@@ -893,20 +994,20 @@ async function principal() {
     // pause partagée
     if (pauseTest) {
       if (pauseTest.etape === 0 && it - pauseTest.depuis > (TEMPS_REEL ? 300 : 60)) {
-        pauseVue = hote.moteur.enPause() && invite.moteur.enPause();
+        pauseVue = clients().every((c) => c.moteur.enPause());
         dire(`  pause : hôte ${hote.moteur.enPause()}, invité ${invite.moteur.enPause()} (ticks ${hote.tick()} / ${invite.tick()})`);
         M_pause(invite); // l'invité reprend
         pauseTest.etape = 1;
         pauseTest.depuis = it;
         pauseTest.tick = hote.tick();
       } else if (pauseTest.etape === 1 && it - pauseTest.depuis > (TEMPS_REEL ? 300 : 60)) {
-        faits.pause = { vue: pauseVue, reprise: hote.tick() > pauseTest.tick && !hote.moteur.enPause() && !invite.moteur.enPause() };
+        faits.pause = { vue: pauseVue, reprise: hote.tick() > pauseTest.tick && clients().every((c) => !c.moteur.enPause()) };
         dire(`  reprise : ${faits.pause.reprise}`);
         pauseTest = null;
       }
     }
     if (attendreFin && attendreFin.verifier === 'vitesse' && it - attendreFin.it > (TEMPS_REEL ? 400 : 80)) {
-      faits.vitesse = { hote: hote.moteur.vitesse(), invite: invite.moteur.vitesse(), identiques: hote.moteur.vitesse() === invite.moteur.vitesse() };
+      faits.vitesse = { hote: hote.moteur.vitesse(), invite: invite.moteur.vitesse(), identiques: clients().every((c) => c.moteur.vitesse() === hote.moteur.vitesse()) };
       dire(`  vitesses : hôte ${faits.vitesse.hote} %, invité ${faits.vitesse.invite} %`);
       attendreFin = null;
     }
@@ -930,6 +1031,29 @@ async function principal() {
       dire(`Page de l'hôte rechargée (nouvelle instance, tick ${hote.tick()}), reprise de session : ${ok}.`);
       rechargeFaite = { debut: performance.now(), epoque: invite.s().epoque, ticksAvant: invite.tick() };
     }
+    if (attendreFin && attendreFin.rechargerTrois) {
+      attendreFin = null;
+      const ancien = autres[0];
+      ancien.lock.interne.conn.fermer();
+      ancien.mort = true;
+      const nouveau = new Client('joueur 3 (page rechargée)', 2, journaux[2], ancien.stockage);
+      nouveau.idx = ancien.idx;
+      nouveau.injectees = ancien.injectees; // pour le rapport : commandes du bot des deux instances
+      await nouveau.demarrer();
+      nouveau.ancien = { ...ancien.lock.stats };
+      ancien.M = null;
+      ancien.moteur = null;
+      autres[0] = nouveau;
+      const ok = nouveau.lock.reprendre();
+      dire(`Page du joueur 3 rechargée (nouvelle instance, tick ${nouveau.tick()}), reprise de session : ${ok}.`);
+      rechargeTrois = { debut: performance.now(), epoque: hote.s().epoque, repris: ok };
+    }
+    if (rechargeTrois && !rechargeTrois.fini && autres[0].s().actif && autres[0].s().epoque !== rechargeTrois.epoque && autres[0].s().epoque === hote.s().epoque) {
+      rechargeTrois.fini = true;
+      rechargeTrois.duree = performance.now() - rechargeTrois.debut;
+      rechargeTrois.joueur = autres[0].s().joueur;
+      dire(`  joueur 3 rechargé : partie reçue en ${(rechargeTrois.duree / 1000).toFixed(1)} s, numéro ${rechargeTrois.joueur + 1}, tick ${autres[0].tick()}.`);
+    }
     if (rechargeFaite && hote.s().actif && hote.s().epoque !== rechargeFaite.epoque && !rechargeFaite.fini) {
       rechargeFaite.fini = true;
       rechargeFaite.duree = performance.now() - rechargeFaite.debut;
@@ -938,10 +1062,12 @@ async function principal() {
 
     // déclenchement des événements
     if (DEBUG && it % 20 === 0 && evenements.some((e) => !e.fait && fraction >= e.fraction)) {
-      dire(`  [debug] it ${it} tick ${th} : outage ${!!outage}, pause ${!!pauseTest}, attendreFin ${!!attendreFin}, recharge ${!!rechargeFaite}, actifs ${hote.s().actif}/${invite.s().actif}, phases ${hote.lock.etat().phase}/${invite.lock.etat().phase}`);
+      dire(`  [debug] it ${it} tick ${th} : outage ${!!outage}, pause ${!!pauseTest}, attendreFin ${!!attendreFin}, recharge ${!!rechargeFaite}, actifs ${clients().map((c) => c.s().actif).join('/')}, phases ${clients().map((c) => c.lock.etat().phase).join('/')}`);
     }
     for (const ev of evenements) {
-      if (!ev.fait && fraction >= ev.fraction && (!ev.pret || ev.pret()) && !outage && !pauseTest && !attendreFin && !(rechargeFaite && !rechargeFaite.fini) && hote.s().actif && invite.s().actif && ['jeu', 'resync'].includes(hote.lock.etat().phase) && ['jeu', 'resync'].includes(invite.lock.etat().phase)) {
+      // Rien d'autre tant que la panne injectée n'est pas détectée (une resynchronisation la réparerait en silence).
+      const panneEnCours = !!panne && !mismatches.some((m) => m.attendue);
+      if (!ev.fait && fraction >= ev.fraction && (!ev.pret || ev.pret()) && !panneEnCours && !outage && !pauseTest && !attendreFin && !(rechargeFaite && !rechargeFaite.fini) && !(rechargeTrois && !rechargeTrois.fini) && tous() && phasesJeu()) {
         ev.fait = true;
         ev.tick = th;
         dire(`ÉVÉNEMENT à ${Math.round(fraction * 100)} % (tick ${th}) : ${ev.nom}`);
@@ -950,7 +1076,7 @@ async function principal() {
       }
     }
 
-    if (th >= cible && !finDemandee && evenements.every((e) => e.fait) && !outage && !pauseTest && !attendreFin && !(rechargeFaite && !rechargeFaite.fini)) {
+    if (th >= cible && !finDemandee && evenements.every((e) => e.fait) && !outage && !pauseTest && !attendreFin && !(rechargeFaite && !rechargeFaite.fini) && !(rechargeTrois && !rechargeTrois.fini)) {
       finDemandee = true;
     }
     if (finDemandee) {
@@ -969,7 +1095,7 @@ async function principal() {
   async function jouerComplements() {
     const res = {};
     const ATT = PROD ? 25000 : 10000; // l'attente (« en attente de… ») s'affiche après 10 s en production
-    const enJeu = () => hote.s().actif && invite.s().actif && hote.lock.etat().phase === 'jeu' && invite.lock.etat().phase === 'jeu' && hote.s().epoque === invite.s().epoque;
+    const enJeu = () => clients().every((c) => c.s().actif && c.lock.etat().phase === 'jeu' && c.s().epoque === hote.s().epoque);
     async function attendre(cond, msMax) {
       const t0 = performance.now();
       let n = 0;
@@ -987,6 +1113,21 @@ async function principal() {
       return cond();
     }
     const appel = (c, nom) => c.M.ccall(nom, 'number', [], []);
+    // Coop à 3 ou 4 : trois bots qui construisent ruinent la ville (trésor très négatif après une longue partie) ;
+    // les cas qui construisent (puits, murs) ont besoin d'argent. L'hôte « ajoute de l'argent » (triche 0,
+    // commande synchronisée) si le trésor est sous 5 000 Dn.
+    async function renflouer() {
+      if (hote.M.ccall('brutus_reseau_test_entree', 'number', [], []) !== 1) {
+        return 0;
+      }
+      const tresor = new DataView(hote.M.HEAPU8.buffer, hote.pointeurTampon(), 40).getInt32(36, true);
+      if (tresor >= 5000) {
+        return 0;
+      }
+      hote.injecter({ nom: 'triche', params: [0, 20000 - tresor] });
+      await attendre(() => false, 300);
+      return 20000 - tresor;
+    }
     dire('Cas complémentaires : menus, vitesse locale, ville quittée, échecs de chargement et d\'envoi.');
     res.pret = await attendre(() => enJeu() && !hote.moteur.enPause(), 60000);
 
@@ -1043,6 +1184,22 @@ async function principal() {
       dire(`  hôte hors de la ville : ${JSON.stringify(res.hoteQuitte)}`);
     }
 
+    // 4b. Tous les joueurs quittent la ville (menu principal), puis l'un d'eux clique « Revenir dans la partie » :
+    // la partie repart de la copie prise en partant (avant : personne ne pouvait la renvoyer, attente sans fin).
+    for (const qui of ['invité', 'hôte']) {
+      await attendre(enJeu, 30000);
+      const ep = hote.s().epoque;
+      const abandons = hote.lock.stats.recuperationsAbandonnees;
+      for (const c of clients()) appel(c, 'brutus_reseau_test_quitter_ville');
+      const hors = await attendre(() => clients().every((c) => c.lock.etat().phase === 'hors-ville'), 3000);
+      const copies = await attendre(() => clients().every((c) => !!c.s().copieQuittee), 3000);
+      const demande = (qui === 'hôte' ? hote : invite).lock.revenir();
+      const retour = await attendre(() => hote.s().epoque !== ep && enJeu(), 60000);
+      res[qui === 'hôte' ? 'tousQuittentHoteRevient' : 'tousQuittentInviteRevient'] = { hors, copies, demande, retour,
+        abandons: hote.lock.stats.recuperationsAbandonnees - abandons };
+      dire(`  tous hors de la ville, retour par ${qui} : ${JSON.stringify(res[qui === 'hôte' ? 'tousQuittentHoteRevient' : 'tousQuittentInviteRevient'])}`);
+    }
+
     // 5. Chargement refusé par le moteur de l'invité : la sauvegarde est redemandée une fois.
     {
       await attendre(enJeu, 30000);
@@ -1090,17 +1247,26 @@ async function principal() {
         const dv = new DataView(c.M.HEAPU8.buffer, c.pointeurTampon(), 8);
         return { g, x: dv.getInt32(0, true), y: dv.getInt32(4, true) };
       };
-      const presences = await attendre(() => hote.lock.stats.presencesRecues > 0 && invite.lock.stats.presencesRecues > 0, 5000);
-      const latences = await attendre(() => hote.s().latences[1] !== undefined && invite.s().latences[0] !== undefined, 15000);
+      // Chaque joueur reçoit la présence de chacun des autres (vue sur la mini-carte) et mesure sa latence.
+      const autresQue = (c) => clients().filter((x) => x !== c).map((x) => x.joueurAttendu);
+      const presenceDe = (c, j) => c.M.ccall('brutus_coop_test_presence', 'number', ['number'], [j]) === 1;
+      const presences = await attendre(() => clients().every((c) => autresQue(c).every((j) => presenceDe(c, j))), 8000);
+      const latences = await attendre(() => clients().every((c) => autresQue(c).every((j) => c.s().latences[j] !== undefined)), 15000);
       const texte = 'Salut ! On pose le forum ici ? é✓';
       const chatEnvoye = hote.lock.envoyerChat(texte);
-      const chat = await attendre(() => [hote, invite].every((c) => c.s().chat.some((l) => l.joueur === 0 && l.texte === texte)), 5000);
-      const cs = caseLibre(invite, 0);
-      const curseur = invite.moteur.coopCurseur;
-      invite.moteur.coopCurseur = () => cs.g;
-      const signalEnvoye = invite.lock.signaler();
-      invite.moteur.coopCurseur = curseur;
-      const signal = cs.g >= 0 && await attendre(() => [hote, invite].every((c) => c.s().chat.some((l) => l.joueur === 1 && l.signal === cs.g)), 5000);
+      const chat = await attendre(() => clients().every((c) => c.s().chat.some((l) => l.joueur === 0 && l.texte === texte)), 5000);
+      // Signal (touche G) : de l'invité, et du dernier joueur à 3 ou 4 ; vu par tous.
+      const signaleurs = JOUEURS > 2 ? [invite, clients()[JOUEURS - 1]] : [invite];
+      let signalEnvoye = true;
+      let signal = true;
+      for (const [k, c] of signaleurs.entries()) {
+        const cs = caseLibre(c, k * 7);
+        const curseur = c.moteur.coopCurseur;
+        c.moteur.coopCurseur = () => cs.g;
+        signalEnvoye = c.lock.signaler() && signalEnvoye;
+        c.moteur.coopCurseur = curseur;
+        signal = cs.g >= 0 && signal && await attendre(() => clients().every((x) => x.s().chat.some((l) => l.joueur === c.joueurAttendu && l.signal === cs.g)), 5000);
+      }
       // Conflit : les deux joueurs posent un puits sur la même case, dans le MÊME tour K. L'hôte passe en
       // premier ; l'invité doit être prévenu (et l'hôte jamais). Pour viser K exactement (en temps réel,
       // deux joueurs ne sont jamais au même groupe au même instant), l'ordre est ajouté au TOUR du
@@ -1121,6 +1287,7 @@ async function principal() {
         };
         return () => { c.moteur.sortie = orig; };
       };
+      res.renflouement = await renflouer();
       hote.injecter({ nom: 'triche', params: [100] }); // de quoi payer les puits, même ville à sec
       await attendre(() => false, 300);
       const conflitsAvant = { h: hote.lock.stats.conflits, i: invite.lock.stats.conflits };
@@ -1141,7 +1308,7 @@ async function principal() {
       }
       const hoteJamais = hote.lock.stats.conflits === conflitsAvant.h;
       const avis = /au même moment/.test(invite.lock.etat().avis);
-      res.coop = { presences, latences: { hote: hote.s().latences[1], invite: invite.s().latences[0] }, chatEnvoye, chat,
+      res.coop = { presences, latences: Object.fromEntries(clients().map((c) => [c.joueurAttendu, c.s().latences])), chatEnvoye, chat,
         signalEnvoye, signal, conflit, essais, hoteJamais, avis };
       dire(`  coop : ${JSON.stringify(res.coop)}`);
     }
@@ -1151,13 +1318,14 @@ async function principal() {
     // et met le jeu en pause chez lui : en réseau, seule la pause partagée compte, la partie continue.
     {
       await attendre(enJeu, 30000);
+      await renflouer();
       const t = (c, i) => new DataView(c.M.HEAPU8.buffer, c.pointeurTampon(), 40).getInt32(i * 4, true);
       const valide = hote.M.ccall('brutus_reseau_test_entree', 'number', [], []) === 1;
       const [ex, ey, sx, sy, xmin, ymin, xmax, ymax, population, tresor] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => t(hote, i));
       const R = 3;
       const separables = valide && Math.max(Math.abs(ex - sx), Math.abs(ey - sy)) > R + 1;
       const reellesAvant = mismatches.filter((m) => !m.attendue).length;
-      const avant = [hote, invite].map((c) => c.M.ccall('brutus_reseau_test_route_rome', 'number', [], []));
+      const avant = clients().map((c) => c.M.ccall('brutus_reseau_test_route_rome', 'number', [], []));
       let cotes = 0;
       if (separables) {
         const borne = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -1183,12 +1351,12 @@ async function principal() {
           await poser('construire', [6, a, b, c, d, 0, 0, 0, 0]); // mur sur la ligne
         }
       }
-      const vu = separables && await attendre(() => [hote, invite].every((c) => c.M.ccall('brutus_reseau_test_route_rome', 'number', [], []) & 6), 60000);
-      const apres = [hote, invite].map((c) => c.M.ccall('brutus_reseau_test_route_rome', 'number', [], []));
+      const vu = separables && await attendre(() => clients().every((c) => c.M.ccall('brutus_reseau_test_route_rome', 'number', [], []) & 6), 60000);
+      const apres = clients().map((c) => c.M.ccall('brutus_reseau_test_route_rome', 'number', [], []));
       const t1 = hote.tick();
       const continue_ = await attendre(() => hote.tick() > t1 + 500 && enJeu(), 60000);
-      const pauseLocale = hote.moteur.enPause() || invite.moteur.enPause();
-      res.routeRome = { valide, population, tresor, entree: [ex, ey], sortie: [sx, sy], separables, cotes, avant, apres, vu, memesMessages: apres[0] === apres[1],
+      const pauseLocale = clients().some((c) => c.moteur.enPause());
+      res.routeRome = { valide, population, tresor, entree: [ex, ey], sortie: [sx, sy], separables, cotes, avant, apres, vu, memesMessages: apres.every((a) => a === apres[0]),
         continue: continue_, pauseLocale, divergences: mismatches.filter((m) => !m.attendue).length - reellesAvant };
       dire(`  route de Rome coupée : ${JSON.stringify(res.routeRome)}`);
     }
@@ -1202,8 +1370,8 @@ async function principal() {
       let attenteVueLatence = false;
       let maxLat = 0;
       await attendre(() => {
-        if (hote.lock.etat().phase === 'attente' || invite.lock.etat().phase === 'attente') attenteVueLatence = true;
-        maxLat = Math.max(maxLat, hote.s().latences[1] || 0, invite.s().latences[0] || 0);
+        if (clients().some((c) => c.lock.etat().phase === 'attente')) attenteVueLatence = true;
+        maxLat = Math.max(maxLat, ...clients().map((c) => Math.max(0, ...Object.values(c.s().latences))));
         return false;
       }, 15000);
       relais.latence = null;
@@ -1261,10 +1429,24 @@ async function principal() {
   for (let i = 0; i < 5000; i++) {
     pomperTout();
     await respirer();
-    if (hote.tick() === invite.tick() && hote.s().epoque === invite.s().epoque && hote.s().actif && invite.s().actif) {
-      const a = Buffer.from(hote.moteur.empreinte()).toString('hex');
-      const b = Buffer.from(invite.moteur.empreinte()).toString('hex');
-      direct = { comparees: true, tick: hote.tick(), a, b, identiques: a === b };
+    if (clients().every((c) => c.tick() === hote.tick() && c.s().epoque === hote.s().epoque && c.s().actif)) {
+      const h = clients().map((c) => Buffer.from(c.moteur.empreinte()).toString('hex'));
+      const [a, b] = h;
+      direct = { comparees: true, tick: hote.tick(), a, b, toutes: h, identiques: h.every((x) => x === a) };
+      if (JOUEURS > 2) {
+        // Ce que fait la page : le salon (numéros, pseudos) va au moteur ; chacun doit voir tous les autres
+        // avec leur pseudo (brutus_menu_nom), connectés, et la ligne d'information de l'hôte.
+        const salons = {};
+        const noms = {};
+        for (const c of clients()) {
+          const e = c.lock.etat();
+          c.M.ccall('brutus_menu_joueurs_vider', null, [], []);
+          for (const p of e.salon || []) c.M.ccall('brutus_menu_joueur_pseudo', null, ['number', 'string'], [p.joueur, p.pseudo || '']);
+          salons[c.joueurAttendu] = (e.salon || []).map((p) => [p.joueur, p.pseudo, !!p.connecte]);
+          noms[c.joueurAttendu] = Array.from({ length: JOUEURS }, (_, j) => c.M.ccall('brutus_menu_nom', 'string', ['number'], [j]));
+        }
+        direct.coop = { salons, noms, infos: clients().map((c) => c.s().info), numeros: clients().map((c) => c.s().joueur) };
+      }
       if (VERSUS) {
         const etatVersus = (c) => Array.from({ length: 11 }, (_, q) => c.versus(q));
         const pseudos = (c) => Object.fromEntries((c.s().salon || []).map((p) => [p.joueur, p.pseudo]));
@@ -1279,7 +1461,7 @@ async function principal() {
       break;
     }
   }
-  return { hote, invite, evenements, faits, attenteVue, tick0, cible, direct, rechargeFaite, it, compl, premierInvite };
+  return { hote, invite, autres, evenements, faits, attenteVue, tick0, cible, direct, rechargeFaite, rechargeTrois, it, compl, premierInvite };
 }
 
 function M_pause(c) {
@@ -1310,6 +1492,24 @@ function criteresVersus(direct) {
   };
 }
 
+// Coop jusqu'à 4 : critères propres aux parties à 3 ou 4 joueurs.
+function criteresCoop(r) {
+  const { direct = {}, attenteVue = {}, rechargeTrois, compl } = r || {};
+  const c = direct.coop;
+  const attendus = PSEUDOS.slice(0, JOUEURS);
+  return {
+    [`coop à ${JOUEURS} : salon créé par le menu (Coop, ${JOUEURS} places)`]: !!(menuCoop && menuCoop.joueurs === JOUEURS && menuCoop.info.startsWith(`Coop à ${JOUEURS}`)),
+    [`coop à ${JOUEURS} : arrivée en cours de partie (numéros 3${JOUEURS > 3 ? ' et 4' : ''})`]: Array.from({ length: JOUEURS - 2 }, (_, k) => k + 2).every((j) => arrivees[j] && arrivees[j].actif && arrivees[j].joueur === j),
+    [`coop à ${JOUEURS} : comparaison finale identique chez les ${JOUEURS}`]: !!(direct.comparees && direct.identiques && direct.toutes && direct.toutes.length === JOUEURS),
+    [`coop à ${JOUEURS} : chacun voit les ${JOUEURS} joueurs, connectés, avec leur pseudo`]: !!(c && Object.values(c.salons).every((l) => l.length === JOUEURS && l.every(([j, p, co]) => p === PSEUDOS[j] && co))
+      && Object.values(c.noms).every((n) => n.every((x, j) => x === attendus[j]))),
+    [`coop à ${JOUEURS} : numéros 1 à ${JOUEURS}, ligne d'info de l'hôte chez tous`]: !!(c && c.numeros.every((n, i) => n === i) && c.infos.every((i) => i === menuCoop.info)),
+    'coop à 3+ : « en attente de » vu pendant les coupures du joueur 3 (propre, silencieuse, simultanées avec l\'invité)': !!(attenteVue.propre3 && attenteVue.silencieuse3 && attenteVue.simultanees),
+    'coop à 3+ : page du joueur 3 rechargée, session reprise sous le même numéro': !!(rechargeTrois && rechargeTrois.repris && rechargeTrois.fini && rechargeTrois.joueur === 2),
+    'coop à 3+ : vue de chacun connue de tous (mini-carte), latences mesurées': !!(compl && compl.coop && compl.coop.presences && Object.values(compl.coop.latences).every((l) => Object.keys(l).length >= JOUEURS - 1)),
+  };
+}
+
 function rapport(r, erreur) {
   const { hote, invite, evenements = [], faits = {}, attenteVue, tick0, direct = {}, rechargeFaite, compl } = r || {};
   const duree = (performance.now() - debut) / 1000;
@@ -1322,7 +1522,8 @@ function rapport(r, erreur) {
   if (PROD) {
     L.push('MODE PRODUCTION : constantes de web/lockstep.js (ping 20 s, mort 45 s, attente 10 s, empreinte tous les 50 groupes), jeu à l\'horloge réelle.');
   }
-  L.push(REEL ? 'RAPPORT : test réseau avec le vrai relais (deux moteurs wasm dans Node, WebSocket vers ' + RELAIS_URL + ')' : 'RAPPORT : test réseau sans port (deux moteurs wasm dans Node, relais en mémoire)');
+  const nbMoteurs = JOUEURS > 2 ? `${JOUEURS} moteurs` : 'deux moteurs';
+  L.push(REEL ? `RAPPORT : test réseau avec le vrai relais (${nbMoteurs} wasm dans Node, WebSocket vers ${RELAIS_URL})` : `RAPPORT : test réseau sans port (${nbMoteurs} wasm dans Node, relais en mémoire)`);
   L.push(`Date : ${new Date().toISOString()}`);
   L.push(`Carte : ${CARTE}. Ticks demandés : ${TICKS}. Une empreinte tous les ${EMPREINTE_GROUPES * 5} ticks.`);
   L.push(`Durée réelle : ${duree.toFixed(0)} s.`);
@@ -1336,7 +1537,17 @@ function rapport(r, erreur) {
     L.push('Progression');
     L.push(`  Tick de départ ${tick0}, tick final hôte ${hote.tick()} / invité ${invite.tick()} (${hote.tick() - tick0} ticks joués par l'hôte, soit ${((hote.tick() - tick0) * 0.008 / 60).toFixed(1)} min de jeu à 200 %).`);
     L.push(`  Groupes de 5 ticks joués : hôte ${sh.groupes} (instance actuelle), invité ${si.groupes}.`);
-    L.push(`  Commandes du bot injectées : hôte ${hote.injectees}, invité ${invite.injectees}.`);
+    L.push(`  Commandes du bot injectées : hôte ${hote.injectees}, invité ${invite.injectees}${(r.autres || []).map((c) => `, ${c.nom} ${c.injectees}`).join('')}.`);
+    if (JOUEURS > 2) {
+      L.push(`  Arrivées en cours de partie : ${JSON.stringify(arrivees)}. Menu : ${JSON.stringify(menuCoop)}.`);
+      for (const c of r.autres || []) {
+        const st = c.lock.stats;
+        L.push(`  ${c.nom} : tick ${c.tick()}, groupes ${st.groupes}, reconnexions ${st.reconnexions}, coupures silencieuses ${st.coupuresSilencieuses}, chargements ${st.chargements}.`);
+      }
+      if (r.rechargeTrois) {
+        L.push(`  Rechargement de la page du joueur 3 : ${r.rechargeTrois.fini ? 'partie reçue en ' + (r.rechargeTrois.duree / 1000).toFixed(1) + ' s' : 'NON TERMINÉ'}.`);
+      }
+    }
     L.push(`  Commandes appliquées / refusées par le moteur : hôte ${hote.M.ccall('brutus_reseau_commandes_appliquees', 'number', [], [])} / ${hote.M.ccall('brutus_reseau_commandes_refusees', 'number', [], [])}, invité ${invite.M.ccall('brutus_reseau_commandes_appliquees', 'number', [], [])} / ${invite.M.ccall('brutus_reseau_commandes_refusees', 'number', [], [])}.`);
     L.push('');
     L.push('Empreintes');
@@ -1349,6 +1560,12 @@ function rapport(r, erreur) {
     }
     if (direct.comparees) {
       L.push(`  Comparaison finale directe au tick ${direct.tick} : ${direct.identiques ? 'identiques' : 'DIFFÉRENTES'} (${direct.a} / ${direct.b}).`);
+      if (direct.toutes && direct.toutes.length > 2) {
+        L.push(`  Empreintes des ${direct.toutes.length} joueurs : ${direct.toutes.join(' / ')}.`);
+      }
+      if (direct.coop) {
+        L.push(`  Salon vu par chacun (numéro, pseudo, connecté) : ${JSON.stringify(direct.coop.salons)} ; noms rendus par le moteur : ${JSON.stringify(direct.coop.noms)}.`);
+      }
       if (direct.versus) {
         L.push(`  Versus (villes, vue, combat, durée, fin, gagnant, tick de fin, relevés, empreinte du récap, bâtiments 1, bâtiments 2) : hôte ${JSON.stringify(direct.versus.hote)}, invité ${JSON.stringify(direct.versus.invite)}.`);
         L.push(`  Pseudos vus par l'hôte ${JSON.stringify(direct.versus.pseudos.hote)}, par l'invité ${JSON.stringify(direct.versus.pseudos.invite)} ; noms rendus par le moteur : ${JSON.stringify(direct.versus.noms)}.`);
@@ -1398,11 +1615,12 @@ function rapport(r, erreur) {
   }
   const criteres = {
     'pas d\'erreur': !erreur,
+    'lobby : la partie attend que tous les joueurs soient prêts': !!(lobbyVu.arrivee && lobbyVu.hotePret),
     'zéro divergence réelle': !!r && reelles.length === 0,
     'comparaison finale identique': !!(direct.comparees && direct.identiques),
     'tous les événements faits': evenements.every((e) => e.fait),
     'panne détectée par le test': attendues.length >= 1,
-    'panne détectée une fois par l\'hôte': !!panne && divergencesHote() === 1,
+    'panne détectée une fois par l\'hôte': !!panne && !!r && divergencesHote() === 1,
     [`empreintes comparées (au moins ${minEmpreintes})`]: complets >= minEmpreintes,
     'aucune divergence avant la panne injectée': !!panne && panne.divergencesAvant === 0,
     'panne réparée dans une nouvelle époque': !!panne && !!r && hote.s().epoque !== panne.epoque,
@@ -1410,14 +1628,16 @@ function rapport(r, erreur) {
     'vitesse locale remise à la vitesse commune': !!(compl && compl.vitesse && compl.vitesse.change && compl.vitesse.revenue && compl.vitesse.commune),
     'invité hors de la ville : figé, hôte en attente, retour resynchronisé': !!(compl && compl.inviteQuitte && Object.values(compl.inviteQuitte).every(Boolean)),
     'hôte hors de la ville : pas de resynchronisation, retour sans abandon': !!(compl && compl.hoteQuitte && compl.hoteQuitte.hors && compl.hoteQuitte.sansResync && compl.hoteQuitte.demande && compl.hoteQuitte.retour && compl.hoteQuitte.abandons === 0),
+    'tous hors de la ville : « Revenir » (de l\'invité, puis de l\'hôte) relance la partie': !!(compl && ['tousQuittentInviteRevient', 'tousQuittentHoteRevient'].every((k) => compl[k] && compl[k].hors && compl[k].copies && compl[k].demande && compl[k].retour && compl[k].abandons === 0)),
     'chargement refusé chez l\'invité : sauvegarde redemandée, partie reprise': !!(compl && compl.chargementRefuse && compl.chargementRefuse.ok && !compl.chargementRefuse.erreurs),
     'envoi refusé : l\'hôte ne recharge pas seul, puis resynchronisation': !!(compl && compl.envoiRate && compl.envoiRate.vu && compl.envoiRate.seul && compl.envoiRate.fini),
-    'coop : présence et latence reçues, chat et signal vus par les deux': !!(compl && compl.coop && compl.coop.presences && compl.coop.latences.hote !== undefined && compl.coop.latences.invite !== undefined && compl.coop.chat && compl.coop.signal),
+    [`coop : présence et latence reçues, chat et signal vus par ${JOUEURS > 2 ? 'tous' : 'les deux'}`]: !!(compl && compl.coop && compl.coop.presences && compl.coop.latences[0][1] !== undefined && compl.coop.latences[1][0] !== undefined && compl.coop.chat && compl.coop.signal),
     'coop : ordre en conflit signalé au second joueur seulement': !!(compl && compl.coop && compl.coop.conflit && compl.coop.hoteJamais && compl.coop.avis),
     ...(VERSUS ? {
       // M12 : en Versus, la route coupée est celle de la ville 1 : le message ne concerne que l'hôte (et ne vient
       // qu'avec des habitants) ; l'invité ne doit pas le recevoir. Le message chez les deux est vérifié en Coop.
-      'route de Rome de la ville 1 coupée : partie continue, sans pause locale, rien chez l\'invité': !!(compl && compl.routeRome && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0 && !(compl.routeRome.apres[1] & 6)),
+      // (Les murs du test n'avaient jamais tenu avant la correction de la démolition : le bot de l'invité les démolissait.)
+      'route de Rome de la ville 1 coupée : message chez l\'hôte, rien chez l\'invité, partie continue sans pause locale': !!(compl && compl.routeRome && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0 && (compl.routeRome.apres[0] & 6) && !(compl.routeRome.apres[1] & 6)),
     } : {
       'route de Rome coupée : message chez les deux, partie continue, sans pause locale': !!(compl && compl.routeRome && compl.routeRome.vu && compl.routeRome.memesMessages && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0),
     }),
@@ -1426,6 +1646,7 @@ function rapport(r, erreur) {
     'deux onglets, même jeton : l\'ancien s\'arrête sans se reconnecter, le nouveau joue': !!(compl && compl.deuxOnglets && compl.deuxOnglets.repris && compl.deuxOnglets.arret && compl.deuxOnglets.remplacements >= 1 && compl.deuxOnglets.enJeu && compl.deuxOnglets.suite && !compl.deuxOnglets.ancienActif && compl.deuxOnglets.reconnexionsAncien === 0 && compl.deuxOnglets.divergences === 0) || (REEL && !FAUX_WS),
     'hôte rechargé': !rechargeFaite || !!rechargeFaite.fini,
     ...(VERSUS ? criteresVersus(direct) : {}),
+    ...(JOUEURS > 2 ? criteresCoop(r) : {}),
     'vitesses identiques': !!(faits.vitesse && faits.vitesse.identiques),
     'pause vue puis reprise': !!(faits.pause && faits.pause.vue && faits.pause.reprise),
   };

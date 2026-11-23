@@ -36,7 +36,8 @@ typedef enum {
     BRUTUS_MENU_REVENIR,
     BRUTUS_MENU_CHAT,      // texte : le message (UTF-8)
     BRUTUS_MENU_EXPULSER,  // paramètre : le joueur
-    BRUTUS_MENU_VOIR       // paramètre : la case (grid offset) d'un signal
+    BRUTUS_MENU_VOIR,      // paramètre : la case (grid offset) d'un signal
+    BRUTUS_MENU_PRET       // lobby : paramètre 1 prêt, 0 plus prêt
 } brutus_menu_action_type;
 
 // ---- poussé par la page (JS)
@@ -58,6 +59,10 @@ BRUTUS_RESEAU_EXPORT void brutus_menu_joueur_pseudo(int numero, const char *pseu
 BRUTUS_RESEAU_EXPORT void brutus_menu_pseudo_definir(const char *pseudo);
 /** Ajoute un joueur du salon (latence en ms, -1 si inconnue). */
 BRUTUS_RESEAU_EXPORT void brutus_menu_joueur(int numero, int connecte, int latence);
+/** Lobby : le joueur `numero` (déjà ajouté par brutus_menu_joueur) est prêt ou non. */
+BRUTUS_RESEAU_EXPORT void brutus_menu_joueur_pret(int numero, int pret);
+/** Lobby : vrai tant que la partie n'a pas démarré (bouton « Prêt »), et si le joueur local est prêt. */
+BRUTUS_RESEAU_EXPORT void brutus_menu_lobby(int lobby, int moi_pret);
 /** Ajoute une ligne de chat (identifiant croissant ; signal = case ou -1). Vide le chat si id = 0. */
 BRUTUS_RESEAU_EXPORT void brutus_menu_chat(int id, int joueur, const char *texte, int signal);
 
@@ -83,6 +88,11 @@ BRUTUS_RESEAU_EXPORT int brutus_menu_saisie_en_cours(void);
  * combat (0 ou 1), durée en mois (0 : sans limite).
  */
 BRUTUS_RESEAU_EXPORT void brutus_menu_definir_partie(int versus, int combat, int duree);
+/**
+ * Coop jusqu'à 4 (tests, et ce que fait le bouton « Places ») : nombre de joueurs du salon en Coop, borné à
+ * 2…BRUTUS_JOUEURS_MAX. Le Versus reste à 2 (une ville par joueur).
+ */
+BRUTUS_RESEAU_EXPORT void brutus_menu_definir_places(int places);
 /**
  * M12 (tests) : fait comme le bouton « Créer avec cette ville » : prépare la partie choisie et met l'action
  * CREER en file (son texte est la ligne d'information). Retourne le nombre de joueurs du salon.

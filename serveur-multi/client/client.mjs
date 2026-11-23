@@ -12,6 +12,7 @@ export const TYPE = {
   PING: 0x11,
   PRESENCE: 0x12,
   SIGNAL: 0x13,
+  PRET: 0x14,
 };
 export const DEST_TOUS = 0xff;
 export const DEST_AUTRES = 0xfe;

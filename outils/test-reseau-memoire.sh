@@ -24,6 +24,11 @@
 # --versus (M12) : l'hôte crée la partie en Versus (comme le menu Multijoueur : combat activé, durée de 70 % des
 # ticks), sur « Brutus - Deux rives » par défaut, avec un bot par ville ; vérifie en plus que chacun joue sa ville
 # et que la fin de partie et le récap sont les mêmes chez les deux. Rapport : rapport-memoire-versus.txt.
+#
+# --joueurs=3 ou --joueurs=4 (Coop jusqu'à 4) : l'hôte crée un salon Coop de 3 ou 4 places par le menu, les joueurs
+# 3 et 4 arrivent pendant la partie, avec un bot chacun ; le scénario ajoute les coupures du joueur 3 (propre,
+# silencieuse, simultanée avec l'invité), une resynchronisation qu'il demande et le rechargement de sa page ;
+# chacun doit voir tous les pseudos, la vue et les signaux des autres. Rapport : rapport-memoire-coop3.txt.
 set -euo pipefail
 
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -31,9 +36,12 @@ cd "$RACINE"
 
 PRODUCTION=""
 VERSUS=""
+JOUEURS=2
 POSITIONNELS=()
 for ARG in "$@"; do
-  if [ "$ARG" = "--production" ]; then
+  if [[ "$ARG" =~ ^--joueurs=([2-4])$ ]]; then
+    JOUEURS="${BASH_REMATCH[1]}"
+  elif [ "$ARG" = "--production" ]; then
     PRODUCTION="--constantes-production"
   elif [ "$ARG" = "--versus" ]; then
     VERSUS="--versus"
@@ -65,6 +73,11 @@ if [ -n "$PRODUCTION" ]; then
 fi
 if [ -n "$VERSUS" ]; then
   RAPPORT_FICHIER="${RAPPORT_FICHIER%.txt}-versus.txt"
+  JOUEURS=2
+fi
+if [ "$JOUEURS" -gt 2 ]; then
+  RAPPORT_FICHIER="${RAPPORT_FICHIER%.txt}-coop$JOUEURS.txt"
+  EXTRA="$EXTRA --joueurs $JOUEURS"
 fi
 
 # Code 3 = test SAUTÉ (jeu absent) : ce n'est ni un succès ni un échec du moteur, mais un script qui
@@ -113,8 +126,14 @@ else
   node "$RACINE/outils/bot-rejouage.mjs" "$SORTIE/carte-$CARTE.txt" "$SORTIE/journal-hote.txt" --graine 42 --ticks "$TICKS"
   node "$RACINE/outils/bot-rejouage.mjs" "$SORTIE/carte-$CARTE.txt" "$SORTIE/journal-invite.txt" --graine 43 --ticks "$TICKS"
 fi
+JOURNAUX="$SORTIE/journal-hote.txt,$SORTIE/journal-invite.txt"
+for ((J = 3; J <= JOUEURS; J++)); do
+  # Coop à 3 ou 4 : un bot de plus par joueur (même ville, autre graine)
+  node "$RACINE/outils/bot-rejouage.mjs" "$SORTIE/carte-$CARTE.txt" "$SORTIE/journal-joueur$J.txt" --graine $((41 + J)) --ticks "$TICKS"
+  JOURNAUX="$JOURNAUX,$SORTIE/journal-joueur$J.txt"
+done
 
-echo "== Test : $TICKS ticks, carte $CARTE"
+echo "== Test : $TICKS ticks, carte $CARTE, $JOUEURS joueurs"
 node "$RACINE/outils/test-reseau-memoire.mjs" --ticks "$TICKS" --carte "$CARTE" \
   --depart "$DEPART" --jeu "$JEU" --module "$BUILD/augustus.js" --rapport "$RAPPORT_FICHIER" \
-  --journaux "$SORTIE/journal-hote.txt,$SORTIE/journal-invite.txt" $EXTRA
+  --journaux "$JOURNAUX" $EXTRA
