@@ -540,7 +540,10 @@
           var latence = e.latences && e.latences[p.joueur] !== undefined ? e.latences[p.joueur] : -1;
           multiAppel('brutus_menu_joueur', ['number', 'number', 'number'], [p.joueur, p.connecte ? 1 : 0, latence]);
           multiAppel('brutus_menu_joueur_pseudo', ['number', 'string'], [p.joueur, p.pseudo || '']);
+          multiAppel('brutus_menu_joueur_pret', ['number', 'number'], [p.joueur, e.prets && e.prets[p.joueur] ? 1 : 0]);
         }
+        // Lobby : bouton « Prêt » tant que la partie n'a pas démarré
+        multiAppel('brutus_menu_lobby', ['number', 'number'], [e.lobby ? 1 : 0, e.pret ? 1 : 0]);
         var lignes = e.chat || [];
         if (!lignes.length) {
           multiAppel('brutus_menu_chat', ['number', 'number', 'string', 'number'], [0, 0, '', -1]);
@@ -584,6 +587,8 @@
             multi.ls.expulser(param);
           } else if (action === 7) {
             multi.ls.allerA(param);
+          } else if (action === 8) {
+            multi.ls.pret(param === 1);
           }
           multiAfficher(multi.ls.etat());
         }

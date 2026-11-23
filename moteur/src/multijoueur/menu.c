@@ -40,6 +40,7 @@ typedef struct {
     int numero;
     int connecte;
     int latence;
+    int pret; // lobby
 } joueur_salon;
 
 typedef struct {
@@ -90,6 +91,8 @@ static struct {
     int saisie; // 0 aucune, 1 code, 2 chat, 3 pseudo
     int saisie_choisie; // M12 : à l'accueil, le champ choisi d'un clic (1 code, 3 pseudo ; 0 : pas encore)
     char pseudos[BRUTUS_JOUEURS_MAX][64]; // M12 : pseudo de chaque joueur du salon (UTF-8, donné par le relais)
+    int lobby;    // la partie n'a pas démarré : chacun clique « Prêt »
+    int moi_pret; // le joueur local est prêt
 } etat = { .combat = 1, .duree = BRUTUS_VICTOIRE_DUREE_DEFAUT, .places = 2 };
 
 static uint8_t saisie_code[CODE_MAX];
@@ -232,7 +235,24 @@ BRUTUS_RESEAU_EXPORT void brutus_menu_joueur(int numero, int connecte, int laten
         j->numero = numero;
         j->connecte = connecte;
         j->latence = latence;
+        j->pret = 0;
     }
+}
+
+BRUTUS_RESEAU_EXPORT void brutus_menu_joueur_pret(int numero, int pret)
+{
+    for (int i = 0; i < etat.nb_joueurs; i++) {
+        if (etat.joueurs[i].numero == numero) {
+            etat.joueurs[i].pret = pret ? 1 : 0;
+        }
+    }
+}
+
+BRUTUS_RESEAU_EXPORT void brutus_menu_lobby(int lobby, int moi_pret)
+{
+    etat.lobby = lobby ? 1 : 0;
+    etat.moi_pret = moi_pret ? 1 : 0;
+    window_invalidate();
 }
 
 BRUTUS_RESEAU_EXPORT void brutus_menu_chat(int id, int joueur, const char *texte, int signal)
@@ -459,7 +479,8 @@ enum {
     B_MODE_VERSUS,
     B_COMBAT,
     B_DUREE,
-    B_PLACES
+    B_PLACES,
+    B_PRET
 };
 
 static void clic(const generic_button *b);
@@ -703,6 +724,8 @@ static void preparer_boutons_session(void)
     ajouter_session(X0 + LARGEUR - 152, 340, 120, B_ENVOYER, 0);
     if (etat.phase == BRUTUS_MENU_HORS_VILLE) {
         ajouter_session(X0 + 24, BAS, 168, B_REVENIR, 0);
+    } else if (etat.lobby && etat.phase == BRUTUS_MENU_SALON) {
+        ajouter_session(X0 + 24, BAS, 168, B_PRET, 0);
     }
     ajouter_session(X0 + 200, BAS, 160, B_QUITTER, 0);
     ajouter_session(X0 + LARGEUR - 176, BAS, 152, B_RETOUR, 0);
@@ -715,6 +738,7 @@ static const char *libelle_session(int p)
         case B_VOIR: return "Voir";
         case B_ENVOYER: return "Envoyer";
         case B_REVENIR: return "Revenir dans la partie";
+        case B_PRET: return etat.moi_pret ? "Plus prêt" : "Je suis prêt";
         case B_QUITTER: return "Quitter la partie";
         default: return etat.depuis_ville ? "Retour au jeu" : "Retour";
     }
@@ -746,6 +770,8 @@ static void dessiner_session(void)
         const char *hote = j->numero == 0 ? ", hôte" : "";
         if (!j->connecte) {
             snprintf(ligne, sizeof(ligne), "%s%s%s : déconnecté", qui, moi, hote);
+        } else if (etat.lobby) {
+            snprintf(ligne, sizeof(ligne), "%s%s%s : %s", qui, moi, hote, j->pret ? "prêt" : "pas encore prêt");
         } else if (j->latence >= 0) {
             snprintf(ligne, sizeof(ligne), "%s%s%s : %d ms", qui, moi, hote, j->latence);
         } else {
@@ -891,6 +917,10 @@ static void clic(const generic_button *b)
         case B_REVENIR:
             demander(BRUTUS_MENU_REVENIR, 0, 0);
             fermer();
+            break;
+        case B_PRET:
+            etat.moi_pret = !etat.moi_pret; // affichage tout de suite ; le client confirme
+            demander(BRUTUS_MENU_PRET, etat.moi_pret, 0);
             break;
         case B_RETIRER:
             demander(BRUTUS_MENU_EXPULSER, b->parameter2, 0);

@@ -568,7 +568,8 @@ const mismatches = [];
 let panne = null; // { epoque, tick } : la panne injectée
 
 const clientsBruts = {};
-let menuCoop = null; // Coop à 3 ou 4 : { joueurs, info } donnés par le menu
+let menuCoop = null;
+const lobbyVu = {}; // lobby : la partie attend que tous soient prêts // Coop à 3 ou 4 : { joueurs, info } donnés par le menu
 const arrivees = {}; // joueur → état à son arrivée en cours de partie
 let brutsEcrits = false;
 function ecrireBruts(tick) {
@@ -788,6 +789,20 @@ async function principal() {
   }
   invite.lock.rejoindre(hote.s().code, VERSUS || JOUEURS > 2 ? PSEUDOS[1] : undefined);
   dire(`Salon ${hote.s().code} : l'invité rejoint.`);
+  // Lobby : la partie ne démarre pas à l'arrivée de l'invité, ni quand seul l'hôte est prêt ; elle démarre
+  // quand les deux le sont (l'hôte la lance pour tous).
+  const attendreIt = async (n) => { for (let i = 0; i < n; i++) { pomperTout(); await respirer(); } };
+  while (!(hote.s().salon.length === 2 && invite.s().salon.length === 2) && it < 20000) {
+    pomperTout();
+    await respirer();
+  }
+  await attendreIt(TEMPS_REEL ? 500 : 200);
+  lobbyVu.arrivee = !hote.s().actif && !invite.s().actif && hote.lock.etat().lobby && invite.lock.etat().lobby;
+  hote.lock.pret(true);
+  await attendreIt(TEMPS_REEL ? 500 : 200);
+  lobbyVu.hotePret = !hote.s().actif && !invite.s().actif && invite.s().prets[0] === true && /1 prêt sur 2/.test(invite.lock.etat().texte);
+  invite.lock.pret(true);
+  dire(`Lobby : ${JSON.stringify(lobbyVu)} ; les deux joueurs sont prêts.`);
   while ((!hote.s().actif || !invite.s().actif) && it < 20000) {
     pomperTout();
     await respirer();
@@ -1167,6 +1182,22 @@ async function principal() {
       const retour = await attendre(() => hote.s().epoque !== ep && enJeu(), 90000);
       res.hoteQuitte = { hors, sansResync, attente, demande, retour, abandons: hote.lock.stats.recuperationsAbandonnees };
       dire(`  hôte hors de la ville : ${JSON.stringify(res.hoteQuitte)}`);
+    }
+
+    // 4b. Tous les joueurs quittent la ville (menu principal), puis l'un d'eux clique « Revenir dans la partie » :
+    // la partie repart de la copie prise en partant (avant : personne ne pouvait la renvoyer, attente sans fin).
+    for (const qui of ['invité', 'hôte']) {
+      await attendre(enJeu, 30000);
+      const ep = hote.s().epoque;
+      const abandons = hote.lock.stats.recuperationsAbandonnees;
+      for (const c of clients()) appel(c, 'brutus_reseau_test_quitter_ville');
+      const hors = await attendre(() => clients().every((c) => c.lock.etat().phase === 'hors-ville'), 3000);
+      const copies = await attendre(() => clients().every((c) => !!c.s().copieQuittee), 3000);
+      const demande = (qui === 'hôte' ? hote : invite).lock.revenir();
+      const retour = await attendre(() => hote.s().epoque !== ep && enJeu(), 60000);
+      res[qui === 'hôte' ? 'tousQuittentHoteRevient' : 'tousQuittentInviteRevient'] = { hors, copies, demande, retour,
+        abandons: hote.lock.stats.recuperationsAbandonnees - abandons };
+      dire(`  tous hors de la ville, retour par ${qui} : ${JSON.stringify(res[qui === 'hôte' ? 'tousQuittentHoteRevient' : 'tousQuittentInviteRevient'])}`);
     }
 
     // 5. Chargement refusé par le moteur de l'invité : la sauvegarde est redemandée une fois.
@@ -1584,6 +1615,7 @@ function rapport(r, erreur) {
   }
   const criteres = {
     'pas d\'erreur': !erreur,
+    'lobby : la partie attend que tous les joueurs soient prêts': !!(lobbyVu.arrivee && lobbyVu.hotePret),
     'zéro divergence réelle': !!r && reelles.length === 0,
     'comparaison finale identique': !!(direct.comparees && direct.identiques),
     'tous les événements faits': evenements.every((e) => e.fait),
@@ -1596,6 +1628,7 @@ function rapport(r, erreur) {
     'vitesse locale remise à la vitesse commune': !!(compl && compl.vitesse && compl.vitesse.change && compl.vitesse.revenue && compl.vitesse.commune),
     'invité hors de la ville : figé, hôte en attente, retour resynchronisé': !!(compl && compl.inviteQuitte && Object.values(compl.inviteQuitte).every(Boolean)),
     'hôte hors de la ville : pas de resynchronisation, retour sans abandon': !!(compl && compl.hoteQuitte && compl.hoteQuitte.hors && compl.hoteQuitte.sansResync && compl.hoteQuitte.demande && compl.hoteQuitte.retour && compl.hoteQuitte.abandons === 0),
+    'tous hors de la ville : « Revenir » (de l\'invité, puis de l\'hôte) relance la partie': !!(compl && ['tousQuittentInviteRevient', 'tousQuittentHoteRevient'].every((k) => compl[k] && compl[k].hors && compl[k].copies && compl[k].demande && compl[k].retour && compl[k].abandons === 0)),
     'chargement refusé chez l\'invité : sauvegarde redemandée, partie reprise': !!(compl && compl.chargementRefuse && compl.chargementRefuse.ok && !compl.chargementRefuse.erreurs),
     'envoi refusé : l\'hôte ne recharge pas seul, puis resynchronisation': !!(compl && compl.envoiRate && compl.envoiRate.vu && compl.envoiRate.seul && compl.envoiRate.fini),
     [`coop : présence et latence reçues, chat et signal vus par ${JOUEURS > 2 ? 'tous' : 'les deux'}`]: !!(compl && compl.coop && compl.coop.presences && compl.coop.latences[0][1] !== undefined && compl.coop.latences[1][0] !== undefined && compl.coop.chat && compl.coop.signal),
@@ -1603,7 +1636,8 @@ function rapport(r, erreur) {
     ...(VERSUS ? {
       // M12 : en Versus, la route coupée est celle de la ville 1 : le message ne concerne que l'hôte (et ne vient
       // qu'avec des habitants) ; l'invité ne doit pas le recevoir. Le message chez les deux est vérifié en Coop.
-      'route de Rome de la ville 1 coupée : partie continue, sans pause locale, rien chez l\'invité': !!(compl && compl.routeRome && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0 && !(compl.routeRome.apres[1] & 6)),
+      // (Les murs du test n'avaient jamais tenu avant la correction de la démolition : le bot de l'invité les démolissait.)
+      'route de Rome de la ville 1 coupée : message chez l\'hôte, rien chez l\'invité, partie continue sans pause locale': !!(compl && compl.routeRome && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0 && (compl.routeRome.apres[0] & 6) && !(compl.routeRome.apres[1] & 6)),
     } : {
       'route de Rome coupée : message chez les deux, partie continue, sans pause locale': !!(compl && compl.routeRome && compl.routeRome.vu && compl.routeRome.memesMessages && compl.routeRome.continue && !compl.routeRome.pauseLocale && compl.routeRome.divergences === 0),
     }),

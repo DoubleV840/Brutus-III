@@ -408,6 +408,21 @@ static void capturer_salon(void)
 
     static const char *pseudos[BRUTUS_JOUEURS_MAX] = { "Léa", "Marcus", "Julia", "Quintus" };
     static const int latences[BRUTUS_JOUEURS_MAX] = { -1, 42, 87, -1 };
+    // Lobby : 3 joueurs connectés sur 4 places, l'hôte et Julia prêts
+    brutus_menu_etat(BRUTUS_MENU_SALON, "K7MPQ2",
+        "Salon : 2 prêts sur 3. Départ quand tous sont prêts.", "", 0, 1);
+    brutus_menu_info("Coop à 4, carte Lugdunum");
+    brutus_menu_joueurs_vider();
+    for (int j = 0; j < 3; j++) {
+        brutus_menu_joueur(j, 1, -1);
+        brutus_menu_joueur_pseudo(j, pseudos[j]);
+        brutus_menu_joueur_pret(j, j != 1);
+    }
+    brutus_menu_lobby(1, 1);
+    window_brutus_multijoueur_show(1);
+    capturer_ecran();
+    brutus_menu_lobby(0, 0);
+
     brutus_menu_etat(BRUTUS_MENU_JEU, "K7MPQ2", "", "", 0, 1);
     brutus_menu_info("Coop à 4, carte Lugdunum");
     brutus_menu_joueurs_vider();

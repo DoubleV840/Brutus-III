@@ -417,6 +417,10 @@ BRUTUS_RESEAU_EXPORT int brutus_reseau_test_route_rome(void)
 {
     int vus = 0;
     for (int i = 0; i < city_message_count(); i++) {
+        // Versus : seulement les messages que voit ce joueur (ceux de sa ville et ceux de tous)
+        if (!city_message_brutus_visible(city_message_get(i))) {
+            continue;
+        }
         int type = city_message_get(i)->message_type;
         if (type == MESSAGE_ROAD_TO_ROME_WARNING) {
             vus |= 1;

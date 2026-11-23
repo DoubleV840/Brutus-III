@@ -278,6 +278,22 @@ passent.
   mémoire, tout le scénario de coupures et de resynchronisations du test réseau) : l'hôte crée en Versus comme le
   menu ; l'invité voit la ligne d'information, chacun voit sa ville, mêmes options, même fin et même récap.
 
+## Corrections du 23/11/2026 (retours du fondateur)
+
+- **Démolition** : l'outil de démolition ne touche plus que les bâtiments de sa propre ville
+  (`get_deletable_building`, `building/construction_clear.c` : `brutus_versus_ignorer`). La ville active est celle du
+  joueur qui envoie l'ordre : le refus est le même chez tous ; dans l'interface c'est la ville du joueur local, donc
+  l'aperçu ne marque pas les bâtiments de l'autre et la confirmation « détruire ce fort » ne s'ouvre pas pour un fort
+  adverse. Routes, aqueducs et terrain restent communs (ils n'ont pas de propriétaire). Effet de bord découvert : le
+  bot de test de l'invité démolissait au hasard les murs de l'hôte, si bien que le cas « route de Rome coupée » du test
+  réseau Versus n'avait jamais vraiment coupé la route. Il est désormais vérifié : message chez l'hôte, rien chez
+  l'invité.
+- **Faveur de César de la ville 2** : au passage en Versus, la ville 2 était remise à zéro (`city_data_init`) sans
+  la faveur de départ du scénario : faveur 0, donc dès le premier mois « César est en colère » et une invasion de
+  l'empereur annoncée dans un an. Elle reçoit maintenant `city_emperor_init_scenario` comme une partie neuve (faveur,
+  salaire, rang). Le trésor de départ, lui, était déjà bon (celui du scénario, 6 000 Dn sur « Deux rives » pour les
+  deux villes). Une sauvegarde Versus faite avant la correction garde sa faveur à 0 pour la ville 2.
+
 ## Laissé aux missions suivantes
 
 - **Combat** : les forts adverses ne se détruisent pas (comme pour les envahisseurs).

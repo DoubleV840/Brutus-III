@@ -5,6 +5,7 @@
 #include "building/menu.h"
 #include "city/data.h"
 #include "city/data_private.h"
+#include "city/emperor.h"
 #include "city/message.h"
 #include "core/log.h"
 #include "figure/figure.h"
@@ -15,6 +16,7 @@
 #include "multijoueur/recap_versus.h"
 #include "multijoueur/simulation.h"
 #include "multijoueur/victoire_versus.h"
+#include "scenario/property.h"
 #include "scenario/request.h"
 #include "widget/minimap.h"
 
@@ -165,6 +167,9 @@ int brutus_versus_activer(void)
     brutus_ville_activer(1);
     city_data_init();
     city_data_init_scenario();
+    // Faveur de César, salaire et rang de départ, comme une partie neuve : sans cela la ville 2 partait avec une
+    // faveur de 0, et César lui annonçait dès le premier mois sa colère et une invasion dans un an.
+    city_emperor_init_scenario(scenario_campaign_rank());
     brutus_villes_donnees[1].map = brutus_villes_donnees[0].map;
     scenario_request_brutus_copier(1); // mêmes demandes de César, mais chacune les siennes
     brutus_ville_activer(avant);

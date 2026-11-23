@@ -19,7 +19,8 @@
   "use strict";
 
   var VERSION_PROTOCOLE = 1;
-  var TYPE = { TOUR: 1, VITESSE: 2, EMPREINTE: 3, SAUVEGARDE_DEMANDE: 4, SAUVEGARDE: 5, CHAT: 16, PING: 17, PRESENCE: 18, SIGNAL: 19 };
+  // PRET (lobby) : u8 1 prêt / 0 pas prêt, envoyé à tous, hors lockstep.
+  var TYPE = { TOUR: 1, VITESSE: 2, EMPREINTE: 3, SAUVEGARDE_DEMANDE: 4, SAUVEGARDE: 5, CHAT: 16, PING: 17, PRESENCE: 18, SIGNAL: 19, PRET: 20 };
   var DEST_TOUS = 255;
   var DEST_AUTRES = 254;
   var ENTETE = 8;
@@ -522,6 +523,11 @@
       joueur: -1,
       joueursMax: o.joueurs,
       salon: [], // dernier état des places : [{joueur, connecte}]
+      // Lobby : de la création (ou de l'arrivée) jusqu'au premier chargement de la partie. La partie ne démarre
+      // que quand tous les joueurs connectés (2 au moins) ont cliqué « Prêt » ; l'hôte la lance alors pour tous.
+      lobby: false,
+      pret: false, // le joueur local est prêt
+      prets: {}, // joueur → prêt (annoncé par chacun, message PRET)
       conn: null,
       gen: 0,
       connecte: false, // bienvenue reçue sur la connexion courante
@@ -550,6 +556,10 @@
       resyncEnAttente: null,
       prochainResync: 0,
       attendSauvegardeInvite: false,
+      // Copie de la partie prise quand ce joueur a quitté la ville (menu principal…) : sert à la renvoyer
+      // si personne d'autre n'est resté en ville. { epoque, attendus, vitesse, pause, tick, octets }
+      copieQuittee: null,
+      retourDemande: false, // hôte hors de la ville : un « Revenir » (le sien ou celui d'un invité) autorise la copie
       derniereDemande: 0,
       resyncJusqua: 0,
       derniereNotif: "",
@@ -646,7 +656,18 @@
         texte = "Récupération de la partie auprès d'un autre joueur…";
       } else if (!s.actif) {
         phase = "salon";
-        texte = s.joueur === 0 ? "En attente d'un autre joueur. Code de la partie : " + s.code : "Connecté. En attente de la partie de l'hôte…";
+        var connectes = 0, prets = 0;
+        for (var k = 0; k < s.salon.length; k++) {
+          if (s.salon[k].connecte) {
+            connectes++;
+            prets += s.prets[s.salon[k].joueur] ? 1 : 0;
+          }
+        }
+        if (s.lobby && connectes >= 2) {
+          texte = "Salon : " + prets + " prêt" + (prets > 1 ? "s" : "") + " sur " + connectes + ". Départ quand tous sont prêts.";
+        } else {
+          texte = s.joueur === 0 ? "En attente d'un autre joueur. Code de la partie : " + s.code : "Connecté. En attente de la partie de l'hôte…";
+        }
       } else if (villeQuittee()) {
         phase = "hors-ville";
         texte = "Vous avez quitté la ville : la partie multijoueur est en pause pour " + (s.joueursMax > 2 ? "tous les joueurs" : "vous deux") + ". Revenez dans la partie ou quittez-la.";
@@ -678,6 +699,9 @@
         chat: s.chat.slice(),
         latences: s.latences,
         info: s.info,
+        lobby: s.lobby && !s.actif,
+        pret: s.pret,
+        prets: s.prets,
       };
     }
 
@@ -686,7 +710,7 @@
         return;
       }
       var e = etat();
-      var cle = JSON.stringify([e.phase, e.texte, e.code, e.joueur, e.salon, e.pause, e.alerte, e.avis, s.chatId, e.latences, e.info]);
+      var cle = JSON.stringify([e.phase, e.texte, e.code, e.joueur, e.salon, e.pause, e.alerte, e.avis, s.chatId, e.latences, e.info, e.lobby, e.pret, e.prets]);
       if (cle !== s.derniereNotif) {
         s.derniereNotif = cle;
         o.surChangement(e);
@@ -697,6 +721,47 @@
 
     function envoyerTexte(texte) {
       return s.conn ? s.conn.envoyer(texte) : false;
+    }
+
+    function diffuserPret() {
+      envoyerBin(TYPE.PRET, 0, new Uint8Array([s.pret ? 1 : 0]), DEST_TOUS);
+    }
+
+    // Lobby : « Prêt » (ou plus prêt) du joueur local.
+    function pret(oui) {
+      if (!s.lobby) {
+        return false;
+      }
+      s.pret = !!oui;
+      s.prets[s.joueur] = s.pret;
+      diffuserPret();
+      notifier();
+      return true;
+    }
+
+    // Hôte, dans le lobby : quand tous les joueurs connectés (2 au moins) sont prêts, il lance la partie
+    // (resynchronisation : tous chargent sa partie au même tick).
+    function verifierDepart() {
+      if (s.joueur !== 0 || !s.lobby || s.actif || !s.connecte || s.resyncEnAttente !== null) {
+        return;
+      }
+      var presents = 0;
+      for (var i = 0; i < s.salon.length; i++) {
+        if (!s.salon[i].connecte) {
+          continue;
+        }
+        if (!s.prets[s.salon[i].joueur]) {
+          return;
+        }
+        presents++;
+      }
+      if (presents < 2) {
+        return;
+      }
+      journal("tous les joueurs sont prêts : la partie démarre");
+      s.lobby = false;
+      enregistrerSession();
+      demanderResync("tous prêts");
     }
 
     function envoyerBin(type, tick, donnees, dest) {
@@ -803,7 +868,7 @@
     }
 
     function enregistrerSession() {
-      stockage.ecrire({ code: s.code, jeton: s.jeton, joueur: s.joueur, pseudo: s.pseudo });
+      stockage.ecrire({ code: s.code, jeton: s.jeton, joueur: s.joueur, pseudo: s.pseudo, lobby: s.lobby });
     }
 
     // M12 : pseudo du joueur local, envoyé au relais à chaque connexion (il le donne à tous dans « joueurs »).
@@ -819,7 +884,14 @@
     }
 
     // info (M12) : ligne d'information de la partie (mode, carte, options), que le relais donne à tous.
+    function entrerLobby() {
+      s.lobby = true;
+      s.pret = false;
+      s.prets = {};
+    }
+
     function creer(joueurs, info, pseudo) {
+      entrerLobby();
       s.rechargee = false;
       s.erreur = null;
       s.info = "";
@@ -829,6 +901,7 @@
     }
 
     function rejoindre(code, pseudo) {
+      entrerLobby();
       s.rechargee = false;
       s.erreur = null;
       s.pseudo = pseudo ? String(pseudo).slice(0, 40) : "";
@@ -845,6 +918,9 @@
       s.jeton = g.jeton;
       s.joueur = g.joueur;
       s.pseudo = typeof g.pseudo === "string" ? g.pseudo : "";
+      s.lobby = !!g.lobby;
+      s.pret = false;
+      s.prets = {};
       s.session = true;
       s.rechargee = true;
       s.erreur = null;
@@ -855,6 +931,9 @@
 
     function oublier() {
       stockage.effacer();
+      s.lobby = false;
+      s.pret = false;
+      s.prets = {};
       s.session = false;
       s.code = null;
       s.jeton = null;
@@ -882,26 +961,32 @@
           break;
         case "joueur-arrive":
           s.salon = m.joueurs || s.salon;
-          if (s.joueur === 0) {
+          if (s.lobby) {
+            diffuserPret(); // le nouveau venu apprend qui est prêt ; la partie attend que tous le soient
+          } else if (s.joueur === 0) {
             demanderResync("arrivée du joueur " + (m.joueur + 1));
           }
           break;
         case "joueur-revenu":
           // Peut arriver sans joueur-parti avant (connexion remplacée) : même traitement.
           s.salon = m.joueurs || s.salon;
-          if (s.joueur === 0) {
+          if (s.lobby) {
+            diffuserPret();
+          } else if (s.joueur === 0) {
             demanderResync("retour du joueur " + (m.joueur + 1));
           }
           break;
         case "joueur-parti":
+          s.prets[m.joueur] = false;
           s.salon = m.joueurs || s.salon;
           journal("joueur " + (m.joueur + 1) + " parti");
           oublierJoueur(m.joueur);
           break;
         case "joueur-expulse":
+          s.prets[m.joueur] = false;
           s.salon = m.joueurs || s.salon;
           oublierJoueur(m.joueur);
-          if (s.joueur === 0) {
+          if (s.joueur === 0 && !s.lobby) {
             demanderResync("expulsion du joueur " + (m.joueur + 1));
           }
           break;
@@ -926,6 +1011,10 @@
       s.erreur = null;
       enregistrerSession();
       journal("bienvenue : joueur " + (m.joueur + 1) + ", salon " + m.code + (m.reconnexion ? " (retour)" : ""));
+      if (s.lobby) {
+        diffuserPret(); // dans le lobby : rien à récupérer, on redit seulement si l'on est prêt
+        return;
+      }
       if (!m.reconnexion || m.joueur !== 0) {
         return;
       }
@@ -979,6 +1068,8 @@
       s.restants = 0;
       s.attendSauvegardeInvite = false;
       s.resyncEnAttente = null;
+      s.copieQuittee = null;
+      s.retourDemande = false;
     }
 
     // ------------------------------------------------------------ messages de jeu (binaire)
@@ -1015,6 +1106,11 @@
           break;
         case TYPE.SIGNAL:
           surSignal(m);
+          break;
+        case TYPE.PRET:
+          if (m.donnees.length >= 1) {
+            s.prets[m.joueur] = m.donnees[0] === 1;
+          }
           break;
         default:
           break;
@@ -1309,7 +1405,18 @@
       if (s.joueur === 0) {
         // Un invité demande la sauvegarde : ignoré si sa demande date d'une autre époque.
         if (s.actif && m.epoque === s.epoque) {
+          if (villeQuittee()) {
+            s.retourDemande = true; // un invité veut revenir : on repartira de notre copie
+          }
           demanderResync("demande du joueur " + (m.joueur + 1));
+        }
+        return;
+      }
+      if (m.joueur === 0 && s.actif && villeQuittee() && s.copieQuittee) {
+        // Nous aussi avons quitté la ville : on renvoie la copie prise en partant.
+        var c = s.copieQuittee;
+        if (envoyerTous(morceauxSauvegarde(fabriquerCharge(c.epoque, c.attendus, c.vitesse, c.pause, c.octets), c.tick, c.epoque, 0))) {
+          journal("copie de la partie (ville quittée) envoyée à l'hôte (" + c.octets.length + " octets)");
         }
         return;
       }
@@ -1372,6 +1479,9 @@
     // ------------------------------------------------------------ chargement et resynchronisation
 
     function demarrerPartie(info) {
+      s.lobby = false;
+      s.copieQuittee = null;
+      s.retourDemande = false;
       s.epoque = info.epoque;
       s.attendus = info.attendus.slice();
       s.T0 = moteur.tick();
@@ -1453,21 +1563,33 @@
       }
       // En partie : on ne se fie pas à jeuEnCours (qui exclut la fenêtre d'options, les boîtes de
       // sauvegarde…), seulement à « la ville a-t-elle été quittée ». Avant la partie : la ville doit être affichée.
-      if (s.actif ? villeQuittee() : !moteur.jeuEnCours()) {
+      // Hôte hors de la ville : la partie repart de la copie prise en partant (un invité qui veut revenir
+      // ne doit pas attendre sans fin) ; sans copie, on ne peut rien renvoyer.
+      var copie = s.actif && villeQuittee() && s.retourDemande ? s.copieQuittee : null;
+      if (!copie && (s.actif ? villeQuittee() : !moteur.jeuEnCours())) {
         return false;
       }
-      finirGroupe();
-      if (!moteur.sauvegarder(o.chemin)) {
-        journal("sauvegarde impossible");
-        return false;
+      var octets, tick, vitesse, pause;
+      if (copie) {
+        octets = copie.octets;
+        tick = copie.tick;
+        vitesse = copie.vitesse;
+        pause = copie.pause;
+      } else {
+        finirGroupe();
+        if (!moteur.sauvegarder(o.chemin)) {
+          journal("sauvegarde impossible");
+          return false;
+        }
+        octets = moteur.lireFichier(o.chemin);
+        tick = moteur.tick();
+        vitesse = moteur.vitesse();
+        pause = s.actif ? moteur.enPause() : false;
       }
-      var octets = moteur.lireFichier(o.chemin);
       var epoque = (s.epoque % 255) + 1;
       var attendus = placesAttribuees();
-      var vitesse = moteur.vitesse();
-      var pause = s.actif ? moteur.enPause() : false;
       var charge = fabriquerCharge(epoque, attendus, vitesse, pause, octets);
-      var msgs = morceauxSauvegarde(charge, moteur.tick(), epoque, DEST_AUTRES);
+      var msgs = morceauxSauvegarde(charge, tick, epoque, DEST_AUTRES);
       if (!envoyerTous(msgs)) {
         // Socket mort : on ne recharge pas seul (les autres n'ont rien reçu) ; nouvel essai plus tard.
         stats.envoisRates++;
@@ -1477,7 +1599,7 @@
       stats.resyncsHote++;
       journal("resynchronisation (" + motif + ") : époque " + epoque + ", " + charge.length + " octets");
       var info = { epoque: epoque, attendus: attendus, vitesse: vitesse, pause: pause, sauvegarde: octets };
-      return appliquerSauvegarde(info, false);
+      return appliquerSauvegarde(info, !!copie); // la copie n'est pas forcément dans o.chemin
     }
 
     // ------------------------------------------------------------ boucle
@@ -1660,8 +1782,27 @@
       }
     }
 
+    // Ville quittée : la ville est encore en mémoire (le menu principal ne la vide pas) ; on la copie tout de
+    // suite, avant que le joueur ne charge autre chose. Sans cela, si tous les joueurs quittent la ville,
+    // personne ne peut plus renvoyer la partie et « Revenir dans la partie » attend sans fin.
+    function garderCopie() {
+      if (s.copieQuittee || !moteur.sauvegarder(o.chemin)) {
+        return;
+      }
+      s.copieQuittee = {
+        epoque: s.epoque,
+        attendus: s.attendus.slice(),
+        vitesse: moteur.vitesse(),
+        pause: moteur.enPause(),
+        tick: moteur.tick(),
+        octets: moteur.lireFichier(o.chemin),
+      };
+      journal("ville quittée : copie de la partie gardée (tick " + s.copieQuittee.tick + ")");
+    }
+
     function jouer(t) {
       if (villeQuittee()) {
+        garderCopie();
         // Ville quittée (menu principal, fin de mission) : on n'avance plus hors de la ville. L'autre
         // joueur attend (« en attente de Joueur N ») ; le retour passe par revenir().
         s.dernierProgres = t;
@@ -1777,6 +1918,7 @@
       try {
         var t = horloge.maintenant();
         gererConnexion(t);
+        verifierDepart();
         gererResync(t);
         if (moteur.refusMenu) {
           var refus = moteur.refusMenu();
@@ -1838,7 +1980,11 @@
       if (!s.actif || !s.connecte || !villeQuittee()) {
         return false;
       }
-      if (s.joueur === 0) {
+      if (s.joueur === 0 && s.copieQuittee) {
+        // Personne n'a avancé sans l'hôte : la copie prise en partant est à jour, on repart d'elle.
+        s.retourDemande = true;
+        demanderResync("retour de l'hôte dans la ville");
+      } else if (s.joueur === 0) {
         s.attendSauvegardeInvite = true;
         s.derniereDemande = 0;
         s.debutRecuperation = horloge.maintenant();
@@ -1867,6 +2013,7 @@
       stats: stats,
       forcerResync: forcerResync,
       revenir: revenir,
+      pret: pret,
       couperConnexion: couperConnexion,
       envoyerChat: envoyerChat,
       signaler: signaler,
